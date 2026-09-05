@@ -76,7 +76,7 @@ export function TextSection({ element: el }: { element: DrawElement }) {
           />
         </Field>
       </div>
-      {error && <div className="text-[11px] text-red-400">{error}</div>}
+      {error && <div className="text-[12px] text-red-500">{error}</div>}
       {dirty && (
         <Button variant="secondary" className="justify-center" onClick={() => void apply()} disabled={busy || !text.trim()}>
           {busy ? 'Updating…' : 'Update text'}

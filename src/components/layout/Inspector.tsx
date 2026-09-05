@@ -14,13 +14,13 @@ export function Inspector() {
   const elementCount = useStore((s) => s.elements.length);
 
   return (
-    <aside className="flex w-[300px] shrink-0 flex-col border-l border-line bg-panel">
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-line px-3">
-        <span className="text-[14px] font-medium">
-          {selected ? selected.label : 'Project'}
+    <aside className="flex w-[280px] shrink-0 flex-col border-l border-line bg-panel">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3.5">
+        <span className="truncate text-[14px] font-semibold">
+          {selected ? selected.label : 'Project settings'}
         </span>
         {selected && (
-          <div className="flex items-center gap-0.5">
+          <div className="flex shrink-0 items-center gap-0.5">
             <IconButton label="Duplicate (Ctrl+D)" onClick={() => duplicateElement(selected.id)}>
               <Copy size={14} />
             </IconButton>
@@ -38,13 +38,17 @@ export function Inspector() {
             >
               <ChevronDown size={14} />
             </IconButton>
-            <IconButton label="Delete (Del)" onClick={() => removeElement(selected.id)}>
+            <IconButton
+              label="Delete (Del)"
+              className="hover:!bg-red-50 hover:!text-red-500"
+              onClick={() => removeElement(selected.id)}
+            >
               <Trash2 size={14} />
             </IconButton>
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto p-3.5">
         {selected ? (
           <div className="flex flex-col">
             <TransformSection element={selected} />

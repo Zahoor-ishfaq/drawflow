@@ -1,8 +1,8 @@
 import { TopBar } from './components/layout/TopBar';
-import { LeftRail } from './components/layout/LeftRail';
+import { IconRail } from './components/layout/IconRail';
 import { Workspace } from './components/layout/Workspace';
 import { Inspector } from './components/layout/Inspector';
-import { Timeline } from './components/layout/Timeline';
+import { TimelineBar } from './components/layout/TimelineBar';
 import { usePlaybackClock } from './hooks/usePlaybackClock';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
@@ -11,14 +11,14 @@ export default function App() {
   useKeyboardShortcuts();
 
   return (
-    <div className="flex h-full min-w-[1280px] flex-col">
+    <div className="flex h-full flex-col">
       <TopBar />
-      <div className="flex min-h-0 flex-1">
-        <LeftRail />
+      <div className="relative flex min-h-0 flex-1">
+        <IconRail />
         <Workspace />
         <Inspector />
       </div>
-      <Timeline />
+      <TimelineBar />
     </div>
   );
 }

@@ -7,8 +7,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const styles: Record<NonNullable<ButtonProps['variant']>, string> = {
   ghost: 'text-t2 hover:text-t1 hover:bg-hov',
-  secondary: 'bg-panel2 border border-line text-t1 hover:bg-hov',
-  primary: 'bg-accent text-white hover:brightness-110',
+  secondary: 'bg-panel2 border border-line text-t1 hover:bg-hov hover:border-[#cbd2dc]',
+  primary: 'bg-accent text-white shadow-[0_2px_8px_rgba(13,157,151,0.35)] hover:brightness-105',
 };
 
 export function Button({ variant = 'ghost', className = '', children, ...rest }: ButtonProps) {
@@ -16,8 +16,8 @@ export function Button({ variant = 'ghost', className = '', children, ...rest }:
     <button
       type="button"
       className={
-        `df-ui-anim inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-[13px] ` +
-        `transition-colors disabled:pointer-events-none disabled:opacity-40 ` +
+        `df-ui-anim inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium ` +
+        `transition-all disabled:pointer-events-none disabled:opacity-40 ` +
         `${styles[variant]} ${className}`
       }
       {...rest}

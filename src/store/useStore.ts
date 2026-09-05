@@ -28,6 +28,10 @@ export interface AppState {
   removeElement(id: string): void;
   duplicateElement(id: string): void;
   reorder(id: string, newZIndex: number): void;
+  /** move an element to a new position in play order and re-chain start times */
+  moveInSequence(id: string, targetIndex: number): void;
+  /** change drawDuration and shift everything that starts later by the delta */
+  setDurationRipple(id: string, duration: number): void;
   select(id: string | null): void;
   setTime(t: number): void;
   play(): void;
@@ -53,6 +57,15 @@ const DEFAULT_PROJECT: Project = {
 
 const TAIL_SECONDS = 1;
 const MIN_DURATION = 5;
+/** default pause between one element finishing and the next starting */
+export const SEQ_GAP = 0.3;
+
+/** play order: by start time, ties broken by layer */
+export function sequenceOrder(elements: DrawElement[]): DrawElement[] {
+  return [...elements].sort(
+    (a, b) => a.startTime - b.startTime || a.zIndex - b.zIndex,
+  );
+}
 
 function computeDuration(elements: DrawElement[], audio: AudioTrack | null): number {
   let end = 0;
@@ -98,7 +111,7 @@ export const useStore = create<AppState>()(
           y: project.height / 2,
           scale: 1,
           rotation: 0,
-          startTime: contentEnd,
+          startTime: elements.length > 0 ? contentEnd + SEQ_GAP : 0,
           drawDuration: 2,
           style: 'draw',
           zIndex: maxZ + 1,
@@ -142,7 +155,7 @@ export const useStore = create<AppState>()(
           id: crypto.randomUUID(),
           x: src.x + 40,
           y: src.y + 40,
-          startTime: src.startTime + src.drawDuration,
+          startTime: src.startTime + src.drawDuration + SEQ_GAP,
           zIndex: maxZ + 1,
         };
         const next = [...elements, copy];
@@ -163,6 +176,47 @@ export const useStore = create<AppState>()(
         const [moved] = ordered.splice(from, 1);
         ordered.splice(to, 0, moved);
         set({ elements: ordered.map((el, i) => ({ ...el, zIndex: i })) });
+      },
+
+      moveInSequence(id, targetIndex) {
+        const { elements, project, audio } = get();
+        const order = sequenceOrder(elements);
+        const from = order.findIndex((e) => e.id === id);
+        if (from === -1) return;
+        const to = clamp(Math.round(targetIndex), 0, order.length - 1);
+        if (from === to) return;
+        const [moved] = order.splice(from, 1);
+        order.splice(to, 0, moved);
+        // re-chain: each element starts when the previous one finishes (+gap),
+        // and layer order follows play order so later elements draw on top
+        let t = 0;
+        const next = order.map((el, i) => {
+          const chained = { ...el, startTime: t, zIndex: i };
+          t += el.drawDuration + SEQ_GAP;
+          return chained;
+        });
+        set({
+          elements: next,
+          project: { ...project, duration: computeDuration(next, audio) },
+        });
+      },
+
+      setDurationRipple(id, duration) {
+        const { elements, project, audio } = get();
+        const target = elements.find((e) => e.id === id);
+        if (!target) return;
+        const delta = duration - target.drawDuration;
+        const next = elements.map((e) => {
+          if (e.id === id) return { ...e, drawDuration: duration };
+          if (e.startTime > target.startTime + 1e-6) {
+            return { ...e, startTime: Math.max(0, e.startTime + delta) };
+          }
+          return e;
+        });
+        set({
+          elements: next,
+          project: { ...project, duration: computeDuration(next, audio) },
+        });
       },
 
       select(id) { set({ selectedId: id }); },

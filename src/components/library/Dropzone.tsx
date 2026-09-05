@@ -25,10 +25,10 @@ export function Dropzone() {
     <div>
       <label
         className={
-          'flex h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed text-[12px] ' +
+          'flex h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed text-[12.5px] ' +
           (dragOver
-            ? 'border-accent bg-accent-weak text-t1'
-            : 'border-line text-t3 hover:border-[#4a4a52] hover:text-t2')
+            ? 'border-accent bg-accent-weak text-accent'
+            : 'border-line text-t3 hover:border-accent hover:text-accent')
         }
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
@@ -38,7 +38,7 @@ export function Dropzone() {
           void handleFiles(e.dataTransfer.files);
         }}
       >
-        <FileUp size={14} />
+        <FileUp size={18} />
         Drop SVG or click to import
         <input
           type="file"
@@ -50,7 +50,7 @@ export function Dropzone() {
           }}
         />
       </label>
-      {error && <div className="mt-1.5 text-[11px] text-red-400">{error}</div>}
+      {error && <div className="mt-1.5 text-[12px] text-red-500">{error}</div>}
     </div>
   );
 }

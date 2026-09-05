@@ -70,19 +70,19 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       : '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-[380px] rounded-md border border-line bg-panel shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
-        <div className="flex h-10 items-center justify-between border-b border-line px-3">
-          <span className="text-[14px] font-medium">Export video</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101623]/45">
+      <div className="w-[400px] rounded-2xl border border-line bg-panel shadow-[0_20px_60px_rgba(15,25,45,0.3)]">
+        <div className="flex h-12 items-center justify-between border-b border-line pr-2.5 pl-4">
+          <span className="text-[15px] font-semibold">Export video</span>
           <IconButton label="Close" onClick={onClose} disabled={working}>
-            <X size={14} />
+            <X size={15} />
           </IconButton>
         </div>
 
-        <div className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-3.5 p-4">
           {!isolated && (
-            <div className="rounded-sm border border-line bg-panel2 p-2.5 text-[12px] leading-relaxed text-t2">
-              <span className="text-red-400">Export unavailable.</span> This page is not
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] leading-relaxed text-red-600">
+              <span className="font-semibold">Export unavailable.</span> This page is not
               cross-origin isolated, so the in-browser encoder can't run. Serve the app
               over HTTPS with the headers{' '}
               <code className="text-[11px]">Cross-Origin-Opener-Policy: same-origin</code> and{' '}
@@ -113,11 +113,11 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 />
               </Field>
               {state.step === 'error' && (
-                <div className="rounded-sm border border-red-900/60 bg-red-950/30 p-2.5 text-[12px] whitespace-pre-wrap text-red-300">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] whitespace-pre-wrap text-red-600">
                   {state.message}
                 </div>
               )}
-              <p className="text-[11px] leading-relaxed text-t3">
+              <p className="text-[11.5px] leading-relaxed text-t3">
                 Rendering happens entirely in your browser. A 20–30&#8202;s clip can take
                 1–3 minutes at 1080p.
               </p>
@@ -127,15 +127,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 onClick={() => void run()}
                 disabled={!isolated}
               >
-                {state.step === 'error' ? 'Retry export' : 'Export'}
+                {state.step === 'error' ? 'Retry export' : 'Start export'}
               </Button>
             </>
           )}
 
           {state.step === 'working' && (
-            <div className="flex flex-col gap-2 py-2">
-              <div className="text-[12px] text-t2">{phaseLabel}</div>
-              <div className="h-1 overflow-hidden rounded-full bg-panel2">
+            <div className="flex flex-col gap-2.5 py-2">
+              <div className="text-[13px] font-medium text-t1">{phaseLabel}</div>
+              <div className="h-2 overflow-hidden rounded-full bg-panel2">
                 <div
                   className="h-full rounded-full bg-accent transition-[width] duration-150"
                   style={{
@@ -143,21 +143,21 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                   }}
                 />
               </div>
-              <p className="text-[11px] text-t3">Keep this tab open while exporting.</p>
+              <p className="text-[11.5px] text-t3">Keep this tab open while exporting.</p>
             </div>
           )}
 
           {state.step === 'done' && (
             <div className="flex flex-col gap-3 py-1">
-              <div className="text-[12px] text-t2">
+              <div className="text-[13px] text-t2">
                 Done — {(state.result.sizeBytes / (1024 * 1024)).toFixed(1)} MB
               </div>
               <a
                 href={state.result.url}
                 download={state.result.filename}
-                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-sm bg-accent px-2.5 text-[13px] text-white hover:brightness-110"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-accent px-4 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(13,157,151,0.35)] hover:brightness-105"
               >
-                <Download size={14} />
+                <Download size={15} />
                 Download {state.result.filename}
               </a>
               <Button className="justify-center" onClick={() => setState({ step: 'options' })}>

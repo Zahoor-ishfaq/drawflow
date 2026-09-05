@@ -92,7 +92,8 @@ export function Stage({ zoom }: StageProps) {
         height: project.height * zoom,
         display: 'block',
         background: project.background,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
+        borderRadius: 6,
+        boxShadow: '0 8px 30px rgba(25, 35, 55, 0.18), 0 1px 3px rgba(25, 35, 55, 0.1)',
       }}
       onPointerDown={(e) => {
         if (e.button === 0) select(null); // click empty canvas → deselect

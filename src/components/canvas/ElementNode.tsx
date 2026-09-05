@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { DrawElement } from '../../types';
 import { elementFrameAt } from '../../lib/renderFrame';
+import { measurePaths } from '../../lib/drawing';
 
 interface ElementNodeProps {
   element: DrawElement;
@@ -15,6 +16,7 @@ export const ElementNode = memo(function ElementNode({
 }: ElementNodeProps) {
   const frame = elementFrameAt(el, currentTime);
   if (!frame) return null;
+  const bbox = measurePaths(el.paths).bbox;
 
   return (
     <g
@@ -23,6 +25,15 @@ export const ElementNode = memo(function ElementNode({
       onPointerDown={(e) => onPointerDown(e, el)}
       style={{ cursor: 'move' }}
     >
+      {/* transparent bbox hit area so the whole element is clickable/draggable */}
+      <rect
+        x={bbox.x}
+        y={bbox.y}
+        width={Math.max(bbox.width, 1)}
+        height={Math.max(bbox.height, 1)}
+        fill="transparent"
+        stroke="none"
+      />
       {el.paths.map((d, i) => {
         const dash = frame.dashes?.[i];
         return (
@@ -37,12 +48,9 @@ export const ElementNode = memo(function ElementNode({
             strokeLinejoin="round"
             strokeDasharray={dash?.strokeDasharray}
             strokeDashoffset={dash?.strokeDashoffset}
-            // an invisible fat stroke keeps thin strokes clickable
-            pointerEvents="stroke"
           />
         );
       })}
-      {/* transparent hit area over the bbox so fills/none elements select easily */}
     </g>
   );
 });

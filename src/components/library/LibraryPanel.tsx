@@ -15,7 +15,7 @@ export function LibraryPanel() {
   }, [query]);
 
   return (
-    <div className="p-3">
+    <div className="p-4">
       <div className="relative mb-3">
         <Search size={13} className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-t3" />
         <input
@@ -42,7 +42,7 @@ export function LibraryPanel() {
                   type="button"
                   title={asset.name}
                   aria-label={`Add ${asset.name}`}
-                  className="df-ui-anim flex h-12 items-center justify-center rounded-sm border border-line bg-panel2 text-t2 transition-colors hover:bg-hov hover:text-t1"
+                  className="df-ui-anim flex h-14 items-center justify-center rounded-xl border border-line bg-panel2 text-t2 transition-colors hover:border-accent hover:bg-accent-weak hover:text-accent"
                   onClick={() => addLibraryElement(asset)}
                 >
                   <svg viewBox="0 0 24 24" width={20} height={20} fill="none"
