@@ -1,0 +1,63 @@
+import { useStore } from '../../store/useStore';
+import { Field, SectionHeader } from '../ui/Field';
+import { ColorInput } from '../ui/ColorInput';
+
+const SIZE_PRESETS = [
+  { label: '16:9 · 1920 × 1080', width: 1920, height: 1080 },
+  { label: '9:16 · 1080 × 1920', width: 1080, height: 1920 },
+  { label: '1:1 · 1080 × 1080', width: 1080, height: 1080 },
+];
+
+export function ProjectSection() {
+  const project = useStore((s) => s.project);
+  const updateProject = useStore((s) => s.updateProject);
+
+  const presetIdx = SIZE_PRESETS.findIndex(
+    (p) => p.width === project.width && p.height === project.height,
+  );
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <SectionHeader>Project</SectionHeader>
+      <Field label="Name">
+        <input
+          type="text"
+          className="df-input"
+          value={project.name}
+          onChange={(e) => updateProject({ name: e.target.value })}
+        />
+      </Field>
+      <Field label="Canvas size">
+        <select
+          className="df-input"
+          value={presetIdx === -1 ? 0 : presetIdx}
+          onChange={(e) => {
+            const p = SIZE_PRESETS[parseInt(e.target.value, 10)];
+            updateProject({ width: p.width, height: p.height });
+          }}
+        >
+          {SIZE_PRESETS.map((p, i) => (
+            <option key={p.label} value={i}>{p.label}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Frame rate">
+        <select
+          className="df-input"
+          value={project.fps}
+          onChange={(e) => updateProject({ fps: parseInt(e.target.value, 10) })}
+        >
+          <option value={24}>24 fps</option>
+          <option value={30}>30 fps</option>
+          <option value={60}>60 fps</option>
+        </select>
+      </Field>
+      <Field label="Background">
+        <ColorInput value={project.background} onChange={(v) => updateProject({ background: v })} />
+      </Field>
+      <p className="pt-1 text-[11px] leading-relaxed text-t3">
+        Select an element on the canvas or timeline to edit its properties.
+      </p>
+    </div>
+  );
+}
