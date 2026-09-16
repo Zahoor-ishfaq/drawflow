@@ -1,6 +1,15 @@
-export type DrawStyle = 'draw' | 'appear' | 'fade';
-export type HandStyle = 'marker' | 'pencil' | 'chalk' | 'none';
+/** Entrance effect. 'draw' = hand draws it (scribble-reveal for raster images). */
+export type DrawStyle = 'draw' | 'appear' | 'fade' | 'slide';
+export type SlideFrom = 'left' | 'right' | 'top' | 'bottom';
+export type HandStyle = 'marker' | 'pen' | 'chalk' | 'none';
 export type ElementKind = 'text' | 'shape' | 'svg' | 'image';
+
+/** Raster picture attached to an 'image' element. */
+export interface ImageRef {
+  src: string;      // data: URL (embedded so export can rasterize it)
+  width: number;    // natural pixel size
+  height: number;
+}
 
 /** How the camera frames an element while it is being drawn. */
 export type CameraMode = 'auto' | 'whole' | 'previous' | 'custom';
@@ -16,6 +25,10 @@ export interface DrawElement {
   kind: ElementKind;
   label: string;              // shown on the timeline card
   paths: string[];            // SVG path 'd' strings in local units
+  /** per-path colour overrides for imported coloured artwork (null → element colour) */
+  pathFills?: (string | null)[];
+  pathStrokes?: (string | null)[];
+  fillRule?: 'nonzero' | 'evenodd';
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;        // in canvas px (divided by scale at render time)
@@ -34,7 +47,11 @@ export interface DrawElement {
   pauseAfter: number;         // "Pause": camera holds on it after drawing
   transitionIn: number;       // "Transition": camera travel time into it
   style: DrawStyle;
+  slideFrom: SlideFrom;       // used when style === 'slide'
   zIndex: number;             // stacking order
+
+  // raster image (kind === 'image'); `paths` then holds the scribble-reveal path
+  image?: ImageRef;
 
   // camera
   camera: CameraMode;
@@ -55,7 +72,10 @@ export interface AudioTrack {
   name: string;
   buffer: AudioBuffer | null; // decoded, for waveform + playback
   url: string;                // object URL of the uploaded file
-  startTime: number;
+  duration: number;           // full file length, seconds
+  startTime: number;          // where the clip sits on the timeline
+  trimStart: number;          // seconds cut from the start of the file
+  trimEnd: number;            // seconds cut from the end of the file
   volume: number;             // 0..1
 }
 

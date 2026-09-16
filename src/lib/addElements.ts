@@ -3,14 +3,18 @@
 // artboard so a scribe built by just clicking "add" already reads well.
 
 import { sequenceOrder, useStore } from '../store/useStore';
-import type { DrawElement } from '../types';
+import type { DrawElement, ImageRef } from '../types';
 import { measurePaths } from './drawing';
 import { elementBounds } from './camera';
 import { textToPaths } from './textToPaths';
-import { normalizeSvg } from './svgImport';
+import { normalizeSvg, type NormalizedSvg } from './svgImport';
 import { SHAPES } from '../assets/shapes';
 import type { LibraryAsset } from '../assets/library';
-import { paperDef } from '../assets/paper';
+import { paperDef, isDarkPaper } from '../assets/paper';
+import { loadLibrarySvg, type LibraryEntry } from '../assets/illustrations';
+import { loadRasterImage } from './images';
+import { scribblePath } from './scribble';
+import type { GalleryItem } from './gallery';
 import { clamp } from './time';
 
 const MARGIN = 120;
@@ -20,35 +24,62 @@ function ink(): string {
   return paperDef(useStore.getState().project.paper).ink;
 }
 
-/** Position for a new element with local bbox `b` at `scale`, in canvas coords. */
-function placeNew(paths: string[], scale: number): { x: number; y: number } {
+/**
+ * Position (and possibly reduced scale) for a new element so it lands in
+ * free space on the board: first to the right of the last element, else the
+ * spot with the least overlap, scanning in reading order.
+ */
+function placeNew(paths: string[], scale: number): { x: number; y: number; scale: number } {
   const { project, elements } = useStore.getState();
   const b = measurePaths(paths).bbox;
-  const w = b.width * scale;
-  const h = b.height * scale;
   const W = project.width;
   const H = project.height;
 
+  // never larger than the board's usable area
+  const maxW = W - 2 * MARGIN;
+  const maxH = H - 2 * MARGIN;
+  if (b.width * scale > maxW || b.height * scale > maxH) {
+    scale = Math.min(maxW / Math.max(b.width, 1), maxH / Math.max(b.height, 1));
+  }
+  const w = b.width * scale;
+  const h = b.height * scale;
+
   // top-left → transform origin
-  const at = (left: number, top: number) => ({ x: left - b.x * scale, y: top - b.y * scale });
+  const at = (left: number, top: number) => ({ x: left - b.x * scale, y: top - b.y * scale, scale });
 
   const order = sequenceOrder(elements);
   if (order.length === 0) return at((W - w) / 2, (H - h) / 2);
+  const taken = order.map(elementBounds);
 
-  const last = elementBounds(order[order.length - 1]);
-  // try to the right of the last element, vertically centred on it
+  const overlapArea = (left: number, top: number) =>
+    taken.reduce((sum, r) => {
+      const ox = Math.max(0, Math.min(left + w, r.x + r.width) - Math.max(left, r.x));
+      const oy = Math.max(0, Math.min(top + h, r.y + r.height) - Math.max(top, r.y));
+      return sum + ox * oy;
+    }, 0);
+
+  // right of the last element, vertically centred on it
+  const last = taken[taken.length - 1];
   const rightLeft = last.x + last.width + GAP;
-  if (rightLeft + w <= W - MARGIN) {
-    const top = clamp(last.y + last.height / 2 - h / 2, MARGIN, H - MARGIN - h);
-    return at(rightLeft, top);
+  const rightTop = clamp(last.y + last.height / 2 - h / 2, MARGIN / 2, H - MARGIN / 2 - h);
+  if (rightLeft + w <= W - MARGIN / 2 && overlapArea(rightLeft, rightTop) === 0) {
+    return at(rightLeft, rightTop);
   }
-  // new row beneath everything so far
-  const bottom = order.reduce((m, el) => Math.max(m, elementBounds(el).y + elementBounds(el).height), 0);
-  const rowTop = bottom + GAP;
-  if (rowTop + h <= H - MARGIN / 2) return at(MARGIN, rowTop);
-  // out of room — stack near the centre with a small offset
-  const n = order.length;
-  return at((W - w) / 2 + (n % 5) * 40, (H - h) / 2 + (n % 5) * 40);
+
+  // scan candidate spots in reading order; take the first free one, else the least crowded
+  let best = { left: (W - w) / 2, top: (H - h) / 2, score: Infinity };
+  const cols = 16, rows = 10;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const left = MARGIN / 2 + ((W - MARGIN - w) * c) / (cols - 1);
+      const top = MARGIN / 2 + ((H - MARGIN - h) * r) / (rows - 1);
+      if (left < 0 || top < 0) continue;
+      const score = overlapArea(left, top);
+      if (score === 0) return at(left, top);
+      if (score < best.score) best = { left, top, score };
+    }
+  }
+  return at(best.left, best.top);
 }
 
 export async function addTextElement(text: string, fontFamily: string, fontSize: number): Promise<void> {
@@ -94,7 +125,6 @@ export function addLibraryElement(asset: LibraryAsset): void {
     kind: 'svg',
     paths: asset.paths,
     label: asset.name,
-    scale,
     strokeColor: ink(),
     strokeWidth: 7,
     drawDuration: 2.5,
@@ -102,19 +132,82 @@ export function addLibraryElement(asset: LibraryAsset): void {
   });
 }
 
-export function addImportedSvg(svgText: string, filename: string): void {
-  const { paths, width, height } = normalizeSvg(svgText);
-  const scale = 420 / Math.max(width, height, 1);
-  useStore.getState().addElement({
-    kind: 'svg',
+const BLACKS = new Set(['#000', '#000000', 'black', 'rgb(0,0,0)', 'rgb(0, 0, 0)']);
+
+/** Build an 'svg' element from normalized artwork, honouring its colours. */
+function svgElementProps(art: NormalizedSvg, label: string, targetSize: number): Partial<DrawElement> & Pick<DrawElement, 'kind' | 'paths'> {
+  const { paths, width, height } = art;
+  const scale = targetSize / Math.max(width, height, 1);
+  const color = ink();
+  const dark = isDarkPaper(useStore.getState().project.paper);
+  // stroke width in canvas px, from the artwork's own unit size
+  const strokeWidth = clamp((Math.max(width, height) / 40) * scale, 3, 10);
+  const base = {
+    kind: 'svg' as const,
     paths,
-    label: filename.replace(/\.svg$/i, ''),
-    scale,
-    strokeColor: ink(),
-    strokeWidth: 4,
+    label,
+    fillRule: art.evenOdd ? ('evenodd' as const) : undefined,
+    strokeColor: color,
+    strokeWidth,
+    drawDuration: clamp(paths.length * 0.25, 1.5, 6),
+    ...placeNew(paths, scale),
+  };
+  if (art.monochrome) {
+    return { ...base, fillColor: 'none', fillAfterDraw: false };
+  }
+  // coloured artwork: keep per-path colours; on dark paper, swap pure black for the ink
+  const swap = (c: string | null) => (c && dark && BLACKS.has(c.toLowerCase()) ? color : c);
+  return {
+    ...base,
+    pathFills: art.fills.map(swap),
+    pathStrokes: art.strokes.map(swap),
+    fillColor: color,
+    fillAfterDraw: true,
+    // thin: fill-only shapes borrow their fill as an outline while being drawn
+    strokeWidth: clamp((Math.max(width, height) / 400) * scale, 0.8, 2.5),
+  };
+}
+
+export function addImportedSvg(svgText: string, filename: string): void {
+  const art = normalizeSvg(svgText);
+  useStore.getState().addElement(svgElementProps(art, filename.replace(/\.svg$/i, ''), 420));
+}
+
+export async function addLibraryIllustration(entry: LibraryEntry): Promise<void> {
+  const svg = await loadLibrarySvg(entry.src);
+  const art = normalizeSvg(svg);
+  const size = entry.category === 'Sketch people' ? 620 : 300;
+  useStore.getState().addElement(svgElementProps(art, entry.name, size));
+}
+
+export function addImageElement(image: ImageRef, label: string): void {
+  const paths = [scribblePath(image.width, image.height)];
+  const scale = 520 / Math.max(image.width, image.height, 1);
+  useStore.getState().addElement({
+    kind: 'image',
+    paths,
+    image,
+    label,
+    fillColor: 'none',
+    strokeColor: '#000000',
+    strokeWidth: 1,
     drawDuration: 3,
     ...placeNew(paths, scale),
   });
+}
+
+export async function addImageFile(file: File): Promise<ImageRef> {
+  const img = await loadRasterImage(file);
+  addImageElement(img, file.name.replace(/\.[^.]+$/, ''));
+  return img;
+}
+
+export async function addGalleryItem(item: GalleryItem): Promise<void> {
+  if (item.kind === 'image') {
+    addImageElement({ src: item.data, width: item.width, height: item.height }, item.name);
+  } else {
+    addImportedSvg(item.data, item.name);
+  }
 }
 
 /** Re-ink every element when the paper changes between light and dark. */

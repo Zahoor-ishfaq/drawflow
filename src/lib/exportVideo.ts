@@ -131,8 +131,11 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
 
     const outName = format === 'mp4' ? 'out.mp4' : 'out.webm';
     const args: string[] = ['-framerate', String(fps), '-start_number', '0', '-i', 'frame_%05d.png'];
-    if (audioName) {
-      if (audio && audio.startTime > 0) args.push('-itsoffset', String(audio.startTime));
+    if (audioName && audio) {
+      const clipLen = Math.max(0, audio.duration - audio.trimStart - audio.trimEnd);
+      if (audio.trimStart > 0) args.push('-ss', audio.trimStart.toFixed(3));
+      args.push('-t', clipLen.toFixed(3));
+      if (audio.startTime > 0) args.push('-itsoffset', audio.startTime.toFixed(3));
       args.push('-i', audioName);
     }
     if (format === 'mp4') {

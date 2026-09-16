@@ -11,7 +11,7 @@ export interface LibraryAsset {
 const circle = (cx: number, cy: number, r: number) =>
   `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0Z`;
 
-export const LIBRARY: LibraryAsset[] = [
+export const ICONS: LibraryAsset[] = [
   // --- Business ---
   { id: 'bar-chart', name: 'Chart', group: 'Business',
     paths: ['M3 3v18h18', 'M7 16v-5', 'M12 16V8', 'M17 16v-3'] },
@@ -78,4 +78,4 @@ export const LIBRARY: LibraryAsset[] = [
     paths: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z'] },
 ];
 
-export const LIBRARY_GROUPS = ['Business', 'Education', 'Tech', 'General'] as const;
+export const ICON_GROUPS = ['Business', 'Education', 'Tech', 'General'] as const;

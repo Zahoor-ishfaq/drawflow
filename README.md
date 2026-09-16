@@ -20,10 +20,17 @@ cross-origin isolated — the dev and preview servers already send the required
 
 ## How it works (the VideoScribe model)
 
-- **Toolbar (left)** — *Images* (bundled outline library), *Text* (handwritten fonts,
-  drawn letter by letter), *Shapes*, *Import* (your own SVG), *Music*, and the two
-  project settings: *Hand* (marker / pencil / chalk — real photographs) and *Paper*
-  (plain, grid, dots, lined, cream, kraft, chalkboard).
+- **Toolbar (left)** — *Images* (your persistent uploads — PNG, JPG, WebP, GIF or
+  SVG — plus a 1,400-piece illustration library with search and categories), *Text*
+  (handwritten fonts, drawn letter by letter), *Shapes & icons*, *Music*, and the two
+  project settings: *Hand* (marker / pen / chalk — real photographs whose sleeve always
+  runs off the board) and *Paper* (plain, grid, dots, lined, cream, kraft, chalkboard).
+- **Edit view** shows the finished scribe with no hand; the hand only appears in
+  *Camera view* and when you press Preview.
+- **Entrance effects** for every element: *Draw* (photos get a scribble reveal),
+  *Slide in* from any side, *Fade*, *Appear*.
+- **Music** sits on a lane under the scrub bar: drag the clip to move it, drag its ends
+  to cut it, click it to set volume and timing.
 - **Elements play in sequence.** Each has three times, exactly like VideoScribe:
   **Animate** (seconds to draw), **Pause** (hold after drawing) and **Transition**
   (camera travel into it). Start times are derived automatically.

@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { useRenderContext } from '../../store/selectors';
 import type { DrawElement } from '../../types';
-import { handFrameAt } from '../../lib/renderFrame';
+import { elementFrameAt, FULL_FRAME, handFrameAt } from '../../lib/renderFrame';
 import { cameraAt, cameraForElement, viewBoxFor, wholeView } from '../../lib/camera';
 import { paperDef } from '../../assets/paper';
 import { ElementNode } from './ElementNode';
@@ -34,11 +34,14 @@ export function Stage({ zoom }: StageProps) {
   const dragRef = useRef<DragState | null>(null);
 
   const selected = ordered.find((e) => e.id === selectedId) ?? null;
+  // Edit view shows the finished scribe with no hand; camera view is the
+  // time-based picture the video will contain.
   const cam = cameraView ? cameraAt(currentTime, timeline, project) : wholeView(project);
   const vb = viewBoxFor(cam, project);
-  const hand = handFrameAt(ordered, currentTime, project, timeline);
+  const hand = cameraView ? handFrameAt(ordered, currentTime, project, timeline) : null;
   const paper = paperDef(project.paper);
   const defs = paper.defs(project.background);
+  const interactive = !isPlaying;
 
   // dashed guide showing what the camera will frame for the selected element
   const cameraGuide = useMemo(() => {
@@ -125,14 +128,19 @@ export function Stage({ zoom }: StageProps) {
       {/* paper covers whatever the camera can see (the canvas is infinite) */}
       <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill={paper.fill(project.background)} />
 
-      {ordered.map((el) => (
-        <ElementNode
-          key={el.id}
-          element={el}
-          currentTime={currentTime}
-          onPointerDown={onElementPointerDown}
-        />
-      ))}
+      {ordered.map((el) => {
+        const frame = cameraView ? elementFrameAt(el, currentTime, vb) : FULL_FRAME;
+        if (!frame) return null;
+        return (
+          <ElementNode
+            key={el.id}
+            element={el}
+            frame={frame}
+            interactive={interactive}
+            onPointerDown={onElementPointerDown}
+          />
+        );
+      })}
 
       <Hand frame={hand} />
 

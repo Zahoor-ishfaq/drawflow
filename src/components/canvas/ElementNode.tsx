@@ -1,56 +1,65 @@
 import { memo } from 'react';
 import type { DrawElement } from '../../types';
-import { elementFrameAt } from '../../lib/renderFrame';
+import { elementInnerSvg, elementTransform, pathColors, type ElementFrame } from '../../lib/renderFrame';
 import { measurePaths } from '../../lib/drawing';
 
 interface ElementNodeProps {
   element: DrawElement;
-  currentTime: number;
+  frame: ElementFrame;
+  interactive: boolean;
   onPointerDown: (e: React.PointerEvent, el: DrawElement) => void;
 }
 
 export const ElementNode = memo(function ElementNode({
   element: el,
-  currentTime,
+  frame,
+  interactive,
   onPointerDown,
 }: ElementNodeProps) {
-  const frame = elementFrameAt(el, currentTime);
-  if (!frame) return null;
   const bbox = measurePaths(el.paths).bbox;
+  const isImage = el.kind === 'image' && !!el.image;
 
   return (
     <g
-      transform={`translate(${el.x} ${el.y}) rotate(${el.rotation}) scale(${el.scale})`}
+      transform={elementTransform(el, frame)}
       opacity={frame.groupOpacity}
-      onPointerDown={(e) => onPointerDown(e, el)}
-      style={{ cursor: 'move' }}
+      onPointerDown={interactive ? (e) => onPointerDown(e, el) : undefined}
+      style={{ cursor: interactive ? 'move' : 'default' }}
     >
       {/* transparent bbox hit area so the whole element is clickable/draggable */}
-      <rect
-        x={bbox.x}
-        y={bbox.y}
-        width={Math.max(bbox.width, 1)}
-        height={Math.max(bbox.height, 1)}
-        fill="transparent"
-        stroke="none"
-      />
-      {el.paths.map((d, i) => {
-        const dash = frame.dashes?.[i];
-        return (
-          <path
-            key={i}
-            d={d}
-            fill={el.fillColor}
-            fillOpacity={frame.fillOpacity}
-            stroke={el.strokeColor}
-            strokeWidth={el.strokeWidth / el.scale}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeDasharray={dash?.strokeDasharray}
-            strokeDashoffset={dash?.strokeDashoffset}
-          />
-        );
-      })}
+      {interactive && (
+        <rect
+          x={bbox.x}
+          y={bbox.y}
+          width={Math.max(bbox.width, 1)}
+          height={Math.max(bbox.height, 1)}
+          fill="transparent"
+          stroke="none"
+        />
+      )}
+      {isImage ? (
+        <g dangerouslySetInnerHTML={{ __html: elementInnerSvg(el, frame) }} />
+      ) : (
+        el.paths.map((d, i) => {
+          const dash = frame.dashes?.[i];
+          const { fill, stroke } = pathColors(el, i);
+          return (
+            <path
+              key={i}
+              d={d}
+              fill={fill}
+              fillOpacity={frame.fillOpacity}
+              fillRule={el.fillRule ?? 'nonzero'}
+              stroke={stroke}
+              strokeWidth={el.strokeWidth / el.scale}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={dash?.strokeDasharray}
+              strokeDashoffset={dash?.strokeDashoffset}
+            />
+          );
+        })
+      )}
     </g>
   );
 });

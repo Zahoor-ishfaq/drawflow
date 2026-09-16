@@ -4,6 +4,7 @@ import type { DrawElement } from '../../types';
 import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
 import { measurePaths } from '../../lib/drawing';
+import { pathColors } from '../../lib/renderFrame';
 import { clamp } from '../../lib/time';
 
 const CARD_W = 104;
@@ -12,28 +13,34 @@ const SLOT_WIDTH = CARD_W + CONNECTOR_W;
 
 /** Mini preview of an element's artwork. */
 const ElementThumb = memo(function ElementThumb({ el }: { el: DrawElement }) {
+  if (el.kind === 'image' && el.image) {
+    return <img src={el.image.src} alt="" className="h-full w-full object-contain" draggable={false} />;
+  }
   const b = measurePaths(el.paths).bbox;
   const w = Math.max(b.width, 1);
   const h = Math.max(b.height, 1);
   const pad = Math.max(w, h) * 0.1;
-  const showFill = el.fillColor !== 'none';
   return (
     <svg
       viewBox={`${b.x - pad} ${b.y - pad} ${w + pad * 2} ${h + pad * 2}`}
       className="h-full w-full"
       preserveAspectRatio="xMidYMid meet"
     >
-      {el.paths.map((d, i) => (
-        <path
-          key={i}
-          d={d}
-          fill={showFill ? el.fillColor : 'none'}
-          stroke={el.strokeColor}
-          strokeWidth={Math.max(w, h) / 36}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
+      {el.paths.map((d, i) => {
+        const { fill, stroke } = pathColors(el, i);
+        return (
+          <path
+            key={i}
+            d={d}
+            fill={fill}
+            fillRule={el.fillRule ?? 'nonzero'}
+            stroke={stroke}
+            strokeWidth={el.pathFills ? Math.max(w, h) / 400 : Math.max(w, h) / 36}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        );
+      })}
     </svg>
   );
 });

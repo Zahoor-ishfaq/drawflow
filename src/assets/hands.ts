@@ -1,8 +1,18 @@
 // Photographic drawing hands (public/hands/*.webp, see CREDITS.md). Each is a
 // top-down cut-out with the pen tip at (tipX, tipY) in image pixels and the
-// arm running toward the lower-right, the way VideoScribe hands are built.
+// arm running toward the lower-right. Because every source photo ends at its
+// frame edge, a long sleeve is drawn from the wrist outward so the arm always
+// continues off-screen — a person reaching in from outside the board.
 
 import type { HandStyle } from '../types';
+
+export interface SleeveDef {
+  x: number;      // wrist centre, image px
+  y: number;
+  angle: number;  // arm direction, degrees (screen coords, y down)
+  hw0: number;    // half-width at the cuff
+  hw1: number;    // half-width 260px along the arm
+}
 
 export interface HandDef {
   id: Exclude<HandStyle, 'none'>;
@@ -15,26 +25,85 @@ export interface HandDef {
   tipY: number;
   /** image height as a fraction of the camera frame height (constant on screen) */
   frameFraction: number;
+  sleeve: SleeveDef;
 }
 
 export const HANDS: HandDef[] = [
   {
     id: 'marker', label: 'Marker', description: 'Black felt-tip — classic whiteboard look',
-    src: '/hands/marker.webp', width: 725, height: 734, tipX: 218, tipY: 13, frameFraction: 0.78,
+    src: '/hands/marker.webp', width: 725, height: 734, tipX: 218, tipY: 13, frameFraction: 0.72,
+    sleeve: { x: 440, y: 505, angle: 32, hw0: 88, hw1: 125 },
   },
   {
-    id: 'pencil', label: 'Pencil', description: 'Yellow HB pencil — sketchbook feel',
-    src: '/hands/pencil.webp', width: 585, height: 695, tipX: 22, tipY: 14, frameFraction: 0.58,
+    id: 'pen', label: 'Pen', description: 'Ballpoint pen — notebook feel',
+    src: '/hands/pen.webp', width: 576, height: 640, tipX: 15, tipY: 106, frameFraction: 0.66,
+    sleeve: { x: 365, y: 360, angle: 79, hw0: 105, hw1: 150 },
   },
   {
     id: 'chalk', label: 'Chalk', description: 'White paint marker — for chalkboards',
-    src: '/hands/chalk.webp', width: 748, height: 722, tipX: 229, tipY: 13, frameFraction: 0.78,
+    src: '/hands/chalk.webp', width: 748, height: 722, tipX: 229, tipY: 13, frameFraction: 0.72,
+    sleeve: { x: 455, y: 495, angle: 28, hw0: 92, hw1: 128 },
   },
 ];
 
 export function handDef(style: HandStyle): HandDef | null {
   if (style === 'none') return null;
   return HANDS.find((h) => h.id === style) ?? HANDS[0];
+}
+
+// --- SVG markup ---------------------------------------------------------
+
+const SLEEVE_LENGTH = 9000; // image px — far beyond any frame at any zoom
+const CUFF = 48;
+
+function sleevePath(s: SleeveDef, fromX = 0): string {
+  const { hw0, hw1 } = s;
+  const hw2 = hw1 * 1.15;
+  const c = hw0 * 0.35; // cuff edge bulges toward the hand
+  const L = SLEEVE_LENGTH;
+  return (
+    `M${fromX} ${-hw0}L260 ${-hw1}L${L} ${-hw2}L${L} ${hw2}L260 ${hw1}L${fromX} ${hw0}` +
+    `Q${fromX - c} 0 ${fromX} ${-hw0}Z`
+  );
+}
+
+function cuffPath(s: SleeveDef): string {
+  const { hw0, hw1 } = s;
+  const c = hw0 * 0.35;
+  const hwC = hw0 + ((hw1 - hw0) * CUFF) / 260;
+  return `M0 ${-hw0}L${CUFF} ${-hwC}L${CUFF} ${hwC}L0 ${hw0}Q${-c} 0 0 ${-hw0}Z`;
+}
+
+/**
+ * Inner markup for a hand: the photo plus the sleeve extension, in the hand's
+ * image-pixel coordinate space (wrap it in the tip-anchoring transform).
+ * Shared by the live canvas and the export serializer. `href` is the image
+ * URL (or a data: URL when exporting).
+ */
+export function handInnerSvg(def: HandDef, href: string): string {
+  const s = def.sleeve;
+  const gid = `sleeve-${def.id}`;
+  const hw2 = s.hw1 * 1.15;
+  return (
+    `<defs>` +
+      `<linearGradient id="${gid}-g" gradientUnits="userSpaceOnUse" x1="0" y1="${-hw2}" x2="0" y2="${hw2}">` +
+        `<stop offset="0" stop-color="#242935"/><stop offset="0.45" stop-color="#363d4d"/>` +
+        `<stop offset="1" stop-color="#1f232c"/></linearGradient>` +
+      `<filter id="${gid}-blur" x="-10%" y="-10%" width="120%" height="120%">` +
+        `<feGaussianBlur stdDeviation="11"/></filter>` +
+    `</defs>` +
+    // sleeve shadow (offset like the hand's baked shadow)
+    `<g transform="translate(14 16)"><g transform="translate(${s.x} ${s.y}) rotate(${s.angle})">` +
+      `<path d="${sleevePath(s)}" fill="#141820" opacity="0.3" filter="url(#${gid}-blur)"/>` +
+    `</g></g>` +
+    `<image href="${href}" width="${def.width}" height="${def.height}"/>` +
+    `<g transform="translate(${s.x} ${s.y}) rotate(${s.angle})">` +
+      `<path d="${sleevePath(s)}" fill="url(#${gid}-g)"/>` +
+      `<path d="${cuffPath(s)}" fill="#3d4557"/>` +
+      `<path d="M${CUFF} ${-(s.hw0 + ((s.hw1 - s.hw0) * CUFF) / 260)}L${CUFF} ${s.hw0 + ((s.hw1 - s.hw0) * CUFF) / 260}" ` +
+        `stroke="#1c2029" stroke-width="3" opacity="0.7"/>` +
+    `</g>`
+  );
 }
 
 // --- image loading (shared by preview + export) ------------------------

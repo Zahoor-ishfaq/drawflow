@@ -56,7 +56,12 @@ export function useKeyboardShortcuts(): void {
           break;
         case 'Delete':
         case 'Backspace':
-          if (s.selectedId) {
+          if (s.selectedId === 'audio') {
+            e.preventDefault();
+            if (s.audio) URL.revokeObjectURL(s.audio.url);
+            s.setAudio(null);
+            s.select(null);
+          } else if (s.selectedId) {
             e.preventDefault();
             s.removeElement(s.selectedId);
           }

@@ -1,15 +1,18 @@
+import { useMemo } from 'react';
 import { handTransform, type HandFrame } from '../../lib/renderFrame';
+import { handInnerSvg } from '../../assets/hands';
 
 export function Hand({ frame }: { frame: HandFrame | null }) {
+  const inner = useMemo(
+    () => (frame ? handInnerSvg(frame.def, frame.def.src) : ''),
+    [frame?.def],
+  );
   if (!frame) return null;
   return (
-    <image
-      href={frame.def.src}
-      width={frame.def.width}
-      height={frame.def.height}
+    <g
       transform={handTransform(frame)}
       pointerEvents="none"
-      style={{ imageRendering: 'auto' }}
+      dangerouslySetInnerHTML={{ __html: inner }}
     />
   );
 }

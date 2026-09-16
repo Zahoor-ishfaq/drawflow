@@ -7,8 +7,9 @@
 import type { DrawElement, HandStyle, Project } from '../types';
 import { applyTransform, dashPropsAt, handTransformAt, measurePaths, type DashProps } from './drawing';
 import { buildCameraTimeline, cameraAt, viewBoxFor, type CameraTimeline } from './camera';
-import { handDef, type HandDef } from '../assets/hands';
+import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
 import { paperDef } from '../assets/paper';
+import { scribbleStrokeWidth } from './scribble';
 
 export const FILL_FADE_SECONDS = 0.2;
 const HAND_IN_SECONDS = 0.45;
@@ -17,9 +18,14 @@ const HAND_OUT_SECONDS = 0.35;
 export interface ElementFrame {
   groupOpacity: number;
   fillOpacity: number;
-  /** null → no dash manipulation (appear/fade, or fully drawn) */
+  /** null → no dash manipulation (appear/fade/slide, or fully drawn) */
   dashes: DashProps[] | null;
+  /** extra translation (slide-in), canvas units */
+  dx: number;
+  dy: number;
 }
+
+export const FULL_FRAME: ElementFrame = { groupOpacity: 1, fillOpacity: 1, dashes: null, dx: 0, dy: 0 };
 
 export function elementProgress(el: DrawElement, t: number): number {
   if (t < el.startTime) return 0;
@@ -27,29 +33,53 @@ export function elementProgress(el: DrawElement, t: number): number {
   return Math.min((t - el.startTime) / el.drawDuration, 1);
 }
 
-/** Returns null when the element is not visible at time t. */
-export function elementFrameAt(el: DrawElement, t: number): ElementFrame | null {
+function easeOutCubic(p: number): number {
+  return 1 - Math.pow(1 - p, 3);
+}
+
+/**
+ * Reveal state of an element at time t. `view` is the camera frame at t
+ * (needed so slide-ins start just outside the visible picture).
+ * Returns null when the element is not visible yet.
+ */
+export function elementFrameAt(
+  el: DrawElement,
+  t: number,
+  view: { width: number; height: number },
+): ElementFrame | null {
   if (t < el.startTime) return null;
   const p = elementProgress(el, t);
 
-  if (el.style === 'appear') {
-    return { groupOpacity: 1, fillOpacity: 1, dashes: null };
-  }
-  if (el.style === 'fade') {
-    return { groupOpacity: p, fillOpacity: 1, dashes: null };
-  }
-
-  // 'draw'
-  const m = measurePaths(el.paths);
-  if (p >= 1) {
-    let fillOpacity = 1;
-    if (el.fillAfterDraw) {
-      const done = el.startTime + el.drawDuration;
-      fillOpacity = Math.min(Math.max((t - done) / FILL_FADE_SECONDS, 0), 1);
+  switch (el.style) {
+    case 'appear':
+      return FULL_FRAME;
+    case 'fade':
+      return { ...FULL_FRAME, groupOpacity: p };
+    case 'slide': {
+      const e = 1 - easeOutCubic(p);
+      const dist = el.slideFrom === 'left' || el.slideFrom === 'right' ? view.width : view.height;
+      const sign = el.slideFrom === 'left' || el.slideFrom === 'top' ? -1 : 1;
+      return {
+        ...FULL_FRAME,
+        groupOpacity: Math.min(1, p * 4),
+        dx: el.slideFrom === 'left' || el.slideFrom === 'right' ? sign * dist * e : 0,
+        dy: el.slideFrom === 'top' || el.slideFrom === 'bottom' ? sign * dist * e : 0,
+      };
     }
-    return { groupOpacity: 1, fillOpacity, dashes: null };
+    default: {
+      // 'draw' — dash reveal; for raster images the dashes drive a scribble mask
+      const m = measurePaths(el.paths);
+      if (p >= 1) {
+        let fillOpacity = 1;
+        if (el.fillAfterDraw && el.kind !== 'image') {
+          const done = el.startTime + el.drawDuration;
+          fillOpacity = Math.min(Math.max((t - done) / FILL_FADE_SECONDS, 0), 1);
+        }
+        return { ...FULL_FRAME, fillOpacity };
+      }
+      return { ...FULL_FRAME, fillOpacity: el.kind === 'image' ? 1 : 0, dashes: dashPropsAt(m, p) };
+    }
   }
-  return { groupOpacity: 1, fillOpacity: 0, dashes: dashPropsAt(m, p) };
 }
 
 export function sortedByZ(elements: DrawElement[]): DrawElement[] {
@@ -153,13 +183,73 @@ export function handTransform(h: HandFrame): string {
 }
 
 // ---------------------------------------------------------------------------
-// Full-frame description + SVG string rendering (used by export, spec §8).
-// Text is already converted to paths, so the serialized SVG needs no fonts.
+// Element markup helpers (shared by the live canvas and the export string)
 // ---------------------------------------------------------------------------
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
+
+export function elementTransform(el: DrawElement, frame: ElementFrame): string {
+  return `translate(${el.x + frame.dx} ${el.y + frame.dy}) rotate(${el.rotation}) scale(${el.scale})`;
+}
+
+/** Inner SVG markup for one element (paths, or a masked image). */
+export function elementInnerSvg(el: DrawElement, frame: ElementFrame): string {
+  if (el.kind === 'image' && el.image) {
+    const maskId = `reveal-${el.id}`;
+    const sw = scribbleStrokeWidth(el.image.width, el.image.height);
+    let out = '';
+    if (frame.dashes) {
+      out += `<mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="${el.image.width}" height="${el.image.height}">`;
+      el.paths.forEach((d, i) => {
+        const dash = frame.dashes![i];
+        out +=
+          `<path d="${esc(d)}" fill="none" stroke="#fff" stroke-width="${sw}" stroke-linecap="round" ` +
+          `stroke-dasharray="${dash.strokeDasharray}" stroke-dashoffset="${dash.strokeDashoffset}"/>`;
+      });
+      out += '</mask>';
+    }
+    out +=
+      `<image href="${el.image.src}" width="${el.image.width}" height="${el.image.height}" ` +
+      `preserveAspectRatio="none"${frame.dashes ? ` mask="url(#${maskId})"` : ''}/>`;
+    return out;
+  }
+  return el.paths
+    .map((d, i) => {
+      const dash = frame.dashes?.[i];
+      const dashAttrs = dash
+        ? ` stroke-dasharray="${dash.strokeDasharray}" stroke-dashoffset="${dash.strokeDashoffset}"`
+        : '';
+      const { fill, stroke } = pathColors(el, i);
+      return (
+        `<path d="${esc(d)}" fill="${esc(fill)}" fill-opacity="${frame.fillOpacity}" fill-rule="${el.fillRule ?? 'nonzero'}" ` +
+        `stroke="${esc(stroke)}" stroke-width="${el.strokeWidth / el.scale}" ` +
+        `stroke-linecap="round" stroke-linejoin="round"${dashAttrs}/>`
+      );
+    })
+    .join('');
+}
+
+/**
+ * Colours for path i. Imported coloured artwork keeps its own fills; a
+ * fill-only shape borrows its fill as the stroke so the hand has a line to
+ * draw before the fill appears.
+ */
+export function pathColors(el: DrawElement, i: number): { fill: string; stroke: string } {
+  const pf = el.pathFills?.[i];
+  const ps = el.pathStrokes?.[i];
+  const fill = pf ?? el.fillColor;
+  let stroke = ps ?? el.strokeColor;
+  if (ps === 'none' || (ps == null && el.pathFills && fill !== 'none')) stroke = fill;
+  if (ps === 'none' && fill === 'none') stroke = el.strokeColor;
+  return { fill, stroke };
+}
+
+// ---------------------------------------------------------------------------
+// Full-frame SVG string rendering (used by export, spec §8). Text is already
+// converted to paths and images are data: URLs, so the SVG is self-contained.
+// ---------------------------------------------------------------------------
 
 export interface RenderContext {
   project: Project;
@@ -197,23 +287,10 @@ export function svgStringForTime(
   );
 
   for (const el of ordered) {
-    const frame = elementFrameAt(el, t);
+    const frame = elementFrameAt(el, t, vb);
     if (!frame) continue;
-    parts.push(
-      `<g transform="translate(${el.x} ${el.y}) rotate(${el.rotation}) scale(${el.scale})" ` +
-        `opacity="${frame.groupOpacity}">`,
-    );
-    el.paths.forEach((d, i) => {
-      const dash = frame.dashes?.[i];
-      const dashAttrs = dash
-        ? ` stroke-dasharray="${dash.strokeDasharray}" stroke-dashoffset="${dash.strokeDashoffset}"`
-        : '';
-      parts.push(
-        `<path d="${esc(d)}" fill="${esc(el.fillColor)}" fill-opacity="${frame.fillOpacity}" ` +
-          `stroke="${esc(el.strokeColor)}" stroke-width="${el.strokeWidth / el.scale}" ` +
-          `stroke-linecap="round" stroke-linejoin="round"${dashAttrs}/>`,
-      );
-    });
+    parts.push(`<g transform="${elementTransform(el, frame)}" opacity="${frame.groupOpacity}">`);
+    parts.push(elementInnerSvg(el, frame));
     parts.push('</g>');
   }
 
@@ -221,10 +298,7 @@ export function svgStringForTime(
   if (hand) {
     const href = handImages[hand.def.id];
     if (href) {
-      parts.push(
-        `<image href="${href}" xlink:href="${href}" width="${hand.def.width}" height="${hand.def.height}" ` +
-          `transform="${handTransform(hand)}"/>`,
-      );
+      parts.push(`<g transform="${handTransform(hand)}">${handInnerSvg(hand.def, href)}</g>`);
     }
   }
 

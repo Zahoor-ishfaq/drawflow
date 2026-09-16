@@ -1,0 +1,36 @@
+<svg id="emoji" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g id="line">
+    <line x1="14" x2="14" y1="46.6491" y2="33.8966" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <polyline fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="14 20.231 14 16 61 16 61 24.2224 64 27.049 64 50.2561 61 53.3063 61 56 14 56 14 52.4289"/>
+    <polyline fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="7 23 20 23 20 31 7 31"/>
+    <rect x="10" y="47" width="9" height="5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <rect x="30" y="43" width="28.5" height="3" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <circle cx="27" cy="20" r="1"/>
+    <circle cx="18" cy="20" r="1"/>
+    <circle cx="30" cy="20" r="1"/>
+    <circle cx="33" cy="20" r="1"/>
+    <circle cx="36" cy="20" r="1"/>
+    <circle cx="39" cy="20" r="1"/>
+    <circle cx="45" cy="20" r="1"/>
+    <circle cx="48" cy="20" r="1"/>
+    <circle cx="51" cy="20" r="1"/>
+    <circle cx="54" cy="20" r="1"/>
+    <circle cx="57" cy="20" r="1"/>
+    <circle cx="27" cy="52" r="1"/>
+    <circle cx="30" cy="52" r="1"/>
+    <circle cx="33" cy="52" r="1"/>
+    <circle cx="36" cy="52" r="1"/>
+    <circle cx="39" cy="52" r="1"/>
+    <circle cx="42" cy="52" r="1"/>
+    <circle cx="48" cy="52" r="1"/>
+    <circle cx="51" cy="52" r="1"/>
+    <circle cx="54" cy="52" r="1"/>
+    <circle cx="57" cy="52" r="1"/>
+    <circle cx="57" cy="31" r="1"/>
+    <circle cx="54" cy="31" r="1"/>
+    <circle cx="27" cy="31" r="1"/>
+    <circle cx="21" cy="40" r="1"/>
+    <circle cx="57" cy="34" r="1"/>
+    <circle cx="54" cy="34" r="1"/>
+  </g>
+</svg>

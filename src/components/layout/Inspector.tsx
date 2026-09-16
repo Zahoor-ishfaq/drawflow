@@ -9,12 +9,15 @@ import { StyleSection } from '../inspector/StyleSection';
 import { AnimationSection } from '../inspector/AnimationSection';
 import { TextSection } from '../inspector/TextSection';
 import { ProjectSection } from '../inspector/ProjectSection';
+import { AudioSection } from '../inspector/AudioSection';
+import { AUDIO_SELECTION_ID } from '../timeline/AudioLane';
 
 type Tab = 'style' | 'animation';
 
 export function Inspector() {
   const selected = useSelectedElement();
   const sequence = useSequence();
+  const audioSelected = useStore((s) => s.selectedId === AUDIO_SELECTION_ID && !!s.audio);
   const { duplicateElement, removeElement, reorder } = useStore.getState();
   const [tab, setTab] = useState<Tab>('animation');
 
@@ -24,7 +27,7 @@ export function Inspector() {
     <aside className="flex w-[290px] shrink-0 flex-col border-l border-line bg-panel">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3.5">
         <span className="truncate text-[14px] font-semibold">
-          {selected ? `${index + 1}. ${selected.label}` : 'Project settings'}
+          {selected ? `${index + 1}. ${selected.label}` : audioSelected ? 'Music' : 'Project settings'}
         </span>
         {selected && (
           <div className="flex shrink-0 items-center gap-0.5">
@@ -80,6 +83,8 @@ export function Inspector() {
               {selected.kind === 'text' && <TextSection element={selected} />}
             </div>
           )
+        ) : audioSelected ? (
+          <AudioSection />
         ) : (
           <ProjectSection />
         )}

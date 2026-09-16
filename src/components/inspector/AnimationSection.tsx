@@ -1,4 +1,4 @@
-import type { CameraMode, DrawElement, DrawStyle } from '../../types';
+import type { CameraMode, DrawElement, DrawStyle, SlideFrom } from '../../types';
 import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
 import { Field, SectionHeader } from '../ui/Field';
@@ -16,7 +16,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
   return (
     <div className="flex flex-col gap-3">
       <SectionHeader>Timing</SectionHeader>
-      <Field label="Animate — seconds to draw">
+      <Field label={`Animate — seconds to ${el.style === 'draw' ? 'draw' : 'appear'}`}>
         <Slider value={el.drawDuration} onChange={(v) => patch({ drawDuration: v })} min={0.1} max={20} step={0.1} />
       </Field>
       <Field label="Pause — hold after drawing">
@@ -34,21 +34,41 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
       </p>
 
       <SectionHeader>Entrance</SectionHeader>
-      <Field label="Style">
+      <Field label="Effect">
         <Segmented<DrawStyle>
           value={el.style}
           onChange={(v) => patch({ style: v })}
           options={[
-            { value: 'draw', label: 'Hand draw' },
+            { value: 'draw', label: el.kind === 'image' ? 'Scribble' : 'Draw' },
+            { value: 'slide', label: 'Slide in' },
+            { value: 'fade', label: 'Fade' },
             { value: 'appear', label: 'Appear' },
-            { value: 'fade', label: 'Fade in' },
           ]}
         />
       </Field>
+      {el.style === 'slide' && (
+        <Field label="Slide in from">
+          <Segmented<SlideFrom>
+            value={el.slideFrom}
+            onChange={(v) => patch({ slideFrom: v })}
+            options={[
+              { value: 'left', label: 'Left' },
+              { value: 'right', label: 'Right' },
+              { value: 'top', label: 'Top' },
+              { value: 'bottom', label: 'Bottom' },
+            ]}
+          />
+        </Field>
+      )}
       {el.style === 'draw' && (
         <Field label="Drawing hand">
           <HandPicker value={el.hand} onChange={(v) => patch({ hand: v })} allowDefault compact />
         </Field>
+      )}
+      {el.style === 'draw' && el.kind === 'image' && (
+        <p className="text-[11px] leading-relaxed text-t3">
+          Photos are revealed with a scribble, the way VideoScribe draws pictures.
+        </p>
       )}
 
       <SectionHeader>Camera</SectionHeader>

@@ -90,7 +90,7 @@ function computeDuration(elements: DrawElement[], audio: AudioTrack | null, proj
     if (project.zoomAtEnd) end += END_ZOOM_SECONDS;
     end += project.endHold;
   }
-  if (audio?.buffer) end = Math.max(end, audio.startTime + audio.buffer.duration);
+  if (audio) end = Math.max(end, audio.startTime + Math.max(0, audio.duration - audio.trimStart - audio.trimEnd));
   return Math.max(MIN_DURATION, end);
 }
 
@@ -145,6 +145,7 @@ export const useStore = create<AppState>()(
           pauseAfter: 0.5,
           transitionIn: 0.6,
           style: 'draw',
+          slideFrom: 'left',
           zIndex: maxZ + 1,
           camera: 'auto',
           cameraZoom: 1,

@@ -1,0 +1,13 @@
+<svg id="emoji" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g id="line">
+    <circle cx="36" cy="33.8061" r="4.2575" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M29.3672,30.3066c-2.8803-2.1162-4.4747-5.2872-4.011-8.2086.8859-5.5812,8.7338-6.7884,9.5794-6.9184,5.1938-.7989,11.0043,1.4504,11.176,3.7253.1249,1.6552-2.8209,2.1876-5.8541,5.8541-1.4013,1.6939-2.319,3.4497-2.9315,5.0017"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M36.3845,40.8092c-.2513,3.7814-2.2535,6.9888-5.1495,8.0993-5.2764,2.0234-10.2458-4.1695-10.7812-4.8368-3.2888-4.0985-4.246-10.2552-2.3618-11.5413,1.371-.9358,3.3049,1.3492,7.9968,2.1427,2.1051.3561,4.0327.2879,5.6537.0587"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M42.3815,29.8591c3.2774-1.4442,6.8288-1.242,9.1308.6235,4.3905,3.5578,1.512,10.9579,1.2019,11.7552-1.905,4.8975-6.7582,8.8048-8.8142,7.816-1.4959-.7194-.484-3.5367-2.1427-7.9968-.7766-2.0883-1.8566-3.7781-2.9077-5.0921"/>
+    <circle cx="36" cy="33.8061" r="21.8197" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M30.9261,21.5016c-4.8318,1.9946-8.2322,6.7524-8.2322,12.3045,0,1.8372.3723,3.5874,1.0457,5.1793"/>
+    <polyline fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="39 38 40.2575 61.4799 31.7425 61.4799 32 52"/>
+    <path fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M47.6583,61.7124c1.5795.5595,2.7108,2.0665,2.7108,3.8377h0c0,.9852-.7987,1.7839-1.7839,1.7839h-25.1704c-.9852,0-1.7839-.7987-1.7839-1.7839h0c0-2.2479,1.8223-4.0702,4.0702-4.0702h13.867"/>
+    <path d="M45.8645,62.9994c0,1.0175-.8325,1.85-1.85,1.85s-1.85-.8325-1.85-1.85.8325-1.85,1.85-1.85,1.85.8325,1.85,1.85h0Z"/>
+  </g>
+</svg>
