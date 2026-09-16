@@ -1,41 +1,49 @@
 # DrawFlow — Whiteboard Animation Studio
 
-A browser-based whiteboard/hand-drawn animation tool (a VideoScribe alternative), built
-from [drawflow_specs.md](./drawflow_specs.md). Compose scenes from text, shapes, and
-imported SVGs; each element draws itself on the canvas as an animated hand traces it,
-synced to a timeline and audio, then exports to MP4/WebM entirely in the browser.
+A browser-based whiteboard animation tool in the spirit of VideoScribe, built from
+[drawflow_specs.md](./drawflow_specs.md). Add text, shapes and images; a real
+photographed hand draws each one while the camera glides from element to element;
+export the result to MP4/WebM entirely in the browser.
 
 ## Run
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev          # http://localhost:5173
 ```
 
-`npm run build` + `npm run preview` for a production build. Both the dev and preview
-servers send the `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers
-that video export requires; any production host must send the same two headers over
-HTTPS (a Netlify `_headers` file is included in `public/`).
+`npm run build` + `npm run preview` for a production build; `npm run desktop:dev` /
+`desktop:pack` for the Electron desktop app. Video export needs the page to be
+cross-origin isolated — the dev and preview servers already send the required
+`Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers, and
+`public/_headers` covers Netlify-style hosts.
 
-## Quick tour
+## How it works (the VideoScribe model)
 
-- **Left rail — Add**: text (Caveat/Inter, converted to glyph paths via opentype.js),
-  eight built-in shapes, and an SVG import dropzone. **Library**: 24 bundled outline
-  illustrations, searchable.
-- **Canvas**: click to select, drag to move, corner handles to scale. Scroll wheel
-  zooms, middle-drag pans.
-- **Timeline**: one track per element (top = top layer). Drag a clip to change its
-  start time, drag its right edge to change draw duration, drag vertically to reorder
-  layers. Ruler click/drag seeks; the audio lane at the bottom takes a soundtrack and
-  renders its waveform.
-- **Inspector**: transform, style (stroke/fill/width, fill-after-draw), animation
-  (Draw/Appear/Fade, duration, start, hand style), and text editing. With nothing
-  selected it shows project settings (canvas preset, fps, background).
-- **Export**: MP4 (H.264) or WebM (VP9) at 720p/1080p via ffmpeg.wasm — deterministic
-  frame-by-frame capture, so the file always matches the preview. Expect 1–3 minutes
-  for a 20–30 s clip at 1080p.
+- **Toolbar (left)** — *Images* (bundled outline library), *Text* (handwritten fonts,
+  drawn letter by letter), *Shapes*, *Import* (your own SVG), *Music*, and the two
+  project settings: *Hand* (marker / pencil / chalk — real photographs) and *Paper*
+  (plain, grid, dots, lined, cream, kraft, chalkboard).
+- **Elements play in sequence.** Each has three times, exactly like VideoScribe:
+  **Animate** (seconds to draw), **Pause** (hold after drawing) and **Transition**
+  (camera travel into it). Start times are derived automatically.
+- **Camera.** By default the camera zooms to each element as it's drawn, then pulls
+  back to the whole scribe at the end. Per element you can choose *Zoom to it*,
+  *Stay* (keep the previous framing) or *Whole* canvas, and tune the zoom tightness.
+  Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
+- **Edit view / Camera view** above the canvas: edit the whole artboard, or see
+  exactly what the video will show at the current time. Scrubbing and Preview switch
+  to camera view automatically; a dashed guide shows the selected element's framing.
+- **Strip (bottom)** — thumbnails in play order. Drag to reorder, double-click to
+  jump there. Each card shows its animate and pause times; connectors show transitions.
+- **Inspector (right)** — *Animation* tab (timing, entrance style, per-element hand,
+  camera) and *Style* tab (position, colours, stroke, text content and font).
+- **Export** — MP4 (H.264) or WebM (VP9) at 720p/1080p via ffmpeg.wasm. Frames are
+  rendered deterministically, so the file always matches the preview.
 
 ## Shortcuts
 
 `Space` play/pause · `←/→` step one frame · `Delete` remove selection ·
 `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo · `Ctrl+D` duplicate · `Esc` deselect
+
+Asset licences are listed in [CREDITS.md](./CREDITS.md).

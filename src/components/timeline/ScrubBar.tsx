@@ -21,7 +21,9 @@ export function ScrubBar() {
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    useStore.getState().pause();
+    const s = useStore.getState();
+    s.pause();
+    s.setCameraView(true); // scrubbing shows what the video will show
     seekTo(e.clientX);
     const onMove = (ev: PointerEvent) => seekTo(ev.clientX);
     const onUp = () => window.removeEventListener('pointermove', onMove);

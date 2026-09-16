@@ -10,6 +10,9 @@ import { Stage } from '../canvas/Stage';
 export function Workspace() {
   const project = useStore((s) => s.project);
   const elementCount = useStore((s) => s.elements.length);
+  const cameraView = useStore((s) => s.cameraView);
+  const isPlaying = useStore((s) => s.isPlaying);
+  const setCameraView = useStore((s) => s.setCameraView);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ zoom: 0.35, x: 0, y: 0 });
@@ -108,10 +111,32 @@ export function Workspace() {
         <div className="pointer-events-none absolute inset-x-0 top-[46%] text-center">
           <div className="text-[15px] font-medium text-t2">Your canvas is empty</div>
           <div className="mt-1 text-[13px] text-t3">
-            Use the toolbar on the left — add text, a shape, or drop in an SVG
+            Use the toolbar on the left — add text, a shape, or an image from the library
           </div>
         </div>
       )}
+
+      {/* edit / camera view toggle */}
+      <div className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-line bg-panel p-0.5 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
+        {(['edit', 'camera'] as const).map((mode) => {
+          const active = mode === 'camera' ? cameraView : !cameraView;
+          return (
+            <button
+              key={mode}
+              type="button"
+              disabled={isPlaying}
+              className={
+                'df-ui-anim h-7 rounded-full px-3.5 text-[12px] font-medium transition-all disabled:opacity-60 ' +
+                (active ? 'bg-accent text-white' : 'text-t2 hover:text-t1')
+              }
+              onClick={() => setCameraView(mode === 'camera')}
+              title={mode === 'camera' ? 'See what the camera sees at the current time' : 'Edit the whole artboard'}
+            >
+              {mode === 'camera' ? 'Camera view' : 'Edit view'}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-full border border-line bg-panel px-1.5 py-1 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
         <button

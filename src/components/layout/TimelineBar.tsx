@@ -31,7 +31,7 @@ export function TimelineBar() {
           </span>
         )}
       </div>
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-1.5">
         <FilmStrip />
       </div>
     </div>

@@ -3,8 +3,9 @@
 // rasterized to PNG, written to ffmpeg's virtual FS, then encoded.
 
 import type { AudioTrack, DrawElement, HandStyle, Project } from '../types';
-import { svgStringForTime } from './renderFrame';
+import { makeRenderContext, svgStringForTime } from './renderFrame';
 import { getFFmpeg } from './ffmpegClient';
+import { HANDS, loadHandDataUrl } from '../assets/hands';
 
 export type ExportFormat = 'mp4' | 'webm';
 export type ExportPhase = 'loading' | 'capturing' | 'encoding';
@@ -15,7 +16,6 @@ export interface ExportOptions {
   project: Project;
   elements: DrawElement[];
   audio: AudioTrack | null;
-  handStyle: HandStyle;
   onPhase: (phase: ExportPhase) => void;
   /** 0..1 within the current phase */
   onProgress: (p: number) => void;
@@ -49,7 +49,7 @@ function canvasToPngBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<B
 }
 
 export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
-  const { project, elements, audio, handStyle, format } = opts;
+  const { project, elements, audio, format } = opts;
 
   if (!isCrossOriginIsolated()) {
     throw new Error(
@@ -68,6 +68,16 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   opts.onPhase('loading');
   const ffmpeg = await getFFmpeg();
 
+  // hand photos must be embedded (an SVG rasterized via <img> can't fetch)
+  const handImages: Partial<Record<HandStyle, string>> = {};
+  const used = new Set<HandStyle>([project.hand, ...elements.map((e) => e.hand ?? project.hand)]);
+  await Promise.all(
+    HANDS.filter((h) => used.has(h.id)).map(async (h) => {
+      handImages[h.id] = await loadHandDataUrl(h);
+    }),
+  );
+  const render = makeRenderContext(project, elements);
+
   const fps = project.fps;
   const totalFrames = Math.ceil(project.duration * fps);
   const canvas = makeCanvas(outW, outH);
@@ -85,7 +95,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     opts.onPhase('capturing');
     for (let frame = 0; frame < totalFrames; frame++) {
       const t = frame / fps;
-      const svg = svgStringForTime(project, elements, handStyle, t, outW, outH);
+      const svg = svgStringForTime(render, t, outW, outH, handImages);
       const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
       try {
         const img = new Image();

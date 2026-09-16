@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import { useStore as useZustandStore } from 'zustand';
-import type { AudioTrack, DrawElement, HandStyle, Project } from '../types';
+import type { AudioTrack, DrawElement, Project } from '../types';
 import { clamp } from '../lib/time';
+import { END_ZOOM_SECONDS } from '../lib/camera';
 
 export interface AppState {
   project: Project;
@@ -12,10 +13,11 @@ export interface AppState {
   // playback
   currentTime: number;
   isPlaying: boolean;
+  /** show the camera's view (what the video will show) instead of the whole artboard */
+  cameraView: boolean;
 
   // editing
   selectedId: string | null;
-  handStyle: HandStyle;
 
   // export
   isExporting: boolean;
@@ -27,19 +29,16 @@ export interface AppState {
   updateElement(id: string, patch: Partial<DrawElement>): void;
   removeElement(id: string): void;
   duplicateElement(id: string): void;
-  reorder(id: string, newZIndex: number): void;
-  /** move an element to a new position in play order and re-chain start times */
-  moveInSequence(id: string, targetIndex: number): void;
-  /** change drawDuration and shift everything that starts later by the delta */
-  setDurationRipple(id: string, duration: number): void;
+  /** move an element to a new position in play order (= stacking order) */
+  reorder(id: string, newIndex: number): void;
   select(id: string | null): void;
   setTime(t: number): void;
   play(): void;
   pause(): void;
   stop(): void;
+  setCameraView(v: boolean): void;
   setAudio(track: AudioTrack | null): void;
   updateAudio(patch: Partial<AudioTrack>): void;
-  setHandStyle(s: HandStyle): void;
   updateProject(patch: Partial<Project>): void;
   setExporting(v: boolean): void;
   setExportProgress(p: number): void;
@@ -52,33 +51,65 @@ const DEFAULT_PROJECT: Project = {
   height: 1080,
   fps: 30,
   background: '#ffffff',
-  duration: 10,
+  paper: 'plain',
+  duration: 5,
+  hand: 'marker',
+  cameraEasing: 'easeOut',
+  zoomAtEnd: true,
+  endHold: 1.5,
 };
 
-const TAIL_SECONDS = 1;
-const MIN_DURATION = 5;
-/** default pause between one element finishing and the next starting */
-export const SEQ_GAP = 0.3;
+const MIN_DURATION = 3;
 
-/** play order: by start time, ties broken by layer */
+/** Play order = stacking order (later elements draw on top). */
 export function sequenceOrder(elements: DrawElement[]): DrawElement[] {
-  return [...elements].sort(
-    (a, b) => a.startTime - b.startTime || a.zIndex - b.zIndex,
-  );
+  return [...elements].sort((a, b) => a.zIndex - b.zIndex);
 }
 
-function computeDuration(elements: DrawElement[], audio: AudioTrack | null): number {
-  let end = 0;
-  for (const el of elements) end = Math.max(end, el.startTime + el.drawDuration);
+/**
+ * Derive every element's startTime from the sequence: each starts when the
+ * previous one has finished drawing and pausing, plus its own transition
+ * (the first element has no transition). Also normalizes zIndex to 0..n-1.
+ */
+function rechain(elements: DrawElement[]): DrawElement[] {
+  let t = 0;
+  return sequenceOrder(elements).map((el, i) => {
+    const start = i === 0 ? 0 : t + el.transitionIn;
+    t = start + el.drawDuration + el.pauseAfter;
+    return el.startTime === start && el.zIndex === i ? el : { ...el, startTime: start, zIndex: i };
+  });
+}
+
+function contentEnd(elements: DrawElement[]): number {
+  return elements.reduce((m, e) => Math.max(m, e.startTime + e.drawDuration + e.pauseAfter), 0);
+}
+
+function computeDuration(elements: DrawElement[], audio: AudioTrack | null, project: Project): number {
+  let end = contentEnd(elements);
+  if (elements.length > 0) {
+    if (project.zoomAtEnd) end += END_ZOOM_SECONDS;
+    end += project.endHold;
+  }
   if (audio?.buffer) end = Math.max(end, audio.startTime + audio.buffer.duration);
-  return Math.max(MIN_DURATION, end + TAIL_SECONDS);
+  return Math.max(MIN_DURATION, end);
 }
 
-/** Reassign contiguous zIndexes 0..n-1 preserving order. */
-function normalizeZ(elements: DrawElement[]): DrawElement[] {
-  return [...elements]
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((el, i) => (el.zIndex === i ? el : { ...el, zIndex: i }));
+/** Apply a new element list: rechain, recompute duration, write to state. */
+function commit(
+  set: (partial: Partial<AppState>) => void,
+  get: () => AppState,
+  elements: DrawElement[],
+  extra: Partial<AppState> = {},
+): DrawElement[] {
+  const project = { ...get().project, ...(extra.project ?? {}) };
+  const audio = 'audio' in extra ? (extra.audio as AudioTrack | null) : get().audio;
+  const chained = rechain(elements);
+  set({
+    ...extra,
+    elements: chained,
+    project: { ...project, duration: computeDuration(chained, audio, project) },
+  });
+  return chained;
 }
 
 export const useStore = create<AppState>()(
@@ -89,17 +120,15 @@ export const useStore = create<AppState>()(
       audio: null,
       currentTime: 0,
       isPlaying: false,
+      cameraView: false,
       selectedId: null,
-      handStyle: 'marker',
       isExporting: false,
       exportProgress: 0,
       ffmpegReady: false,
 
       addElement(partial) {
-        const { elements, project, audio } = get();
+        const { elements, project } = get();
         const maxZ = elements.reduce((m, e) => Math.max(m, e.zIndex), -1);
-        const contentEnd = elements.reduce(
-          (m, e) => Math.max(m, e.startTime + e.drawDuration), 0);
         const el: DrawElement = {
           id: crypto.randomUUID(),
           label: partial.kind,
@@ -111,112 +140,55 @@ export const useStore = create<AppState>()(
           y: project.height / 2,
           scale: 1,
           rotation: 0,
-          startTime: elements.length > 0 ? contentEnd + SEQ_GAP : 0,
+          startTime: 0,
           drawDuration: 2,
+          pauseAfter: 0.5,
+          transitionIn: 0.6,
           style: 'draw',
           zIndex: maxZ + 1,
+          camera: 'auto',
+          cameraZoom: 1,
           ...partial,
         };
-        const next = [...elements, el];
-        set({
-          elements: next,
-          selectedId: el.id,
-          project: { ...project, duration: computeDuration(next, audio) },
-        });
-        return el;
+        const chained = commit(set, get, [...elements, el], { selectedId: el.id });
+        return chained.find((e) => e.id === el.id) ?? el;
       },
 
       updateElement(id, patch) {
-        const { elements, project, audio } = get();
-        const next = elements.map((e) => (e.id === id ? { ...e, ...patch } : e));
-        set({
-          elements: next,
-          project: { ...project, duration: computeDuration(next, audio) },
-        });
+        const { elements } = get();
+        commit(set, get, elements.map((e) => (e.id === id ? { ...e, ...patch } : e)));
       },
 
       removeElement(id) {
-        const { elements, project, audio, selectedId } = get();
-        const next = normalizeZ(elements.filter((e) => e.id !== id));
-        set({
-          elements: next,
+        const { elements, selectedId } = get();
+        commit(set, get, elements.filter((e) => e.id !== id), {
           selectedId: selectedId === id ? null : selectedId,
-          project: { ...project, duration: computeDuration(next, audio) },
         });
       },
 
       duplicateElement(id) {
-        const { elements, project, audio } = get();
+        const { elements } = get();
         const src = elements.find((e) => e.id === id);
         if (!src) return;
-        const maxZ = elements.reduce((m, e) => Math.max(m, e.zIndex), -1);
         const copy: DrawElement = {
           ...src,
           id: crypto.randomUUID(),
-          x: src.x + 40,
-          y: src.y + 40,
-          startTime: src.startTime + src.drawDuration + SEQ_GAP,
-          zIndex: maxZ + 1,
+          x: src.x + 60,
+          y: src.y + 60,
+          zIndex: src.zIndex + 0.5, // lands right after the original
         };
-        const next = [...elements, copy];
-        set({
-          elements: next,
-          selectedId: copy.id,
-          project: { ...project, duration: computeDuration(next, audio) },
-        });
+        commit(set, get, [...elements, copy], { selectedId: copy.id });
       },
 
-      reorder(id, newZIndex) {
-        const { elements } = get();
-        const ordered = [...elements].sort((a, b) => a.zIndex - b.zIndex);
-        const from = ordered.findIndex((e) => e.id === id);
-        if (from === -1) return;
-        const to = clamp(Math.round(newZIndex), 0, ordered.length - 1);
-        if (from === to) return;
-        const [moved] = ordered.splice(from, 1);
-        ordered.splice(to, 0, moved);
-        set({ elements: ordered.map((el, i) => ({ ...el, zIndex: i })) });
-      },
-
-      moveInSequence(id, targetIndex) {
-        const { elements, project, audio } = get();
-        const order = sequenceOrder(elements);
+      reorder(id, newIndex) {
+        const order = sequenceOrder(get().elements);
         const from = order.findIndex((e) => e.id === id);
         if (from === -1) return;
-        const to = clamp(Math.round(targetIndex), 0, order.length - 1);
+        const to = clamp(Math.round(newIndex), 0, order.length - 1);
         if (from === to) return;
         const [moved] = order.splice(from, 1);
         order.splice(to, 0, moved);
-        // re-chain: each element starts when the previous one finishes (+gap),
-        // and layer order follows play order so later elements draw on top
-        let t = 0;
-        const next = order.map((el, i) => {
-          const chained = { ...el, startTime: t, zIndex: i };
-          t += el.drawDuration + SEQ_GAP;
-          return chained;
-        });
-        set({
-          elements: next,
-          project: { ...project, duration: computeDuration(next, audio) },
-        });
-      },
-
-      setDurationRipple(id, duration) {
-        const { elements, project, audio } = get();
-        const target = elements.find((e) => e.id === id);
-        if (!target) return;
-        const delta = duration - target.drawDuration;
-        const next = elements.map((e) => {
-          if (e.id === id) return { ...e, drawDuration: duration };
-          if (e.startTime > target.startTime + 1e-6) {
-            return { ...e, startTime: Math.max(0, e.startTime + delta) };
-          }
-          return e;
-        });
-        set({
-          elements: next,
-          project: { ...project, duration: computeDuration(next, audio) },
-        });
+        commit(set, get, order.map((el, i) => ({ ...el, zIndex: i })));
       },
 
       select(id) { set({ selectedId: id }); },
@@ -229,33 +201,24 @@ export const useStore = create<AppState>()(
         const { currentTime, project } = get();
         // restart from the top if the playhead is parked at the end
         if (currentTime >= project.duration - 1e-6) set({ currentTime: 0 });
-        set({ isPlaying: true });
+        set({ isPlaying: true, cameraView: true, selectedId: null });
       },
       pause() { set({ isPlaying: false }); },
       stop() { set({ isPlaying: false, currentTime: 0 }); },
+      setCameraView(v) { set({ cameraView: v }); },
 
       setAudio(track) {
-        const { elements, project } = get();
-        set({
-          audio: track,
-          project: { ...project, duration: computeDuration(elements, track) },
-        });
+        commit(set, get, get().elements, { audio: track });
       },
 
       updateAudio(patch) {
-        const { audio, elements, project } = get();
+        const { audio } = get();
         if (!audio) return;
-        const next = { ...audio, ...patch };
-        set({
-          audio: next,
-          project: { ...project, duration: computeDuration(elements, next) },
-        });
+        commit(set, get, get().elements, { audio: { ...audio, ...patch } });
       },
 
-      setHandStyle(s) { set({ handStyle: s }); },
-
       updateProject(patch) {
-        set({ project: { ...get().project, ...patch } });
+        commit(set, get, get().elements, { project: { ...get().project, ...patch } });
       },
 
       setExporting(v) { set({ isExporting: v, exportProgress: 0 }); },

@@ -2,11 +2,20 @@ export type DrawStyle = 'draw' | 'appear' | 'fade';
 export type HandStyle = 'marker' | 'pencil' | 'chalk' | 'none';
 export type ElementKind = 'text' | 'shape' | 'svg' | 'image';
 
+/** How the camera frames an element while it is being drawn. */
+export type CameraMode = 'auto' | 'whole' | 'previous' | 'custom';
+
+export interface CameraView {
+  cx: number;   // canvas coords of the view centre
+  cy: number;
+  zoom: number; // 1 = whole artboard fits the frame; 2 = 2× magnification
+}
+
 export interface DrawElement {
   id: string;
   kind: ElementKind;
-  label: string;              // shown on the timeline clip
-  paths: string[];            // SVG path 'd' strings, already positioned
+  label: string;              // shown on the timeline card
+  paths: string[];            // SVG path 'd' strings in local units
   fillColor: string;
   strokeColor: string;
   strokeWidth: number;        // in canvas px (divided by scale at render time)
@@ -18,11 +27,22 @@ export interface DrawElement {
   scale: number;
   rotation: number;
 
-  // timeline
-  startTime: number;          // seconds from timeline zero
-  drawDuration: number;       // seconds to draw this element
+  // timeline — VideoScribe model: elements play one after another.
+  // startTime is derived from the sequence (see rechain in the store).
+  startTime: number;          // seconds; when drawing starts
+  drawDuration: number;       // "Animate": seconds to draw this element
+  pauseAfter: number;         // "Pause": camera holds on it after drawing
+  transitionIn: number;       // "Transition": camera travel time into it
   style: DrawStyle;
-  zIndex: number;             // stacking + timeline row
+  zIndex: number;             // stacking order
+
+  // camera
+  camera: CameraMode;
+  cameraZoom: number;         // auto-framing tightness multiplier (0.5 – 2)
+  customCamera?: CameraView;
+
+  // hand override (undefined → project default)
+  hand?: HandStyle;
 
   // text-only metadata (for re-editing)
   text?: string;
@@ -39,11 +59,20 @@ export interface AudioTrack {
   volume: number;             // 0..1
 }
 
+export type PaperStyle = 'plain' | 'grid' | 'dots' | 'lined' | 'cream' | 'chalkboard' | 'kraft';
+
+export type CameraEasing = 'easeOut' | 'linear' | 'cut';
+
 export interface Project {
   name: string;
-  width: number;              // canvas px, default 1920
+  width: number;              // artboard px, default 1920
   height: number;             // default 1080
   fps: number;                // default 30
-  background: string;         // default '#ffffff'
-  duration: number;           // total timeline length, seconds (auto-grows)
+  background: string;         // paper colour, default '#ffffff'
+  paper: PaperStyle;
+  duration: number;           // total timeline length, seconds (derived)
+  hand: HandStyle;            // default drawing hand
+  cameraEasing: CameraEasing;
+  zoomAtEnd: boolean;         // pull back to the whole scribe at the end
+  endHold: number;            // seconds to hold the final frame
 }

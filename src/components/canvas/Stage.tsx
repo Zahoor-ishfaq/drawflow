@@ -1,8 +1,10 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useStore } from '../../store/useStore';
-import { useElementsByZ } from '../../store/selectors';
+import { useRenderContext } from '../../store/selectors';
 import type { DrawElement } from '../../types';
 import { handFrameAt } from '../../lib/renderFrame';
+import { cameraAt, cameraForElement, viewBoxFor, wholeView } from '../../lib/camera';
+import { paperDef } from '../../assets/paper';
 import { ElementNode } from './ElementNode';
 import { Hand } from './Hand';
 import { SelectionBox } from './SelectionBox';
@@ -15,33 +17,51 @@ type DragState =
   | { mode: 'move'; id: string; offsetX: number; offsetY: number }
   | { mode: 'scale'; id: string; startDist: number; startScale: number };
 
+const ACCENT = '#0d9d97';
+
 export function Stage({ zoom }: StageProps) {
   const project = useStore((s) => s.project);
   const currentTime = useStore((s) => s.currentTime);
-  const handStyle = useStore((s) => s.handStyle);
+  const cameraView = useStore((s) => s.cameraView);
+  const isPlaying = useStore((s) => s.isPlaying);
   const selectedId = useStore((s) => s.selectedId);
   const select = useStore((s) => s.select);
   const updateElement = useStore((s) => s.updateElement);
-  const elements = useElementsByZ();
+  const ctx = useRenderContext();
+  const { ordered, timeline } = ctx;
 
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
-  const selected = elements.find((e) => e.id === selectedId) ?? null;
-  const hand = handFrameAt(elements, currentTime);
+  const selected = ordered.find((e) => e.id === selectedId) ?? null;
+  const cam = cameraView ? cameraAt(currentTime, timeline, project) : wholeView(project);
+  const vb = viewBoxFor(cam, project);
+  const hand = handFrameAt(ordered, currentTime, project, timeline);
+  const paper = paperDef(project.paper);
+  const defs = paper.defs(project.background);
+
+  // dashed guide showing what the camera will frame for the selected element
+  const cameraGuide = useMemo(() => {
+    if (!selected || cameraView || isPlaying) return null;
+    const idx = ordered.findIndex((e) => e.id === selected.id);
+    if (idx === -1) return null;
+    return viewBoxFor(cameraForElement(idx, ordered, project), project);
+  }, [selected, cameraView, isPlaying, ordered, project]);
+
+  const effectiveZoom = zoom * cam.zoom;
 
   const toCanvasPoint = (clientX: number, clientY: number) => {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
     const rect = svg.getBoundingClientRect();
     return {
-      x: ((clientX - rect.left) / rect.width) * project.width,
-      y: ((clientY - rect.top) / rect.height) * project.height,
+      x: vb.x + ((clientX - rect.left) / rect.width) * vb.width,
+      y: vb.y + ((clientY - rect.top) / rect.height) * vb.height,
     };
   };
 
   const onElementPointerDown = (e: React.PointerEvent, el: DrawElement) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || isPlaying) return;
     e.stopPropagation();
     select(el.id);
     const p = toCanvasPoint(e.clientX, e.clientY);
@@ -86,23 +106,26 @@ export function Stage({ zoom }: StageProps) {
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${project.width} ${project.height}`}
+      viewBox={`${vb.x} ${vb.y} ${vb.width} ${vb.height}`}
       style={{
         width: project.width * zoom,
         height: project.height * zoom,
         display: 'block',
-        background: project.background,
-        borderRadius: 6,
+        borderRadius: 4,
         boxShadow: '0 8px 30px rgba(25, 35, 55, 0.18), 0 1px 3px rgba(25, 35, 55, 0.1)',
       }}
       onPointerDown={(e) => {
-        if (e.button === 0) select(null); // click empty canvas → deselect
+        if (e.button === 0) select(null); // click empty paper → deselect
       }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      {elements.map((el) => (
+      {defs && <defs dangerouslySetInnerHTML={{ __html: defs }} />}
+      {/* paper covers whatever the camera can see (the canvas is infinite) */}
+      <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill={paper.fill(project.background)} />
+
+      {ordered.map((el) => (
         <ElementNode
           key={el.id}
           element={el}
@@ -110,9 +133,38 @@ export function Stage({ zoom }: StageProps) {
           onPointerDown={onElementPointerDown}
         />
       ))}
-      <Hand frame={hand} style={handStyle} project={project} />
-      {selected && (
-        <SelectionBox element={selected} zoom={zoom} onHandleDown={onHandleDown} />
+
+      <Hand frame={hand} />
+
+      {cameraGuide && (
+        <g pointerEvents="none">
+          <rect
+            x={cameraGuide.x}
+            y={cameraGuide.y}
+            width={cameraGuide.width}
+            height={cameraGuide.height}
+            fill="none"
+            stroke={ACCENT}
+            strokeOpacity={0.55}
+            strokeWidth={1.5 / effectiveZoom}
+            strokeDasharray={`${8 / effectiveZoom} ${6 / effectiveZoom}`}
+            rx={4 / effectiveZoom}
+          />
+          <text
+            x={cameraGuide.x + 12 / effectiveZoom}
+            y={cameraGuide.y + 22 / effectiveZoom}
+            fontSize={13 / effectiveZoom}
+            fontFamily="Inter, system-ui, sans-serif"
+            fill={ACCENT}
+            fillOpacity={0.8}
+          >
+            camera
+          </text>
+        </g>
+      )}
+
+      {selected && !isPlaying && (
+        <SelectionBox element={selected} zoom={effectiveZoom} onHandleDown={onHandleDown} />
       )}
     </svg>
   );

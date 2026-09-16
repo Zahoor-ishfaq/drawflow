@@ -1,26 +1,23 @@
 import { useState } from 'react';
-import { Clapperboard, PenTool, Redo2, Undo2 } from 'lucide-react';
+import { Download, PenTool, Play, Redo2, Undo2 } from 'lucide-react';
 import { redo, undo, useCanUndoRedo, useStore } from '../../store/useStore';
-import type { HandStyle } from '../../types';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { ExportDialog } from '../export/ExportDialog';
-
-const HAND_OPTIONS: { value: HandStyle; label: string }[] = [
-  { value: 'marker', label: 'Marker hand' },
-  { value: 'pencil', label: 'Pencil hand' },
-  { value: 'chalk', label: 'Chalk hand' },
-  { value: 'none', label: 'No hand' },
-];
 
 export function TopBar() {
   const name = useStore((s) => s.project.name);
   const updateProject = useStore((s) => s.updateProject);
   const isExporting = useStore((s) => s.isExporting);
-  const handStyle = useStore((s) => s.handStyle);
-  const setHandStyle = useStore((s) => s.setHandStyle);
+  const elementCount = useStore((s) => s.elements.length);
   const { canUndo, canRedo } = useCanUndoRedo();
   const [showExport, setShowExport] = useState(false);
+
+  const preview = () => {
+    const s = useStore.getState();
+    s.setTime(0);
+    s.play();
+  };
 
   return (
     <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-line bg-panel px-3">
@@ -41,18 +38,6 @@ export function TopBar() {
 
       <div className="flex-1" />
 
-      <select
-        className="df-input !h-8 !w-auto !rounded-full !bg-panel pr-2 pl-3 text-[12px]"
-        value={handStyle}
-        onChange={(e) => setHandStyle(e.target.value as HandStyle)}
-        title="Drawing hand"
-        aria-label="Drawing hand"
-      >
-        {HAND_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-
       <div className="flex items-center gap-0.5">
         <IconButton label="Undo (Ctrl+Z)" onClick={undo} disabled={!canUndo}>
           <Undo2 size={16} />
@@ -62,9 +47,13 @@ export function TopBar() {
         </IconButton>
       </div>
       <span className="mx-0.5 h-5 w-px bg-line" />
-      <Button variant="primary" onClick={() => setShowExport(true)} disabled={isExporting}>
-        <Clapperboard size={15} />
-        Export video
+      <Button variant="secondary" onClick={preview} disabled={elementCount === 0}>
+        <Play size={14} />
+        Preview
+      </Button>
+      <Button variant="primary" onClick={() => setShowExport(true)} disabled={isExporting || elementCount === 0}>
+        <Download size={15} />
+        Download video
       </Button>
 
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}

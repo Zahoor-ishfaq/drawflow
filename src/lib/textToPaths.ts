@@ -11,7 +11,8 @@ export interface FontDef {
 
 export const FONTS: FontDef[] = [
   { id: 'caveat', label: 'Caveat (handwritten)', url: '/fonts/Caveat.ttf' },
-  { id: 'inter', label: 'Inter (sans)', url: '/fonts/Inter.ttf' },
+  { id: 'shadows', label: 'Shadows Into Light (marker)', url: '/fonts/ShadowsIntoLight.ttf' },
+  { id: 'inter', label: 'Inter (clean sans)', url: '/fonts/Inter.ttf' },
 ];
 
 export const DEFAULT_FONT_ID = 'caveat';
