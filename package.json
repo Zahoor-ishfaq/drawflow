@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:dev": "electron . --dev",
+    "desktop:start": "npm run build && electron .",
+    "desktop:pack": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "0.12.10",
@@ -24,8 +27,33 @@
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.0"
-  }
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.zahoor.drawflow",
+    "productName": "DrawFlow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "description": "Whiteboard animation studio",
+  "author": "Zahoor Ishfaq"
 }
