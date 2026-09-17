@@ -1,10 +1,15 @@
-// Photographic drawing hands (public/hands/*.webp, see CREDITS.md). Each is a
+// Photographic drawing hands (src/assets/hands/*.webp, see CREDITS.md). Each is a
 // top-down cut-out with the pen tip at (tipX, tipY) in image pixels and the
 // arm running toward the lower-right. Because every source photo ends at its
 // frame edge, a long sleeve is drawn from the wrist outward so the arm always
 // continues off-screen — a person reaching in from outside the board.
 
 import type { HandStyle } from '../types';
+// Inlined as data: URLs so the hands are part of the bundle — never a
+// separate request that can fail — and export can embed them directly.
+import markerSrc from './hands/marker.webp?inline';
+import penSrc from './hands/pen.webp?inline';
+import chalkSrc from './hands/chalk.webp?inline';
 
 export interface SleeveDef {
   x: number;      // wrist centre, image px
@@ -31,17 +36,17 @@ export interface HandDef {
 export const HANDS: HandDef[] = [
   {
     id: 'marker', label: 'Marker', description: 'Black felt-tip — classic whiteboard look',
-    src: '/hands/marker.webp', width: 725, height: 734, tipX: 218, tipY: 13, frameFraction: 0.72,
+    src: markerSrc, width: 725, height: 734, tipX: 218, tipY: 13, frameFraction: 0.72,
     sleeve: { x: 440, y: 505, angle: 32, hw0: 88, hw1: 125 },
   },
   {
     id: 'pen', label: 'Pen', description: 'Ballpoint pen — notebook feel',
-    src: '/hands/pen.webp', width: 576, height: 640, tipX: 15, tipY: 106, frameFraction: 0.66,
+    src: penSrc, width: 576, height: 640, tipX: 15, tipY: 106, frameFraction: 0.66,
     sleeve: { x: 365, y: 360, angle: 79, hw0: 105, hw1: 150 },
   },
   {
     id: 'chalk', label: 'Chalk', description: 'White paint marker — for chalkboards',
-    src: '/hands/chalk.webp', width: 748, height: 722, tipX: 229, tipY: 13, frameFraction: 0.72,
+    src: chalkSrc, width: 748, height: 722, tipX: 229, tipY: 13, frameFraction: 0.72,
     sleeve: { x: 455, y: 495, angle: 28, hw0: 92, hw1: 128 },
   },
 ];
@@ -108,28 +113,7 @@ export function handInnerSvg(def: HandDef, href: string): string {
 
 // --- image loading (shared by preview + export) ------------------------
 
-const dataUrlCache = new Map<string, Promise<string>>();
-
-/** Hand image as a data: URL so it can be embedded in a serialized SVG. */
+/** Hand image as a data: URL for embedding in a serialized SVG (already inline). */
 export function loadHandDataUrl(def: HandDef): Promise<string> {
-  let p = dataUrlCache.get(def.id);
-  if (!p) {
-    p = fetch(def.src)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Failed to load hand image (${r.status})`);
-        return r.blob();
-      })
-      .then(
-        (blob) =>
-          new Promise<string>((resolve, reject) => {
-            const fr = new FileReader();
-            fr.onload = () => resolve(fr.result as string);
-            fr.onerror = () => reject(fr.error);
-            fr.readAsDataURL(blob);
-          }),
-      );
-    dataUrlCache.set(def.id, p);
-    p.catch(() => dataUrlCache.delete(def.id));
-  }
-  return p;
+  return Promise.resolve(def.src);
 }

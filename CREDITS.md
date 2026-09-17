@@ -1,6 +1,6 @@
 # Credits
 
-## Hand photographs (`public/hands/`)
+## Hand photographs (`src/assets/hands/`)
 
 Cut out, re-oriented and shadowed from photos published under the
 [Unsplash License](https://unsplash.com/license) (free for commercial and
