@@ -19,7 +19,7 @@ extends each arm off-screen is drawn by the app.
   SVG sources recovered from [lunahq/react-open-doodles](https://github.com/lunahq/react-open-doodles) (MIT).
 - `index.json` — built by a script that selects and categorises the above.
 
-## Fonts (`public/fonts/`)
+## Fonts (`src/assets/fonts/`, Inter also in `public/fonts/` for the UI)
 
 - Caveat, Shadows Into Light, Inter — SIL Open Font License, via Google Fonts.
 

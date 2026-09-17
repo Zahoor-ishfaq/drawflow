@@ -1,39 +1,49 @@
-// Text → SVG paths via opentype.js (spec §10). Fonts are fetched once and
-// cached; each glyph becomes its own path so text draws letter by letter.
+// Text → SVG paths via opentype.js (spec §10). The fonts are bundled inline
+// (data: URLs) so adding text never depends on a network request; each glyph
+// becomes its own path so text draws letter by letter.
 
 import * as opentype from 'opentype.js';
+import caveatUrl from '../assets/fonts/Caveat.ttf?inline';
+import shadowsUrl from '../assets/fonts/ShadowsIntoLight.ttf?inline';
+import interUrl from '../assets/fonts/Inter.ttf?inline';
 
 export interface FontDef {
   id: string;
   label: string;
-  url: string;
+  url: string; // data: URL
 }
 
 export const FONTS: FontDef[] = [
-  { id: 'caveat', label: 'Caveat (handwritten)', url: '/fonts/Caveat.ttf' },
-  { id: 'shadows', label: 'Shadows Into Light (marker)', url: '/fonts/ShadowsIntoLight.ttf' },
-  { id: 'inter', label: 'Inter (clean sans)', url: '/fonts/Inter.ttf' },
+  { id: 'caveat', label: 'Caveat (handwritten)', url: caveatUrl },
+  { id: 'shadows', label: 'Shadows Into Light (marker)', url: shadowsUrl },
+  { id: 'inter', label: 'Inter (clean sans)', url: interUrl },
 ];
 
 export const DEFAULT_FONT_ID = 'caveat';
 export const DEFAULT_FONT_SIZE = 140;
 
-const fontCache = new Map<string, Promise<opentype.Font>>();
+const fontCache = new Map<string, opentype.Font>();
+
+function dataUrlToBuffer(url: string): ArrayBuffer {
+  const b64 = url.slice(url.indexOf(',') + 1);
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
 
 export function loadFont(fontId: string): Promise<opentype.Font> {
   const def = FONTS.find((f) => f.id === fontId) ?? FONTS[0];
-  let cached = fontCache.get(def.id);
-  if (!cached) {
-    cached = fetch(def.url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Failed to load font "${def.label}" (${r.status})`);
-        return r.arrayBuffer();
-      })
-      .then((buf) => opentype.parse(buf));
-    fontCache.set(def.id, cached);
-    cached.catch(() => fontCache.delete(def.id));
+  let font = fontCache.get(def.id);
+  if (!font) {
+    try {
+      font = opentype.parse(dataUrlToBuffer(def.url));
+    } catch (e) {
+      return Promise.reject(new Error(`Could not read the font "${def.label}": ${e instanceof Error ? e.message : e}`));
+    }
+    fontCache.set(def.id, font);
   }
-  return cached;
+  return Promise.resolve(font);
 }
 
 /** One 'd' string per glyph; multi-line via \n with 1.25em line spacing. */
