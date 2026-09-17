@@ -35,6 +35,13 @@ cross-origin isolated — the dev and preview servers already send the required
   the lane to add it where you drop it.
 - **Voiceover.** Press *Record*: the scribe plays from the playhead while you narrate; stop
   (or let it finish) and the take lands on the Voiceover lane at the right time.
+- **AI assistant** (sparkle tool). *Create from text*: describe what you want and the
+  model you chose turns it into elements — matches from the bundled library, text, or
+  line-art it draws itself as SVG (the hand draws it). *From a photo*: **Doodle** turns a
+  photo into pen strokes entirely offline (no key needed, tune Detail/Lines with a live
+  preview); **Cartoon** asks Gemini or OpenAI's image model to redraw it. Bring your own
+  keys — Anthropic, OpenAI, Groq (free tier) or Gemini (free tier) — in the panel's
+  settings; keys stay in this browser and go only to the provider you pick.
 - **Checkpoints.** Every change is saved to this browser's local storage a moment later
   and restored when you come back (see the status in the top bar). *Save to file / Open
   file* in that menu gives you a portable `.drawflow.json` backup; *New project* starts over.

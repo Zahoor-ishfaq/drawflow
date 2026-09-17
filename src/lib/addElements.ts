@@ -15,6 +15,7 @@ import { loadLibrarySvg, type LibraryEntry } from '../assets/illustrations';
 import { loadRasterImage } from './images';
 import { scribblePath } from './scribble';
 import type { GalleryItem } from './gallery';
+import type { SketchResult } from './sketch';
 import { clamp } from './time';
 
 function ink(): string {
@@ -262,4 +263,28 @@ export function reinkForPaper(prevInk: string, nextInk: string): void {
     if (el.fillColor.toLowerCase() === prevInk.toLowerCase()) patch.fillColor = nextInk;
     if (Object.keys(patch).length) updateElement(el.id, patch);
   }
+}
+
+/** Add an offline photo-sketch as pen strokes the hand draws. */
+export function addSketchElement(sketch: SketchResult, label: string): void {
+  const size = 560;
+  const scale = size / Math.max(sketch.width, sketch.height, 1);
+  useStore.getState().addElement({
+    kind: 'svg',
+    paths: sketch.paths,
+    label,
+    strokeColor: ink(),
+    fillColor: 'none',
+    fillAfterDraw: false,
+    strokeWidth: 3,
+    // roughly 900 canvas-px of line per second, within sensible bounds
+    drawDuration: clamp((sketch.totalLength * scale) / 900, 2, 14),
+    ...placeNew(sketch.paths, scale),
+  });
+}
+
+/** Add text at one of three sizes (from the AI planner). */
+export async function addTextSized(text: string, size: 'title' | 'normal' | 'small'): Promise<void> {
+  const px = size === 'title' ? 190 : size === 'small' ? 96 : 140;
+  await addTextElement(text, 'caveat', px);
 }

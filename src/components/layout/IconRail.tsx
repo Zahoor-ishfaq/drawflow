@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { Hand, Image, Music, Shapes, StickyNote, Type, X } from 'lucide-react';
+import { Hand, Image, Music, Shapes, Sparkles, StickyNote, Type, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
 import { ShapesPanel } from '../library/ShapesPanel';
 import { ImagesPanel } from '../library/ImagesPanel';
 import { AudioPanel } from '../library/AudioPanel';
 import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
+import { AiPanel } from '../library/AiPanel';
 import { IconButton } from '../ui/IconButton';
 
-type Tool = 'images' | 'text' | 'shapes' | 'music' | 'hand' | 'paper';
+type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'hand' | 'paper';
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'images', label: 'Images', Icon: Image },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'shapes', label: 'Shapes', Icon: Shapes },
   { id: 'music', label: 'Music', Icon: Music },
+  { id: 'ai', label: 'AI', Icon: Sparkles },
 ];
 
 const SETUP_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
@@ -27,6 +29,7 @@ const PANEL_TITLES: Record<Tool, string> = {
   text: 'Add text',
   shapes: 'Shapes & icons',
   music: 'Music',
+  ai: 'AI assistant',
   hand: 'Set hand',
   paper: 'Set paper',
 };
@@ -70,7 +73,7 @@ export function IconRail() {
       </div>
 
       {open && (
-        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] w-[320px] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]">
+        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] w-[340px] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]">
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-line pr-2 pl-4">
             <span className="text-[14px] font-semibold">{PANEL_TITLES[open]}</span>
             <IconButton label="Close panel" onClick={close}>
@@ -82,6 +85,7 @@ export function IconRail() {
             {open === 'text' && <TextPanel onAdded={close} />}
             {open === 'shapes' && <ShapesPanel />}
             {open === 'music' && <AudioPanel onAdded={close} />}
+            {open === 'ai' && <AiPanel />}
             {open === 'hand' && <HandPanel />}
             {open === 'paper' && <PaperPanel />}
           </div>

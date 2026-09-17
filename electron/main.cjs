@@ -25,7 +25,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' data: blob:",
+  "connect-src 'self' data: blob: https://api.anthropic.com https://api.openai.com https://api.groq.com https://generativelanguage.googleapis.com",
   "worker-src 'self' blob:",
   "media-src 'self' data: blob:",
   "object-src 'none'",
