@@ -3,6 +3,7 @@ import { Check, ChevronDown, CloudOff, FilePlus2, FolderOpen, Loader2, Save } fr
 import { useStore } from '../../store/useStore';
 import { clearCheckpoint, exportProjectFile, importProjectFile, saveNow, useSaveStatus } from '../../lib/persistence';
 import { clearSources } from '../../store/audioSources';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 function ago(at: number): string {
   const s = Math.max(0, Math.round((Date.now() - at) / 1000));
@@ -16,6 +17,7 @@ function ago(at: number): string {
 export function ProjectMenu() {
   const status = useSaveStatus();
   const [open, setOpen] = useState(false);
+  const [confirmNew, setConfirmNew] = useState(false);
   const [, tick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -64,13 +66,18 @@ export function ProjectMenu() {
 
   const fresh = async () => {
     const s = useStore.getState();
-    if (s.elements.length > 0 || s.audioClips.length > 0) {
-      if (!window.confirm('Start a new project? The current one stays saved to a file only if you exported it.')) return;
-    }
-    clearSources();
-    s.newProject();
-    await clearCheckpoint();
     setOpen(false);
+    if (s.elements.length > 0 || s.audioClips.length > 0) {
+      setConfirmNew(true);
+      return;
+    }
+    await startFresh();
+  };
+  const startFresh = async () => {
+    setConfirmNew(false);
+    clearSources();
+    useStore.getState().newProject();
+    await clearCheckpoint();
   };
 
   return (
@@ -97,6 +104,17 @@ export function ProjectMenu() {
           <MenuItem icon={<FilePlus2 size={14} />} label="New project" onClick={() => void fresh()} />
           <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
+      )}
+      {confirmNew && (
+        <ConfirmDialog
+          title="Start a new project?"
+          message="This clears the canvas, the timeline and the local checkpoint. If you want to keep the current project, save it to a file first."
+          confirmLabel="Start new project"
+          cancelLabel="Keep working"
+          danger
+          onConfirm={() => void startFresh()}
+          onCancel={() => setConfirmNew(false)}
+        />
       )}
     </div>
   );

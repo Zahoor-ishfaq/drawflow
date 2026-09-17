@@ -221,12 +221,17 @@ export function Workspace() {
         )
       )}
 
-      {elements.length === 0 && (
-        <div className="pointer-events-none absolute inset-x-0 top-[46%] text-center">
-          <div className="text-[15px] font-medium text-t2">Your canvas is empty</div>
-          <div className="mt-1 text-[13px] text-t3">
-            Everything inside the dashed boundary is what the video captures. Add text,
-            shapes or images from the toolbar; drag the paper to move to a new shot.
+      {elements.length === 0 && !cameraView && (
+        <div
+          className="pointer-events-none absolute flex items-center justify-center"
+          style={{ left: boundaryPx.left, top: boundaryPx.top, width: boundaryPx.width, height: boundaryPx.height }}
+        >
+          <div className="max-w-[420px] px-6 text-center">
+            <div className="text-[15px] font-medium text-t2">Your canvas is empty</div>
+            <div className="mt-1.5 text-[12.5px] leading-relaxed text-t3">
+              Everything inside this dashed boundary is what the video captures. Add text,
+              shapes or images from the toolbar; drag the paper to move to a new shot.
+            </div>
           </div>
         </div>
       )}

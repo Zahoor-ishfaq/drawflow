@@ -3,7 +3,8 @@ import { temporal } from 'zundo';
 import { useStore as useZustandStore } from 'zustand';
 import type { AudioClip, DrawElement, Project } from '../types';
 import { clamp } from '../lib/time';
-import { END_ZOOM_SECONDS } from '../lib/camera';
+import { END_ZOOM_SECONDS, cameraForElement } from '../lib/camera';
+import type { CameraView } from '../types';
 
 export interface AppState {
   project: Project;
@@ -204,14 +205,37 @@ export const useStore = create<AppState>()(
       },
 
       reorder(id, newIndex) {
+        const { project } = get();
         const order = sequenceOrder(get().elements);
         const from = order.findIndex((e) => e.id === id);
         if (from === -1) return;
         const to = clamp(Math.round(newIndex), 0, order.length - 1);
         if (from === to) return;
+        // remember the shot each element resolves to before the move
+        const before = new Map<string, CameraView>();
+        order.forEach((el, i) => before.set(el.id, cameraForElement(i, order, project)));
         const [moved] = order.splice(from, 1);
         order.splice(to, 0, moved);
-        commit(set, get, order.map((el, i) => ({ ...el, zIndex: i })));
+        // an element set to "stay" must keep its own shot even when its new
+        // predecessor belongs to a different one — pin it to the old shot
+        const same = (a: CameraView, b: CameraView) =>
+          Math.abs(a.cx - b.cx) < 1 && Math.abs(a.cy - b.cy) < 1 && Math.abs(a.zoom - b.zoom) < 1e-3;
+        const next: DrawElement[] = [];
+        order.forEach((el, i) => {
+          let out: DrawElement = { ...el, zIndex: i };
+          if (el.camera === 'previous') {
+            const trial = [...next, out];
+            const resolved = cameraForElement(i, trial, project);
+            const old = before.get(el.id)!;
+            if (!same(resolved, old)) out = { ...out, camera: 'custom', customCamera: old, transitionIn: Math.max(out.transitionIn, 0.8) };
+          } else if (el.camera === 'custom' && el.customCamera && i > 0) {
+            // a pinned shot identical to the predecessor's is just "stay"
+            const prev = cameraForElement(i - 1, next, project);
+            if (same(prev, el.customCamera)) out = { ...out, camera: 'previous', transitionIn: Math.min(out.transitionIn, 0.3) };
+          }
+          next.push(out);
+        });
+        commit(set, get, next);
       },
 
       select(id) { set({ selectedId: id }); },

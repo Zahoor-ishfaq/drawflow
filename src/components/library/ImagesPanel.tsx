@@ -156,7 +156,8 @@ export function ImagesPanel({ onAdded }: { onAdded?: () => void }) {
         <Search size={13} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-t3" />
         <input
           type="search"
-          className="df-input pl-8"
+          className="df-input"
+          style={{ paddingLeft: 32 }}
           placeholder={index ? `Search ${index.length.toLocaleString()} illustrations…` : 'Loading library…'}
           value={query}
           onChange={(e) => setQuery(e.target.value)}

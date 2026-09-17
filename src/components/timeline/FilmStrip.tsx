@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo, useRef, useState } from 'react';
 import { Camera, Hand, Hourglass, Pencil, Play } from 'lucide-react';
 import type { DrawElement } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -50,6 +50,7 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
   const currentTime = useStore((s) => s.currentTime);
   const paperDark = useStore((s) => s.project.paper === 'chalkboard');
   const drag = useRef<{ startX: number; curIndex: number; moved: boolean } | null>(null);
+  const [lift, setLift] = useState<number | null>(null); // px offset while dragging
 
   const end = el.startTime + el.drawDuration;
   const active = currentTime >= el.startTime && currentTime < end + el.pauseAfter;
@@ -66,17 +67,22 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const target = clamp(d.curIndex + Math.round((e.clientX - d.startX) / SLOT_WIDTH), 0, count - 1);
+    const dx = e.clientX - d.startX;
+    if (!d.moved && Math.abs(dx) < 4) return;
+    d.moved = true;
+    const target = clamp(d.curIndex + Math.round(dx / SLOT_WIDTH), 0, count - 1);
     if (target !== d.curIndex) {
+      // the card jumps to its new slot; keep it under the cursor
       useStore.getState().reorder(el.id, target);
+      d.startX += (target - d.curIndex) * SLOT_WIDTH;
       d.curIndex = target;
-      d.startX = e.clientX;
-      d.moved = true;
     }
+    setLift(e.clientX - d.startX);
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const d = drag.current;
     drag.current = null;
+    setLift(null);
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
     if (d && !d.moved) {
       // a plain click: go to the element — pan the paper to its camera frame in
@@ -101,8 +107,15 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
         </div>
       )}
       <div
-        className="group shrink-0 cursor-grab select-none"
-        style={{ width: CARD_W }}
+        className={
+          'group shrink-0 select-none ' +
+          (lift !== null ? 'relative z-20 cursor-grabbing' : 'cursor-grab transition-transform duration-150')
+        }
+        style={{
+          width: CARD_W,
+          transform: lift !== null ? `translateX(${lift}px) scale(1.06)` : undefined,
+          filter: lift !== null ? 'drop-shadow(0 10px 16px rgba(25,35,55,0.28))' : undefined,
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
