@@ -68,7 +68,7 @@ const DEFAULT_PROJECT: Project = {
   hand: 'marker',
   cameraEasing: 'easeOut',
   cameraFill: 0.5,
-  zoomAtEnd: true,
+  zoomAtEnd: false,   // end on the last shot; pulling back is opt-in
   endHold: 1.5,
 };
 

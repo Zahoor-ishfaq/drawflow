@@ -39,8 +39,8 @@ cross-origin isolated — the dev and preview servers already send the required
   drawn in turn while the others stay visible. Drag the paper to fresh space and add
   something there to start a new shot; the camera only moves between shots. Per element
   you can still choose *Stay*, *This shot*, *Zoom to it* or *All*, and drag/resize the
-  teal frame to set a shot by hand. At the end the camera optionally pulls back to show
-  everything. Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
+  teal frame to set a shot by hand. The video ends on the last shot (a pull-back to show
+  everything is an opt-in project setting). Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
 - **Infinite canvas.** In Edit view the paper is endless: hover empty paper and the
   cursor becomes a hand — drag to pan, wheel to zoom, place elements anywhere. The dashed
   "video frame" is only a guide; the camera visits each element wherever it is. *Fit*

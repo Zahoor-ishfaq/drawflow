@@ -75,7 +75,7 @@ export function ProjectSection() {
         />
       </Field>
       <label className="flex items-center justify-between">
-        <span className="text-[12px] text-t2">Pull back to show everything at the end</span>
+        <span className="text-[12px] text-t2">Pull back to show everything at the end (otherwise it ends on the last shot)</span>
         <input
           type="checkbox"
           className="h-4 w-4 accent-[#0d9d97]"
