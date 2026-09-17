@@ -1,7 +1,8 @@
 import type { CameraMode, DrawElement, DrawStyle, SlideFrom } from '../../types';
 import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
-import { cameraForElement } from '../../lib/camera';
+import { cameraForElement, viewFromRect } from '../../lib/camera';
+import { Button } from '../ui/Button';
 import { Field, SectionHeader } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
 import { Slider } from '../ui/Slider';
@@ -10,6 +11,8 @@ import { HandPicker } from '../library/HandPanel';
 export function AnimationSection({ element: el }: { element: DrawElement }) {
   const updateElement = useStore((s) => s.updateElement);
   const project = useStore((s) => s.project);
+  const cameraBoundary = useStore((s) => s.cameraBoundary);
+  const cameraView = useStore((s) => s.cameraView);
   const sequence = useSequence();
   const index = sequence.findIndex((e) => e.id === el.id);
   const isFirst = index === 0;
@@ -97,12 +100,24 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
           <Slider value={el.cameraZoom} onChange={(v) => patch({ cameraZoom: v })} min={0.4} max={2} step={0.05} precision={2} />
         </Field>
       )}
+      {!cameraView && cameraBoundary && (
+        <Button
+          variant="secondary"
+          className="justify-center"
+          onClick={() => patch({ camera: 'custom', customCamera: viewFromRect(cameraBoundary, project) })}
+          title="Record the grey boundary on the canvas as the shot for this element"
+        >
+          Use the boundary as this element's shot
+        </Button>
+      )}
       <p className="text-[11px] leading-relaxed text-t3">
         {el.camera === 'previous'
-          ? 'The camera stays where it was for the previous element. Choose "This shot" to start a new shot here.'
+          ? 'Stays: the camera does not move for this element — it keeps the previous shot. Pan the canvas to where you want the camera and press the button above to start a new shot here.'
           : el.camera === 'custom'
-            ? 'This element starts a shot. Drag the teal frame on the canvas to move it, or its corners to capture more or less; later elements inside it will "Stay".'
-            : 'The camera zooms to this element on its own. Drag the teal frame (or its corners) to take manual control.'}
+            ? 'This element starts a new shot. When its teal frame differs from the grey boundary you can drag the frame (or its corners) to adjust it, or re-aim it with the button above.'
+            : el.camera === 'whole'
+              ? 'The camera pulls back to show every element.'
+              : 'The camera zooms in on this element by itself.'}
       </p>
     </div>
   );

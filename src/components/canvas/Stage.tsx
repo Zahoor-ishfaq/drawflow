@@ -62,13 +62,22 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const interactive = !isPlaying;
   const pxPerUnit = cssWidth / vb.width; // screen px per canvas unit
 
-  // dashed guide showing what the camera will frame for the selected element
+  // The selected element's recorded shot. Shown only when it differs from
+  // the on-screen boundary — when they coincide the boundary says it all.
   const cameraGuide = useMemo(() => {
     if (!selected || cameraMode) return null;
     const idx = ordered.findIndex((e) => e.id === selected.id);
     if (idx === -1) return null;
-    return viewBoxFor(cameraForElement(idx, ordered, project), project);
-  }, [selected, cameraMode, ordered, project]);
+    const r = viewBoxFor(cameraForElement(idx, ordered, project), project);
+    if (boundary) {
+      const tol = Math.min(boundary.width, boundary.height) * 0.03;
+      const same =
+        Math.abs(r.x - boundary.x) < tol && Math.abs(r.y - boundary.y) < tol &&
+        Math.abs(r.width - boundary.width) < tol && Math.abs(r.height - boundary.height) < tol;
+      if (same) return null;
+    }
+    return r;
+  }, [selected, cameraMode, ordered, project, boundary]);
 
   const toCanvasPoint = (clientX: number, clientY: number) => {
     const svg = svgRef.current;
@@ -303,7 +312,7 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
             style={{ cursor: interactive ? 'move' : 'default' }}
             onPointerDown={interactive ? onCamFrameDown : undefined}
           >
-            <rect width={136 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
+            <rect width={190 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
             <text
               x={8 / pxPerUnit}
               y={14 / pxPerUnit}
@@ -313,12 +322,12 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
               pointerEvents="none"
             >
               {selected?.camera === 'previous'
-                ? 'camera · stays here'
-                : selected?.camera === 'custom'
-                  ? 'camera · this shot'
-                  : selected?.camera === 'whole'
-                    ? 'camera · everything'
-                    : 'camera · zooms to it'}
+                ? "this element's shot (stays)"
+                : selected?.camera === 'whole'
+                  ? "this element's shot (everything)"
+                  : selected?.camera === 'auto'
+                    ? "this element's shot (zoomed)"
+                    : "this element's shot"}
             </text>
           </g>
           {/* corner handles: resize (aspect locked) */}
