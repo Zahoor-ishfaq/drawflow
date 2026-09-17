@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore';
 import { useRenderContext } from '../../store/selectors';
 import type { DrawElement } from '../../types';
 import { elementFrameAt, FULL_FRAME, handFrameAt } from '../../lib/renderFrame';
-import { cameraAt, cameraForElement, viewBoxFor } from '../../lib/camera';
+import { cameraAt, cameraForElement, viewBoxFor, viewFromRect } from '../../lib/camera';
 import { paperDef } from '../../assets/paper';
 import { ElementNode } from './ElementNode';
 import { Hand } from './Hand';
@@ -25,7 +25,9 @@ interface StageProps {
 type DragState =
   | { mode: 'move'; id: string; offsetX: number; offsetY: number }
   | { mode: 'scale'; id: string; startDist: number; startScale: number }
-  | { mode: 'pan'; lastX: number; lastY: number; moved: boolean };
+  | { mode: 'pan'; lastX: number; lastY: number; moved: boolean }
+  | { mode: 'camMove'; id: string; offsetX: number; offsetY: number; width: number; height: number }
+  | { mode: 'camResize'; id: string; anchorX: number; anchorY: number; sx: number; sy: number };
 
 const ACCENT = '#0d9d97';
 const CLICK_SLOP = 4; // px of movement below which a drag counts as a click
@@ -107,9 +109,57 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
     capture(e);
   };
 
+  // camera frame: drag its border/label to move, a corner to resize (aspect locked)
+  const onCamFrameDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || !selected || !cameraGuide) return;
+    e.stopPropagation();
+    const p = toCanvasPoint(e.clientX, e.clientY);
+    dragRef.current = {
+      mode: 'camMove', id: selected.id,
+      offsetX: p.x - cameraGuide.x, offsetY: p.y - cameraGuide.y,
+      width: cameraGuide.width, height: cameraGuide.height,
+    };
+    capture(e);
+  };
+  const onCamCornerDown = (e: React.PointerEvent, corner: 'nw' | 'ne' | 'se' | 'sw') => {
+    if (e.button !== 0 || !selected || !cameraGuide) return;
+    e.stopPropagation();
+    const g = cameraGuide;
+    // the opposite corner stays put
+    const anchorX = corner === 'nw' || corner === 'sw' ? g.x + g.width : g.x;
+    const anchorY = corner === 'nw' || corner === 'ne' ? g.y + g.height : g.y;
+    dragRef.current = {
+      mode: 'camResize', id: selected.id, anchorX, anchorY,
+      sx: corner === 'nw' || corner === 'sw' ? -1 : 1,
+      sy: corner === 'nw' || corner === 'ne' ? -1 : 1,
+    };
+    capture(e);
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
+    if (drag.mode === 'camMove') {
+      const p = toCanvasPoint(e.clientX, e.clientY);
+      const rect = { x: p.x - drag.offsetX, y: p.y - drag.offsetY, width: drag.width, height: drag.height };
+      updateElement(drag.id, { camera: 'custom', customCamera: viewFromRect(rect, project) });
+      return;
+    }
+    if (drag.mode === 'camResize') {
+      const p = toCanvasPoint(e.clientX, e.clientY);
+      const aspect = project.width / project.height;
+      const dx = Math.max(0, (p.x - drag.anchorX) * drag.sx);
+      const dy = Math.max(0, (p.y - drag.anchorY) * drag.sy);
+      const width = Math.max(200, Math.max(dx, dy * aspect));
+      const height = width / aspect;
+      const rect = {
+        x: drag.sx > 0 ? drag.anchorX : drag.anchorX - width,
+        y: drag.sy > 0 ? drag.anchorY : drag.anchorY - height,
+        width, height,
+      };
+      updateElement(drag.id, { camera: 'custom', customCamera: viewFromRect(rect, project) });
+      return;
+    }
     if (drag.mode === 'pan') {
       const dx = e.clientX - drag.lastX;
       const dy = e.clientY - drag.lastY;
@@ -216,7 +266,7 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
       <Hand frame={hand} />
 
       {cameraGuide && (
-        <g pointerEvents="none">
+        <g>
           <rect
             x={cameraGuide.x}
             y={cameraGuide.y}
@@ -228,17 +278,62 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
             strokeWidth={guideStroke}
             strokeDasharray={`${8 / pxPerUnit} ${6 / pxPerUnit}`}
             rx={4 / pxPerUnit}
+            pointerEvents="none"
           />
-          <text
-            x={cameraGuide.x + 12 / pxPerUnit}
-            y={cameraGuide.y + 22 / pxPerUnit}
-            fontSize={13 / pxPerUnit}
-            fontFamily="Inter, system-ui, sans-serif"
-            fill={ACCENT}
-            fillOpacity={0.8}
+          {/* fat invisible border: drag the frame */}
+          {interactive && (
+            <rect
+              x={cameraGuide.x}
+              y={cameraGuide.y}
+              width={cameraGuide.width}
+              height={cameraGuide.height}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={14 / pxPerUnit}
+              pointerEvents="stroke"
+              style={{ cursor: 'move' }}
+              onPointerDown={onCamFrameDown}
+            />
+          )}
+          {/* label tab (also a drag handle) */}
+          <g
+            transform={`translate(${cameraGuide.x} ${cameraGuide.y - 22 / pxPerUnit})`}
+            style={{ cursor: interactive ? 'move' : 'default' }}
+            onPointerDown={interactive ? onCamFrameDown : undefined}
           >
-            camera
-          </text>
+            <rect width={112 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
+            <text
+              x={8 / pxPerUnit}
+              y={14 / pxPerUnit}
+              fontSize={11.5 / pxPerUnit}
+              fontFamily="Inter, system-ui, sans-serif"
+              fill="#ffffff"
+              pointerEvents="none"
+            >
+              {selected?.camera === 'custom' ? 'camera · custom' : 'camera · auto'}
+            </text>
+          </g>
+          {/* corner handles: resize (aspect locked) */}
+          {interactive &&
+            (['nw', 'ne', 'se', 'sw'] as const).map((corner) => {
+              const hx = corner === 'nw' || corner === 'sw' ? cameraGuide.x : cameraGuide.x + cameraGuide.width;
+              const hy = corner === 'nw' || corner === 'ne' ? cameraGuide.y : cameraGuide.y + cameraGuide.height;
+              const hs = 6 / pxPerUnit;
+              return (
+                <rect
+                  key={corner}
+                  x={hx - hs}
+                  y={hy - hs}
+                  width={hs * 2}
+                  height={hs * 2}
+                  fill="#ffffff"
+                  stroke={ACCENT}
+                  strokeWidth={guideStroke}
+                  style={{ cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize' }}
+                  onPointerDown={(e) => onCamCornerDown(e, corner)}
+                />
+              );
+            })}
         </g>
       )}
 

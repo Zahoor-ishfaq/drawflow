@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize, Minus, Plus } from 'lucide-react';
-import { useStore } from '../../store/useStore';
-import { unionBounds } from '../../lib/camera';
+import { sequenceOrder, useStore } from '../../store/useStore';
+import { cameraForElement, unionBounds, viewBoxFor } from '../../lib/camera';
 import { clamp } from '../../lib/time';
 import { Stage } from '../canvas/Stage';
 
@@ -22,12 +22,34 @@ export function Workspace() {
   const isPlaying = useStore((s) => s.isPlaying);
   const setCameraView = useStore((s) => s.setCameraView);
   const setViewport = useStore((s) => s.setViewport);
+  const focusRequest = useStore((s) => s.focusRequest);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>({ cx: project.width / 2, cy: project.height / 2, zoom: 0.4 });
   const userAdjusted = useRef(false);
   const midDrag = useRef<{ x: number; y: number } | null>(null);
+  const tween = useRef<number>(0);
+
+  /** Glide the view to a target over ~320ms. */
+  const animateTo = useCallback((target: View) => {
+    cancelAnimationFrame(tween.current);
+    setView((from) => {
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const p = Math.min(1, (now - t0) / 320);
+        const e = 1 - Math.pow(1 - p, 3);
+        setView({
+          cx: from.cx + (target.cx - from.cx) * e,
+          cy: from.cy + (target.cy - from.cy) * e,
+          zoom: Math.exp(Math.log(from.zoom) + (Math.log(target.zoom) - Math.log(from.zoom)) * e),
+        });
+        if (p < 1) tween.current = requestAnimationFrame(step);
+      };
+      tween.current = requestAnimationFrame(step);
+      return from;
+    });
+  }, []);
 
   // container size
   useEffect(() => {
@@ -67,6 +89,21 @@ export function Workspace() {
     frameView(u);
   }, [elements, project.width, project.height, frameView]);
 
+  // bring a strip-selected element's camera frame into view (edit view only)
+  useEffect(() => {
+    if (!focusRequest || cameraView || size.w < 50) return;
+    const st = useStore.getState();
+    const ordered = sequenceOrder(st.elements);
+    const idx = ordered.findIndex((e) => e.id === focusRequest.id);
+    if (idx === -1) return;
+    const r = viewBoxFor(cameraForElement(idx, ordered, st.project), st.project);
+    const pad = 80;
+    const zoom = clamp(Math.min((size.w - pad * 2) / r.width, (size.h - pad * 2) / r.height), MIN_ZOOM, MAX_ZOOM);
+    userAdjusted.current = true;
+    animateTo({ cx: r.x + r.width / 2, cy: r.y + r.height / 2, zoom });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest]);
+
   // initial fit (and re-fit on resize / artboard change until the user takes over)
   useEffect(() => {
     if (!userAdjusted.current) frameView({ x: 0, y: 0, width: project.width, height: project.height });
@@ -85,6 +122,7 @@ export function Workspace() {
   }, [view, size, setViewport]);
 
   const zoomAt = useCallback((factor: number, sx: number, sy: number) => {
+    cancelAnimationFrame(tween.current);
     userAdjusted.current = true;
     setView((v) => {
       const zoom = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM);
@@ -96,6 +134,7 @@ export function Workspace() {
   }, []);
 
   const panBy = useCallback((dxCanvas: number, dyCanvas: number) => {
+    cancelAnimationFrame(tween.current);
     userAdjusted.current = true;
     setView((v) => ({ ...v, cx: v.cx - dxCanvas, cy: v.cy - dyCanvas }));
   }, []);

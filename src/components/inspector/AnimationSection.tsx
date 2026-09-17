@@ -1,6 +1,7 @@
 import type { CameraMode, DrawElement, DrawStyle, SlideFrom } from '../../types';
 import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
+import { cameraForElement } from '../../lib/camera';
 import { Field, SectionHeader } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
 import { Slider } from '../ui/Slider';
@@ -8,6 +9,7 @@ import { HandPicker } from '../library/HandPanel';
 
 export function AnimationSection({ element: el }: { element: DrawElement }) {
   const updateElement = useStore((s) => s.updateElement);
+  const project = useStore((s) => s.project);
   const sequence = useSequence();
   const index = sequence.findIndex((e) => e.id === el.id);
   const isFirst = index === 0;
@@ -74,12 +76,19 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
       <SectionHeader>Camera</SectionHeader>
       <Field label="Framing while this draws">
         <Segmented<CameraMode>
-          value={el.camera === 'custom' ? 'auto' : el.camera}
-          onChange={(v) => patch({ camera: v })}
+          value={el.camera}
+          onChange={(v) => {
+            if (v === 'custom' && !el.customCamera) {
+              patch({ camera: 'custom', customCamera: cameraForElement(index, sequence, project) });
+            } else {
+              patch({ camera: v });
+            }
+          }}
           options={[
             { value: 'auto', label: 'Zoom to it' },
             { value: 'previous', label: 'Stay' },
-            { value: 'whole', label: 'Everything' },
+            { value: 'whole', label: 'All' },
+            { value: 'custom', label: 'Custom' },
           ]}
         />
       </Field>
@@ -89,8 +98,9 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
         </Field>
       )}
       <p className="text-[11px] leading-relaxed text-t3">
-        Switch to <span className="font-medium text-t2">Camera view</span> above the canvas to see
-        exactly what the video will show at any moment.
+        {el.camera === 'custom'
+          ? 'Drag the dashed camera frame on the canvas to move it; drag its corners to capture more or less. Put several elements inside one frame and set the later ones to "Stay".'
+          : 'Drag the dashed camera frame on the canvas (or its corners) to take manual control of what this shot captures.'}
       </p>
     </div>
   );

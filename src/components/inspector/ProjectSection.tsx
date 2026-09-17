@@ -67,6 +67,13 @@ export function ProjectSection() {
           ]}
         />
       </Field>
+      <Field label="Auto-framing — how much of the frame an element fills">
+        <Slider
+          value={project.cameraFill ?? 0.5}
+          onChange={(v) => updateProject({ cameraFill: v })}
+          min={0.25} max={0.9} step={0.05} precision={2}
+        />
+      </Field>
       <label className="flex items-center justify-between">
         <span className="text-[12px] text-t2">Pull back to show everything at the end</span>
         <input

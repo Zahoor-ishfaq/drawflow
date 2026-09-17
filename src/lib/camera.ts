@@ -63,7 +63,7 @@ export function autoCamera(el: DrawElement, project: Project): CameraView {
   const b = elementBounds(el);
   const w = Math.max(b.width, 40);
   const h = Math.max(b.height, 40);
-  const fill = AUTO_FILL * Math.min(Math.max(el.cameraZoom, 0.25), 3);
+  const fill = (project.cameraFill ?? AUTO_FILL) * Math.min(Math.max(el.cameraZoom, 0.25), 3);
   const zoom = Math.min((project.width * fill) / w, (project.height * fill) / h);
   return {
     cx: b.x + b.width / 2,
@@ -144,6 +144,12 @@ export function cameraAt(t: number, timeline: CameraTimeline, project: Project):
   const from = idx > 0 ? keys[idx - 1].view : key.view;
   const p = (t - key.moveStart) / (key.moveEnd - key.moveStart);
   return lerpView(from, key.view, ease(Math.min(Math.max(p, 0), 1), project.cameraEasing));
+}
+
+/** Camera view whose frame is the given canvas rect (aspect forced to the video's). */
+export function viewFromRect(r: { x: number; y: number; width: number; height: number }, project: Project): CameraView {
+  const zoom = Math.max(0.02, Math.min(project.width / Math.max(r.width, 1), project.height / Math.max(r.height, 1)));
+  return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, zoom };
 }
 
 /** viewBox numbers for a camera view. */

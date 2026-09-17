@@ -45,8 +45,14 @@ cross-origin isolated — the dev and preview servers already send the required
 - **Edit view / Camera view** above the canvas: edit the paper, or see exactly what the
   video will show at the current time. Scrubbing and Preview switch to camera view
   automatically; a dashed guide shows the selected element's framing.
-- **Strip (bottom)** — thumbnails in play order. Drag to reorder, double-click to
-  jump there. Each card shows its animate and pause times; connectors show transitions.
+- **Strip (bottom)** — thumbnails in play order. Click a card to go to that element
+  (the paper glides to its camera frame), drag to reorder, and use the small play
+  button on a card to play from that element. Cards show animate and pause times;
+  connectors show transitions.
+- **Camera frame per element.** The dashed frame on the canvas is what that shot
+  captures: drag it to move, drag its corners to capture more or less (so several
+  elements can share one shot — set the later ones to *Stay*). Project settings has an
+  auto-framing slider for how much of the frame an element fills by default.
 - **Inspector (right)** — *Animation* tab (timing, entrance style, per-element hand,
   camera) and *Style* tab (position, colours, stroke, text content and font).
 - **Export** — MP4 (H.264) or WebM (VP9) at 720p/1080p via ffmpeg.wasm. Frames are

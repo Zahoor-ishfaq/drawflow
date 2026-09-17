@@ -17,6 +17,8 @@ export interface AppState {
   cameraView: boolean;
   /** canvas-space rect currently visible in edit view (new elements land inside it) */
   viewport: { x: number; y: number; width: number; height: number } | null;
+  /** ask the workspace to bring an element's camera frame into view */
+  focusRequest: { id: string; n: number } | null;
 
   // editing
   selectedId: string | null;
@@ -40,6 +42,9 @@ export interface AppState {
   stop(): void;
   setCameraView(v: boolean): void;
   setViewport(r: AppState['viewport']): void;
+  focusOn(id: string): void;
+  /** start playback at an element's start time */
+  playFrom(id: string): void;
   setAudio(track: AudioTrack | null): void;
   updateAudio(patch: Partial<AudioTrack>): void;
   updateProject(patch: Partial<Project>): void;
@@ -58,6 +63,7 @@ const DEFAULT_PROJECT: Project = {
   duration: 5,
   hand: 'marker',
   cameraEasing: 'easeOut',
+  cameraFill: 0.5,
   zoomAtEnd: true,
   endHold: 1.5,
 };
@@ -125,6 +131,7 @@ export const useStore = create<AppState>()(
       isPlaying: false,
       cameraView: false,
       viewport: null,
+      focusRequest: null,
       selectedId: null,
       isExporting: false,
       exportProgress: 0,
@@ -212,6 +219,12 @@ export const useStore = create<AppState>()(
       stop() { set({ isPlaying: false, currentTime: 0 }); },
       setCameraView(v) { set({ cameraView: v }); },
       setViewport(r) { set({ viewport: r }); },
+      focusOn(id) { set({ focusRequest: { id, n: (get().focusRequest?.n ?? 0) + 1 } }); },
+      playFrom(id) {
+        const el = get().elements.find((e) => e.id === id);
+        if (!el) return;
+        set({ currentTime: el.startTime, isPlaying: true, cameraView: true, selectedId: null });
+      },
 
       setAudio(track) {
         commit(set, get, get().elements, { audio: track });

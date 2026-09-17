@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react';
-import { Camera, Hand, Hourglass, Pencil } from 'lucide-react';
+import { Camera, Hand, Hourglass, Pencil, Play } from 'lucide-react';
 import type { DrawElement } from '../../types';
 import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
@@ -49,7 +49,7 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
   const selected = useStore((s) => s.selectedId === el.id);
   const currentTime = useStore((s) => s.currentTime);
   const paperDark = useStore((s) => s.project.paper === 'chalkboard');
-  const drag = useRef<{ startX: number; curIndex: number } | null>(null);
+  const drag = useRef<{ startX: number; curIndex: number; moved: boolean } | null>(null);
 
   const end = el.startTime + el.drawDuration;
   const active = currentTime >= el.startTime && currentTime < end + el.pauseAfter;
@@ -60,7 +60,7 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
     const s = useStore.getState();
     s.pause();
     s.select(el.id);
-    drag.current = { startX: e.clientX, curIndex: index };
+    drag.current = { startX: e.clientX, curIndex: index, moved: false };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
@@ -71,11 +71,20 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
       useStore.getState().reorder(el.id, target);
       d.curIndex = target;
       d.startX = e.clientX;
+      d.moved = true;
     }
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    const d = drag.current;
     drag.current = null;
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+    if (d && !d.moved) {
+      // a plain click: go to the element — pan the paper to its camera frame in
+      // edit view, or jump the playhead to it in camera view
+      const s = useStore.getState();
+      if (s.cameraView) s.setTime(el.startTime);
+      else s.focusOn(el.id);
+    }
   };
 
   return (
@@ -92,19 +101,13 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
         </div>
       )}
       <div
-        className="shrink-0 cursor-grab select-none"
+        className="group shrink-0 cursor-grab select-none"
         style={{ width: CARD_W }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onDoubleClick={() => {
-          const s = useStore.getState();
-          s.pause();
-          s.setCameraView(true);
-          s.setTime(el.startTime);
-        }}
-        title={`${el.label} — drag to reorder, double-click to jump here`}
+        title={`${el.label} — click to go to it, drag to reorder`}
       >
         <div
           className={
@@ -134,6 +137,17 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
               style={{ width: `${progress * 100}%` }}
             />
           )}
+          {/* play from this element */}
+          <button
+            type="button"
+            title="Play from here"
+            aria-label={`Play from ${el.label}`}
+            className="df-ui-anim absolute bottom-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white opacity-0 shadow transition-opacity group-hover:opacity-100 hover:brightness-110"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); useStore.getState().playFrom(el.id); }}
+          >
+            <Play size={10} className="ml-px" />
+          </button>
         </div>
         <div className={'mt-1 truncate text-center text-[11px] ' + (selected ? 'font-medium text-t1' : 'text-t2')}>
           {index + 1}. {el.label}

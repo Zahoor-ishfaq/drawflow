@@ -93,6 +93,8 @@ export interface Project {
   duration: number;           // total timeline length, seconds (derived)
   hand: HandStyle;            // default drawing hand
   cameraEasing: CameraEasing;
+  /** auto-framing: fraction of the frame an element fills (0.25 tight … 0.9 wide) */
+  cameraFill: number;
   zoomAtEnd: boolean;         // pull back to the whole scribe at the end
   endHold: number;            // seconds to hold the final frame
 }
