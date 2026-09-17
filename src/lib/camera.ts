@@ -9,11 +9,40 @@ import { applyTransform, measurePaths } from './drawing';
 export const END_ZOOM_SECONDS = 1.2;
 /** an auto-framed element fills roughly this fraction of the frame */
 const AUTO_FILL = 0.5;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 5;
 
 export function wholeView(project: Project): CameraView {
   return { cx: project.width / 2, cy: project.height / 2, zoom: 1 };
+}
+
+/** Union of element bounds (canvas coords), or null when there are none. */
+export function unionBounds(elements: DrawElement[]): Bounds | null {
+  if (elements.length === 0) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const el of elements) {
+    const b = elementBounds(el);
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+  }
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
+/**
+ * Camera that shows the whole scribe: everything the user placed, wherever
+ * it is on the infinite paper, with a little breathing room. Never zooms in
+ * past the frame size, so a small cluster is shown at 1:1.
+ */
+export function overviewView(elements: DrawElement[], project: Project): CameraView {
+  const u = unionBounds(elements);
+  if (!u) return wholeView(project);
+  const pad = 1.12;
+  const zoom = Math.min(
+    project.width / Math.max(u.width * pad, 1),
+    project.height / Math.max(u.height * pad, 1),
+    1,
+  );
+  return { cx: u.x + u.width / 2, cy: u.y + u.height / 2, zoom: Math.max(zoom, 0.02) };
 }
 
 export interface Bounds { x: number; y: number; width: number; height: number }
@@ -47,7 +76,7 @@ export function autoCamera(el: DrawElement, project: Project): CameraView {
 export function cameraForElement(index: number, ordered: DrawElement[], project: Project): CameraView {
   const el = ordered[index];
   switch (el.camera) {
-    case 'whole': return wholeView(project);
+    case 'whole': return overviewView(ordered, project);
     case 'custom': return el.customCamera ?? autoCamera(el, project);
     case 'previous':
       return index > 0 ? cameraForElement(index - 1, ordered, project) : autoCamera(el, project);
@@ -79,7 +108,7 @@ export function buildCameraTimeline(ordered: DrawElement[], project: Project): C
   });
   if (project.zoomAtEnd && ordered.length > 0) {
     keys.push({
-      view: wholeView(project),
+      view: overviewView(ordered, project),
       moveStart: contentEnd,
       moveEnd: contentEnd + END_ZOOM_SECONDS,
     });

@@ -79,7 +79,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
           options={[
             { value: 'auto', label: 'Zoom to it' },
             { value: 'previous', label: 'Stay' },
-            { value: 'whole', label: 'Whole' },
+            { value: 'whole', label: 'Everything' },
           ]}
         />
       </Field>

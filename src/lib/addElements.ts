@@ -17,27 +17,27 @@ import { scribblePath } from './scribble';
 import type { GalleryItem } from './gallery';
 import { clamp } from './time';
 
-const MARGIN = 120;
-const GAP = 90;
-
 function ink(): string {
   return paperDef(useStore.getState().project.paper).ink;
 }
 
 /**
  * Position (and possibly reduced scale) for a new element so it lands in
- * free space on the board: first to the right of the last element, else the
- * spot with the least overlap, scanning in reading order.
+ * free space inside the area the user is currently looking at: first to the
+ * right of the last element, else the free spot nearest the centre of the
+ * view, else the least crowded spot.
  */
 function placeNew(paths: string[], scale: number): { x: number; y: number; scale: number } {
-  const { project, elements } = useStore.getState();
+  const { project, elements, viewport } = useStore.getState();
   const b = measurePaths(paths).bbox;
-  const W = project.width;
-  const H = project.height;
+  // the region we place into: the visible paper, or the video frame
+  const region = viewport ?? { x: 0, y: 0, width: project.width, height: project.height };
+  const margin = Math.max(40, Math.min(region.width, region.height) * 0.06);
+  const gap = Math.max(40, Math.min(region.width, region.height) * 0.05);
 
-  // never larger than the board's usable area
-  const maxW = W - 2 * MARGIN;
-  const maxH = H - 2 * MARGIN;
+  // never larger than the region's usable area
+  const maxW = region.width - 2 * margin;
+  const maxH = region.height - 2 * margin;
   if (b.width * scale > maxW || b.height * scale > maxH) {
     scale = Math.min(maxW / Math.max(b.width, 1), maxH / Math.max(b.height, 1));
   }
@@ -47,9 +47,10 @@ function placeNew(paths: string[], scale: number): { x: number; y: number; scale
   // top-left → transform origin
   const at = (left: number, top: number) => ({ x: left - b.x * scale, y: top - b.y * scale, scale });
 
+  const centre = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
   const order = sequenceOrder(elements);
-  if (order.length === 0) return at((W - w) / 2, (H - h) / 2);
   const taken = order.map(elementBounds);
+  if (taken.length === 0) return at(centre.x - w / 2, centre.y - h / 2);
 
   const overlapArea = (left: number, top: number) =>
     taken.reduce((sum, r) => {
@@ -57,27 +58,34 @@ function placeNew(paths: string[], scale: number): { x: number; y: number; scale
       const oy = Math.max(0, Math.min(top + h, r.y + r.height) - Math.max(top, r.y));
       return sum + ox * oy;
     }, 0);
+  const inside = (left: number, top: number) =>
+    left >= region.x + margin / 2 && top >= region.y + margin / 2 &&
+    left + w <= region.x + region.width - margin / 2 && top + h <= region.y + region.height - margin / 2;
 
-  // right of the last element, vertically centred on it
+  // right of the last element, vertically centred on it (when that is in view)
   const last = taken[taken.length - 1];
-  const rightLeft = last.x + last.width + GAP;
-  const rightTop = clamp(last.y + last.height / 2 - h / 2, MARGIN / 2, H - MARGIN / 2 - h);
-  if (rightLeft + w <= W - MARGIN / 2 && overlapArea(rightLeft, rightTop) === 0) {
+  const rightLeft = last.x + last.width + gap;
+  const rightTop = last.y + last.height / 2 - h / 2;
+  if (inside(rightLeft, rightTop) && overlapArea(rightLeft, rightTop) === 0) {
     return at(rightLeft, rightTop);
   }
 
-  // scan candidate spots in reading order; take the first free one, else the least crowded
-  let best = { left: (W - w) / 2, top: (H - h) / 2, score: Infinity };
+  // candidate spots across the region, nearest the centre first
   const cols = 16, rows = 10;
+  const spots: { left: number; top: number; d: number }[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const left = MARGIN / 2 + ((W - MARGIN - w) * c) / (cols - 1);
-      const top = MARGIN / 2 + ((H - MARGIN - h) * r) / (rows - 1);
-      if (left < 0 || top < 0) continue;
-      const score = overlapArea(left, top);
-      if (score === 0) return at(left, top);
-      if (score < best.score) best = { left, top, score };
+      const left = region.x + margin + ((region.width - 2 * margin - w) * c) / (cols - 1);
+      const top = region.y + margin + ((region.height - 2 * margin - h) * r) / (rows - 1);
+      spots.push({ left, top, d: Math.hypot(left + w / 2 - centre.x, top + h / 2 - centre.y) });
     }
+  }
+  spots.sort((a, b2) => a.d - b2.d);
+  let best = { left: centre.x - w / 2, top: centre.y - h / 2, score: Infinity };
+  for (const sp of spots) {
+    const score = overlapArea(sp.left, sp.top);
+    if (score === 0) return at(sp.left, sp.top);
+    if (score < best.score) best = { left: sp.left, top: sp.top, score };
   }
   return at(best.left, best.top);
 }

@@ -38,9 +38,13 @@ cross-origin isolated — the dev and preview servers already send the required
   back to the whole scribe at the end. Per element you can choose *Zoom to it*,
   *Stay* (keep the previous framing) or *Whole* canvas, and tune the zoom tightness.
   Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
-- **Edit view / Camera view** above the canvas: edit the whole artboard, or see
-  exactly what the video will show at the current time. Scrubbing and Preview switch
-  to camera view automatically; a dashed guide shows the selected element's framing.
+- **Infinite canvas.** In Edit view the paper is endless: hover empty paper and the
+  cursor becomes a hand — drag to pan, wheel to zoom, place elements anywhere. The dashed
+  "video frame" is only a guide; the camera visits each element wherever it is. *Fit*
+  frames everything you've placed.
+- **Edit view / Camera view** above the canvas: edit the paper, or see exactly what the
+  video will show at the current time. Scrubbing and Preview switch to camera view
+  automatically; a dashed guide shows the selected element's framing.
 - **Strip (bottom)** — thumbnails in play order. Drag to reorder, double-click to
   jump there. Each card shows its animate and pause times; connectors show transitions.
 - **Inspector (right)** — *Animation* tab (timing, entrance style, per-element hand,

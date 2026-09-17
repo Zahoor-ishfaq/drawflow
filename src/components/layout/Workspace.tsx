@@ -1,59 +1,103 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { unionBounds } from '../../lib/camera';
 import { clamp } from '../../lib/time';
 import { Stage } from '../canvas/Stage';
 
-// Zoom/pan is view state, separate from element transforms (spec §7).
-// The artboard auto-fits the available space and re-fits on container resize
-// until the user zooms or pans manually.
+// Edit view is an infinite sheet of paper (VideoScribe-style): drag empty
+// paper to pan, wheel to zoom, place elements anywhere. Camera view shows the
+// video frame letterboxed in the workspace. View state is separate from
+// element transforms.
+
+interface View { cx: number; cy: number; zoom: number } // zoom = screen px per canvas unit
+
+const MIN_ZOOM = 0.03;
+const MAX_ZOOM = 8;
+
 export function Workspace() {
   const project = useStore((s) => s.project);
-  const elementCount = useStore((s) => s.elements.length);
+  const elements = useStore((s) => s.elements);
   const cameraView = useStore((s) => s.cameraView);
   const isPlaying = useStore((s) => s.isPlaying);
   const setCameraView = useStore((s) => s.setCameraView);
+  const setViewport = useStore((s) => s.setViewport);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ zoom: 0.35, x: 0, y: 0 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [view, setView] = useState<View>({ cx: project.width / 2, cy: project.height / 2, zoom: 0.4 });
   const userAdjusted = useRef(false);
-  const panDrag = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+  const midDrag = useRef<{ x: number; y: number } | null>(null);
 
-  const fit = useCallback(() => {
-    const el = containerRef.current;
-    if (!el || el.clientWidth < 50 || el.clientHeight < 50) return;
-    const z = Math.min(
-      (el.clientWidth - 64) / project.width,
-      (el.clientHeight - 64) / project.height,
-    );
-    userAdjusted.current = false;
-    setView({ zoom: clamp(z, 0.02, 4), x: 0, y: 0 });
-  }, [project.width, project.height]);
-
-  // fit on mount, when the artboard size changes, and on container resize
-  // (unless the user has taken over the view)
+  // container size
   useEffect(() => {
-    fit();
     const el = containerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      if (!userAdjusted.current) fit();
-    });
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
+    setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
-  }, [fit]);
+  }, []);
 
-  const zoomBy = useCallback((factor: number, px = 0, py = 0) => {
+  const frameView = useCallback(
+    (b: { x: number; y: number; width: number; height: number }, pad = 64) => {
+      if (size.w < 50 || size.h < 50) return;
+      const zoom = clamp(Math.min((size.w - pad * 2) / b.width, (size.h - pad * 2) / b.height), MIN_ZOOM, MAX_ZOOM);
+      setView({ cx: b.x + b.width / 2, cy: b.y + b.height / 2, zoom });
+    },
+    [size],
+  );
+
+  /** Fit everything the user has placed (or the video frame when empty). */
+  const fit = useCallback(() => {
+    userAdjusted.current = false;
+    const u = unionBounds(elements);
+    const frame = { x: 0, y: 0, width: project.width, height: project.height };
+    if (!u) return frameView(frame);
+    // include the video frame while the content is near it, so the first
+    // elements don't jump around as you add them
+    const near =
+      u.x < project.width * 1.5 && u.y < project.height * 1.5 &&
+      u.x + u.width > -project.width * 0.5 && u.y + u.height > -project.height * 0.5;
+    if (near) {
+      const x0 = Math.min(u.x, 0), y0 = Math.min(u.y, 0);
+      const x1 = Math.max(u.x + u.width, project.width), y1 = Math.max(u.y + u.height, project.height);
+      return frameView({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+    }
+    frameView(u);
+  }, [elements, project.width, project.height, frameView]);
+
+  // initial fit (and re-fit on resize / artboard change until the user takes over)
+  useEffect(() => {
+    if (!userAdjusted.current) frameView({ x: 0, y: 0, width: project.width, height: project.height });
+  }, [size, project.width, project.height, frameView]);
+
+  // visible canvas rect → store (so new elements land where the user is looking)
+  const editVb = {
+    x: view.cx - size.w / view.zoom / 2,
+    y: view.cy - size.h / view.zoom / 2,
+    width: size.w / view.zoom,
+    height: size.h / view.zoom,
+  };
+  useEffect(() => {
+    if (size.w > 0) setViewport(editVb);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, size, setViewport]);
+
+  const zoomAt = useCallback((factor: number, sx: number, sy: number) => {
     userAdjusted.current = true;
     setView((v) => {
-      const zoom = clamp(v.zoom * factor, 0.02, 6);
-      // keep the point (px, py — relative to container center) stationary
-      return {
-        zoom,
-        x: px - ((px - v.x) * zoom) / v.zoom,
-        y: py - ((py - v.y) * zoom) / v.zoom,
-      };
+      const zoom = clamp(v.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+      // keep the canvas point under (sx, sy) stationary; sx/sy relative to container centre
+      const px = v.cx + sx / v.zoom;
+      const py = v.cy + sy / v.zoom;
+      return { zoom, cx: px - sx / zoom, cy: py - sy / zoom };
     });
+  }, []);
+
+  const panBy = useCallback((dxCanvas: number, dyCanvas: number) => {
+    userAdjusted.current = true;
+    setView((v) => ({ ...v, cx: v.cx - dxCanvas, cy: v.cy - dyCanvas }));
   }, []);
 
   // native wheel listener so preventDefault works (React wheel is passive)
@@ -61,9 +105,10 @@ export function Workspace() {
     const el = containerRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      if (cameraView) return;
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      zoomBy(
+      zoomAt(
         Math.exp(-e.deltaY * 0.0012),
         e.clientX - (rect.left + rect.width / 2),
         e.clientY - (rect.top + rect.height / 2),
@@ -71,25 +116,27 @@ export function Workspace() {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [zoomBy]);
+  }, [zoomAt, cameraView]);
 
+  // middle-drag pans from anywhere (edit view)
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 1) return; // middle-drag pans
+    if (e.button !== 1 || cameraView) return;
     e.preventDefault();
-    userAdjusted.current = true;
-    panDrag.current = { startX: e.clientX, startY: e.clientY, panX: view.x, panY: view.y };
+    midDrag.current = { x: e.clientX, y: e.clientY };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    const d = panDrag.current;
+    const d = midDrag.current;
     if (!d) return;
-    setView((v) => ({
-      ...v,
-      x: d.panX + (e.clientX - d.startX),
-      y: d.panY + (e.clientY - d.startY),
-    }));
+    panBy((e.clientX - d.x) / view.zoom, (e.clientY - d.y) / view.zoom);
+    midDrag.current = { x: e.clientX, y: e.clientY };
   };
-  const onPointerUp = () => { panDrag.current = null; };
+  const onPointerUp = () => { midDrag.current = null; };
+
+  // camera view: the video frame letterboxed in the workspace
+  const frameScale = Math.max(0.01, Math.min((size.w - 48) / project.width, (size.h - 72) / project.height));
+  const frameW = project.width * frameScale;
+  const frameH = project.height * frameScale;
 
   return (
     <div
@@ -100,18 +147,27 @@ export function Workspace() {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div
-        className="absolute top-1/2 left-1/2"
-        style={{ transform: `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px))` }}
-      >
-        <Stage zoom={view.zoom} />
-      </div>
+      {cameraView ? (
+        <div
+          className="absolute"
+          style={{ left: (size.w - frameW) / 2, top: (size.h - frameH) / 2 + 12, width: frameW, height: frameH }}
+        >
+          <Stage mode="camera" cssWidth={frameW} cssHeight={frameH} onPan={panBy} />
+        </div>
+      ) : (
+        size.w > 0 && (
+          <div className="absolute inset-0">
+            <Stage mode="edit" cssWidth={size.w} cssHeight={size.h} editView={editVb} onPan={panBy} />
+          </div>
+        )
+      )}
 
-      {elementCount === 0 && (
+      {elements.length === 0 && (
         <div className="pointer-events-none absolute inset-x-0 top-[46%] text-center">
           <div className="text-[15px] font-medium text-t2">Your canvas is empty</div>
           <div className="mt-1 text-[13px] text-t3">
-            Use the toolbar on the left — add text, a shape, or an image from the library
+            Use the toolbar on the left — add text, a shape, or an image from the library.
+            Drag the paper to move around.
           </div>
         </div>
       )}
@@ -130,7 +186,7 @@ export function Workspace() {
                 (active ? 'bg-accent text-white' : 'text-t2 hover:text-t1')
               }
               onClick={() => setCameraView(mode === 'camera')}
-              title={mode === 'camera' ? 'See what the camera sees at the current time' : 'Edit the whole artboard'}
+              title={mode === 'camera' ? 'See what the camera sees at the current time' : 'Edit the infinite canvas'}
             >
               {mode === 'camera' ? 'Camera view' : 'Edit view'}
             </button>
@@ -138,47 +194,46 @@ export function Workspace() {
         })}
       </div>
 
-      <div className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-full border border-line bg-panel px-1.5 py-1 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
-          onClick={() => zoomBy(1 / 1.25)}
-          title="Zoom out"
-          aria-label="Zoom out"
-        >
-          <Minus size={13} />
-        </button>
-        <button
-          type="button"
-          className="tabular min-w-11 px-1 text-center text-[12px] text-t2 hover:text-t1"
-          onClick={() => {
-            userAdjusted.current = true;
-            setView({ zoom: 1, x: 0, y: 0 });
-          }}
-          title="Zoom to 100%"
-        >
-          {Math.round(view.zoom * 100)}%
-        </button>
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
-          onClick={() => zoomBy(1.25)}
-          title="Zoom in"
-          aria-label="Zoom in"
-        >
-          <Plus size={13} />
-        </button>
-        <span className="mx-0.5 h-3.5 w-px bg-line" />
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
-          onClick={fit}
-          title="Fit artboard"
-          aria-label="Fit artboard"
-        >
-          <Maximize size={12} />
-        </button>
-      </div>
+      {!cameraView && (
+        <div className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-full border border-line bg-panel px-1.5 py-1 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
+            onClick={() => zoomAt(1 / 1.25, 0, 0)}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <Minus size={13} />
+          </button>
+          <button
+            type="button"
+            className="tabular min-w-11 px-1 text-center text-[12px] text-t2 hover:text-t1"
+            onClick={() => { userAdjusted.current = true; setView((v) => ({ ...v, zoom: 1 })); }}
+            title="Zoom to 100%"
+          >
+            {Math.round(view.zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
+            onClick={() => zoomAt(1.25, 0, 0)}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <Plus size={13} />
+          </button>
+          <span className="mx-0.5 h-3.5 w-px bg-line" />
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"
+            onClick={fit}
+            title="Fit everything"
+            aria-label="Fit everything"
+          >
+            <Maximize size={12} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

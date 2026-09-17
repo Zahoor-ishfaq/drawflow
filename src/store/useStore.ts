@@ -15,6 +15,8 @@ export interface AppState {
   isPlaying: boolean;
   /** show the camera's view (what the video will show) instead of the whole artboard */
   cameraView: boolean;
+  /** canvas-space rect currently visible in edit view (new elements land inside it) */
+  viewport: { x: number; y: number; width: number; height: number } | null;
 
   // editing
   selectedId: string | null;
@@ -37,6 +39,7 @@ export interface AppState {
   pause(): void;
   stop(): void;
   setCameraView(v: boolean): void;
+  setViewport(r: AppState['viewport']): void;
   setAudio(track: AudioTrack | null): void;
   updateAudio(patch: Partial<AudioTrack>): void;
   updateProject(patch: Partial<Project>): void;
@@ -121,6 +124,7 @@ export const useStore = create<AppState>()(
       currentTime: 0,
       isPlaying: false,
       cameraView: false,
+      viewport: null,
       selectedId: null,
       isExporting: false,
       exportProgress: 0,
@@ -207,6 +211,7 @@ export const useStore = create<AppState>()(
       pause() { set({ isPlaying: false }); },
       stop() { set({ isPlaying: false, currentTime: 0 }); },
       setCameraView(v) { set({ cameraView: v }); },
+      setViewport(r) { set({ viewport: r }); },
 
       setAudio(track) {
         commit(set, get, get().elements, { audio: track });
