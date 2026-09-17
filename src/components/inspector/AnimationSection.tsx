@@ -85,10 +85,10 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
             }
           }}
           options={[
-            { value: 'auto', label: 'Zoom to it' },
             { value: 'previous', label: 'Stay' },
+            { value: 'custom', label: 'This shot' },
+            { value: 'auto', label: 'Zoom to it' },
             { value: 'whole', label: 'All' },
-            { value: 'custom', label: 'Custom' },
           ]}
         />
       </Field>
@@ -98,9 +98,11 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
         </Field>
       )}
       <p className="text-[11px] leading-relaxed text-t3">
-        {el.camera === 'custom'
-          ? 'Drag the dashed camera frame on the canvas to move it; drag its corners to capture more or less. Put several elements inside one frame and set the later ones to "Stay".'
-          : 'Drag the dashed camera frame on the canvas (or its corners) to take manual control of what this shot captures.'}
+        {el.camera === 'previous'
+          ? 'The camera stays where it was for the previous element. Choose "This shot" to start a new shot here.'
+          : el.camera === 'custom'
+            ? 'This element starts a shot. Drag the teal frame on the canvas to move it, or its corners to capture more or less; later elements inside it will "Stay".'
+            : 'The camera zooms to this element on its own. Drag the teal frame (or its corners) to take manual control.'}
       </p>
     </div>
   );

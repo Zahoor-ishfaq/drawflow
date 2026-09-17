@@ -5,7 +5,7 @@
 import { sequenceOrder, useStore } from '../store/useStore';
 import type { DrawElement, ImageRef } from '../types';
 import { measurePaths } from './drawing';
-import { elementBounds } from './camera';
+import { elementBounds, cameraForElement, viewBoxFor, viewFromRect, type Bounds } from './camera';
 import { textToPaths } from './textToPaths';
 import { normalizeSvg, type NormalizedSvg } from './svgImport';
 import { SHAPES } from '../assets/shapes';
@@ -27,11 +27,37 @@ function ink(): string {
  * right of the last element, else the free spot nearest the centre of the
  * view, else the least crowded spot.
  */
-function placeNew(paths: string[], scale: number): { x: number; y: number; scale: number } {
-  const { project, elements, viewport } = useStore.getState();
+type Placement = { x: number; y: number; scale: number } & Pick<DrawElement, 'camera' | 'customCamera' | 'transitionIn'>;
+
+const TRANSITION_STAY = 0.3;    // small beat between elements sharing a shot
+const TRANSITION_MOVE = 0.8;    // camera travel into a new shot
+
+/**
+ * Which shot a newly placed element belongs to. If the previous element's
+ * shot already contains it (the user hasn't moved the boundary away), the
+ * camera stays; otherwise the current boundary becomes a new shot.
+ */
+function shotFor(bounds: Bounds): Pick<DrawElement, 'camera' | 'customCamera' | 'transitionIn'> {
+  const { project, elements, cameraBoundary } = useStore.getState();
+  const order = sequenceOrder(elements);
+  if (order.length > 0) {
+    const prev = viewBoxFor(cameraForElement(order.length - 1, order, project), project);
+    const tol = Math.min(prev.width, prev.height) * 0.04;
+    const inside =
+      bounds.x >= prev.x - tol && bounds.y >= prev.y - tol &&
+      bounds.x + bounds.width <= prev.x + prev.width + tol &&
+      bounds.y + bounds.height <= prev.y + prev.height + tol;
+    if (inside) return { camera: 'previous', transitionIn: TRANSITION_STAY };
+  }
+  const rect = cameraBoundary ?? { x: 0, y: 0, width: project.width, height: project.height };
+  return { camera: 'custom', customCamera: viewFromRect(rect, project), transitionIn: TRANSITION_MOVE };
+}
+
+function placeNew(paths: string[], scale: number, attempt = 0): Placement {
+  const { project, elements, cameraBoundary } = useStore.getState();
   const b = measurePaths(paths).bbox;
-  // the region we place into: the visible paper, or the video frame
-  const region = viewport ?? { x: 0, y: 0, width: project.width, height: project.height };
+  // the region we place into: the camera boundary on screen, or the video frame
+  const region = cameraBoundary ?? { x: 0, y: 0, width: project.width, height: project.height };
   const margin = Math.max(40, Math.min(region.width, region.height) * 0.06);
   const gap = Math.max(40, Math.min(region.width, region.height) * 0.05);
 
@@ -44,18 +70,25 @@ function placeNew(paths: string[], scale: number): { x: number; y: number; scale
   const w = b.width * scale;
   const h = b.height * scale;
 
-  // top-left → transform origin
-  const at = (left: number, top: number) => ({ x: left - b.x * scale, y: top - b.y * scale, scale });
+  // top-left → transform origin, plus the shot this element belongs to
+  const at = (left: number, top: number): Placement => ({
+    x: left - b.x * scale,
+    y: top - b.y * scale,
+    scale,
+    ...shotFor({ x: left, y: top, width: w, height: h }),
+  });
 
   const centre = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
   const order = sequenceOrder(elements);
   const taken = order.map(elementBounds);
   if (taken.length === 0) return at(centre.x - w / 2, centre.y - h / 2);
 
+  // existing elements are inflated by the gap so new ones keep clear of them
+  const pad = gap * 0.6;
   const overlapArea = (left: number, top: number) =>
     taken.reduce((sum, r) => {
-      const ox = Math.max(0, Math.min(left + w, r.x + r.width) - Math.max(left, r.x));
-      const oy = Math.max(0, Math.min(top + h, r.y + r.height) - Math.max(top, r.y));
+      const ox = Math.max(0, Math.min(left + w, r.x + r.width + pad) - Math.max(left, r.x - pad));
+      const oy = Math.max(0, Math.min(top + h, r.y + r.height + pad) - Math.max(top, r.y - pad));
       return sum + ox * oy;
     }, 0);
   const inside = (left: number, top: number) =>
@@ -87,6 +120,8 @@ function placeNew(paths: string[], scale: number): { x: number; y: number; scale
     if (score === 0) return at(sp.left, sp.top);
     if (score < best.score) best = { left: sp.left, top: sp.top, score };
   }
+  // no free room at this size: try a smaller version before overlapping
+  if (attempt < 2) return placeNew(paths, scale * 0.72, attempt + 1);
   return at(best.left, best.top);
 }
 

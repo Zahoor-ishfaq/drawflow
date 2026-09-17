@@ -15,8 +15,12 @@ export interface AppState {
   isPlaying: boolean;
   /** show the camera's view (what the video will show) instead of the whole artboard */
   cameraView: boolean;
-  /** canvas-space rect currently visible in edit view (new elements land inside it) */
-  viewport: { x: number; y: number; width: number; height: number } | null;
+  /**
+   * The camera boundary shown in edit view, in canvas coords: the piece of
+   * paper the video captures right now. New elements land inside it and
+   * take it as their shot unless the previous shot already contains them.
+   */
+  cameraBoundary: { x: number; y: number; width: number; height: number } | null;
   /** ask the workspace to bring an element's camera frame into view */
   focusRequest: { id: string; n: number } | null;
 
@@ -41,7 +45,7 @@ export interface AppState {
   pause(): void;
   stop(): void;
   setCameraView(v: boolean): void;
-  setViewport(r: AppState['viewport']): void;
+  setCameraBoundary(r: AppState['cameraBoundary']): void;
   focusOn(id: string): void;
   /** start playback at an element's start time */
   playFrom(id: string): void;
@@ -130,7 +134,7 @@ export const useStore = create<AppState>()(
       currentTime: 0,
       isPlaying: false,
       cameraView: false,
-      viewport: null,
+      cameraBoundary: null,
       focusRequest: null,
       selectedId: null,
       isExporting: false,
@@ -218,7 +222,7 @@ export const useStore = create<AppState>()(
       pause() { set({ isPlaying: false }); },
       stop() { set({ isPlaying: false, currentTime: 0 }); },
       setCameraView(v) { set({ cameraView: v }); },
-      setViewport(r) { set({ viewport: r }); },
+      setCameraBoundary(r) { set({ cameraBoundary: r }); },
       focusOn(id) { set({ focusRequest: { id, n: (get().focusRequest?.n ?? 0) + 1 } }); },
       playFrom(id) {
         const el = get().elements.find((e) => e.id === id);

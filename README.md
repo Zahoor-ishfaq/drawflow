@@ -34,10 +34,13 @@ cross-origin isolated — the dev and preview servers already send the required
 - **Elements play in sequence.** Each has three times, exactly like VideoScribe:
   **Animate** (seconds to draw), **Pause** (hold after drawing) and **Transition**
   (camera travel into it). Start times are derived automatically.
-- **Camera.** By default the camera zooms to each element as it's drawn, then pulls
-  back to the whole scribe at the end. Per element you can choose *Zoom to it*,
-  *Stay* (keep the previous framing) or *Whole* canvas, and tune the zoom tightness.
-  Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
+- **Camera = the boundary on screen.** The dashed boundary in Edit view is what the
+  video captures. Add elements and they land inside it and share that shot — each is
+  drawn in turn while the others stay visible. Drag the paper to fresh space and add
+  something there to start a new shot; the camera only moves between shots. Per element
+  you can still choose *Stay*, *This shot*, *Zoom to it* or *All*, and drag/resize the
+  teal frame to set a shot by hand. At the end the camera optionally pulls back to show
+  everything. Camera movement is *Ease out*, *Linear* or a hard *Cut* (project setting).
 - **Infinite canvas.** In Edit view the paper is endless: hover empty paper and the
   cursor becomes a hand — drag to pan, wheel to zoom, place elements anywhere. The dashed
   "video frame" is only a guide; the camera visits each element wherever it is. *Fit*

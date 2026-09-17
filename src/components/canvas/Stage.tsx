@@ -18,6 +18,8 @@ interface StageProps {
   cssHeight: number;
   /** visible canvas rect (edit mode) */
   editView?: Rect;
+  /** camera boundary in canvas coords (edit mode) */
+  boundary?: Rect;
   /** pan request in canvas units (edit mode, dragging empty paper) */
   onPan: (dxCanvas: number, dyCanvas: number) => void;
 }
@@ -32,7 +34,7 @@ type DragState =
 const ACCENT = '#0d9d97';
 const CLICK_SLOP = 4; // px of movement below which a drag counts as a click
 
-export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps) {
+export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: StageProps) {
   const project = useStore((s) => s.project);
   const currentTime = useStore((s) => s.currentTime);
   const isPlaying = useStore((s) => s.isPlaying);
@@ -223,28 +225,28 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
         onPointerDown={onPaperPointerDown}
       />
 
-      {/* the video frame, as a guide only — elements may live anywhere */}
-      {!cameraMode && (
+      {/* camera boundary: what the video captures from here */}
+      {!cameraMode && boundary && (
         <g pointerEvents="none">
           <rect
-            x={0}
-            y={0}
-            width={project.width}
-            height={project.height}
+            x={boundary.x}
+            y={boundary.y}
+            width={boundary.width}
+            height={boundary.height}
             fill="none"
-            stroke="#8a93a3"
-            strokeOpacity={0.6}
+            stroke="#5b6472"
+            strokeOpacity={0.7}
             strokeWidth={guideStroke}
             strokeDasharray={`${10 / pxPerUnit} ${8 / pxPerUnit}`}
           />
           <text
-            x={12 / pxPerUnit}
-            y={-10 / pxPerUnit}
+            x={boundary.x + 12 / pxPerUnit}
+            y={boundary.y + boundary.height + 18 / pxPerUnit}
             fontSize={12 / pxPerUnit}
             fontFamily="Inter, system-ui, sans-serif"
-            fill="#8a93a3"
+            fill="#5b6472"
           >
-            video frame
+            camera boundary — what the video captures
           </text>
         </g>
       )}
@@ -301,7 +303,7 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
             style={{ cursor: interactive ? 'move' : 'default' }}
             onPointerDown={interactive ? onCamFrameDown : undefined}
           >
-            <rect width={112 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
+            <rect width={136 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
             <text
               x={8 / pxPerUnit}
               y={14 / pxPerUnit}
@@ -310,7 +312,13 @@ export function Stage({ mode, cssWidth, cssHeight, editView, onPan }: StageProps
               fill="#ffffff"
               pointerEvents="none"
             >
-              {selected?.camera === 'custom' ? 'camera · custom' : 'camera · auto'}
+              {selected?.camera === 'previous'
+                ? 'camera · stays here'
+                : selected?.camera === 'custom'
+                  ? 'camera · this shot'
+                  : selected?.camera === 'whole'
+                    ? 'camera · everything'
+                    : 'camera · zooms to it'}
             </text>
           </g>
           {/* corner handles: resize (aspect locked) */}

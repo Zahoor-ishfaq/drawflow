@@ -21,7 +21,7 @@ export function Workspace() {
   const cameraView = useStore((s) => s.cameraView);
   const isPlaying = useStore((s) => s.isPlaying);
   const setCameraView = useStore((s) => s.setCameraView);
-  const setViewport = useStore((s) => s.setViewport);
+  const setCameraBoundary = useStore((s) => s.setCameraBoundary);
   const focusRequest = useStore((s) => s.focusRequest);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -61,13 +61,26 @@ export function Workspace() {
     return () => ro.disconnect();
   }, []);
 
+  // camera boundary on screen (px, relative to the container): the largest
+  // video-aspect rectangle that fits with a margin, centred
+  const boundaryPx = (() => {
+    const mx = Math.max(24, size.w * 0.09);
+    const my = Math.max(24, size.h * 0.12);
+    const scale = Math.max(0.01, Math.min((size.w - 2 * mx) / project.width, (size.h - 2 * my) / project.height));
+    const w = project.width * scale;
+    const h = project.height * scale;
+    return { left: (size.w - w) / 2, top: (size.h - h) / 2, width: w, height: h };
+  })();
+
+  /** Zoom/centre the view so canvas rect `b` fills the on-screen boundary. */
   const frameView = useCallback(
-    (b: { x: number; y: number; width: number; height: number }, pad = 64) => {
+    (b: { x: number; y: number; width: number; height: number }) => {
       if (size.w < 50 || size.h < 50) return;
-      const zoom = clamp(Math.min((size.w - pad * 2) / b.width, (size.h - pad * 2) / b.height), MIN_ZOOM, MAX_ZOOM);
+      const zoom = clamp(Math.min(boundaryPx.width / b.width, boundaryPx.height / b.height), MIN_ZOOM, MAX_ZOOM);
       setView({ cx: b.x + b.width / 2, cy: b.y + b.height / 2, zoom });
     },
-    [size],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [size, project.width, project.height],
   );
 
   /** Fit everything the user has placed (or the video frame when empty). */
@@ -97,8 +110,8 @@ export function Workspace() {
     const idx = ordered.findIndex((e) => e.id === focusRequest.id);
     if (idx === -1) return;
     const r = viewBoxFor(cameraForElement(idx, ordered, st.project), st.project);
-    const pad = 80;
-    const zoom = clamp(Math.min((size.w - pad * 2) / r.width, (size.h - pad * 2) / r.height), MIN_ZOOM, MAX_ZOOM);
+    // put that shot exactly inside the on-screen boundary
+    const zoom = clamp(Math.min(boundaryPx.width / r.width, boundaryPx.height / r.height), MIN_ZOOM, MAX_ZOOM);
     userAdjusted.current = true;
     animateTo({ cx: r.x + r.width / 2, cy: r.y + r.height / 2, zoom });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,17 +122,24 @@ export function Workspace() {
     if (!userAdjusted.current) frameView({ x: 0, y: 0, width: project.width, height: project.height });
   }, [size, project.width, project.height, frameView]);
 
-  // visible canvas rect → store (so new elements land where the user is looking)
+  // visible canvas rect, and the boundary's canvas rect → store (new elements
+  // land inside the boundary and take it as their shot)
   const editVb = {
     x: view.cx - size.w / view.zoom / 2,
     y: view.cy - size.h / view.zoom / 2,
     width: size.w / view.zoom,
     height: size.h / view.zoom,
   };
+  const boundaryCanvas = {
+    x: editVb.x + boundaryPx.left / view.zoom,
+    y: editVb.y + boundaryPx.top / view.zoom,
+    width: boundaryPx.width / view.zoom,
+    height: boundaryPx.height / view.zoom,
+  };
   useEffect(() => {
-    if (size.w > 0) setViewport(editVb);
+    if (size.w > 0) setCameraBoundary(boundaryCanvas);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, size, setViewport]);
+  }, [view, size, setCameraBoundary]);
 
   const zoomAt = useCallback((factor: number, sx: number, sy: number) => {
     cancelAnimationFrame(tween.current);
@@ -196,7 +216,7 @@ export function Workspace() {
       ) : (
         size.w > 0 && (
           <div className="absolute inset-0">
-            <Stage mode="edit" cssWidth={size.w} cssHeight={size.h} editView={editVb} onPan={panBy} />
+            <Stage mode="edit" cssWidth={size.w} cssHeight={size.h} editView={editVb} boundary={boundaryCanvas} onPan={panBy} />
           </div>
         )
       )}
@@ -205,8 +225,8 @@ export function Workspace() {
         <div className="pointer-events-none absolute inset-x-0 top-[46%] text-center">
           <div className="text-[15px] font-medium text-t2">Your canvas is empty</div>
           <div className="mt-1 text-[13px] text-t3">
-            Use the toolbar on the left — add text, a shape, or an image from the library.
-            Drag the paper to move around.
+            Everything inside the dashed boundary is what the video captures. Add text,
+            shapes or images from the toolbar; drag the paper to move to a new shot.
           </div>
         </div>
       )}
