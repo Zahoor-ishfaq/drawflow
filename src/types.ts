@@ -67,16 +67,30 @@ export interface DrawElement {
   fontFamily?: string;
 }
 
-export interface AudioTrack {
+export type AudioLaneKind = 'music' | 'voice';
+
+/** A decoded audio file or recording. Clips reference it by id. */
+export interface AudioSource {
   id: string;
   name: string;
-  buffer: AudioBuffer | null; // decoded, for waveform + playback
-  url: string;                // object URL of the uploaded file
-  duration: number;           // full file length, seconds
-  startTime: number;          // where the clip sits on the timeline
-  trimStart: number;          // seconds cut from the start of the file
-  trimEnd: number;            // seconds cut from the end of the file
-  volume: number;             // 0..1
+  blob: Blob;                 // original bytes (for export + persistence)
+  buffer: AudioBuffer;        // decoded, for waveform + playback
+  duration: number;           // seconds
+}
+
+/** A piece of a source placed on the timeline (splitting yields two clips). */
+export interface AudioClip {
+  id: string;
+  name: string;
+  lane: AudioLaneKind;
+  sourceId: string;
+  startTime: number;          // timeline position, seconds
+  offset: number;             // seconds into the source where the clip begins
+  duration: number;           // clip length on the timeline
+  volume: number;             // 0..1.5
+  fadeIn: number;             // seconds
+  fadeOut: number;            // seconds
+  muted: boolean;
 }
 
 export type PaperStyle = 'plain' | 'grid' | 'dots' | 'lined' | 'cream' | 'chalkboard' | 'kraft';

@@ -56,11 +56,9 @@ export function useKeyboardShortcuts(): void {
           break;
         case 'Delete':
         case 'Backspace':
-          if (s.selectedId === 'audio') {
+          if (s.selectedId?.startsWith('clip:')) {
             e.preventDefault();
-            if (s.audio) URL.revokeObjectURL(s.audio.url);
-            s.setAudio(null);
-            s.select(null);
+            s.removeAudioClip(s.selectedId.slice(5));
           } else if (s.selectedId) {
             e.preventDefault();
             s.removeElement(s.selectedId);
@@ -68,6 +66,13 @@ export function useKeyboardShortcuts(): void {
           break;
         case 'Escape':
           s.select(null);
+          break;
+        case 's':
+        case 'S':
+          if (!mod && s.selectedId?.startsWith('clip:')) {
+            e.preventDefault();
+            s.splitAudioClip(s.selectedId.slice(5), s.currentTime);
+          }
           break;
       }
     };

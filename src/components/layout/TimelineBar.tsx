@@ -3,7 +3,7 @@ import { formatTimecode } from '../../lib/time';
 import { Transport } from '../timeline/Transport';
 import { ScrubBar } from '../timeline/ScrubBar';
 import { FilmStrip } from '../timeline/FilmStrip';
-import { AudioLane } from '../timeline/AudioLane';
+import { AudioLanes } from '../timeline/AudioLane';
 
 export function TimelineBar() {
   const currentTime = useStore((s) => s.currentTime);
@@ -25,10 +25,7 @@ export function TimelineBar() {
               {formatTimecode(duration, fps)}
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <AudioLane />
-            <span className="w-[132px] shrink-0 text-right text-[10.5px] text-t3">music</span>
-          </div>
+          <AudioLanes />
         </div>
       </div>
       <div className="px-3 pb-1.5">

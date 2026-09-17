@@ -29,8 +29,15 @@ cross-origin isolated — the dev and preview servers already send the required
   *Camera view* and when you press Preview.
 - **Entrance effects** for every element: *Draw* (photos get a scribble reveal),
   *Slide in* from any side, *Fade*, *Appear*.
-- **Music** sits on a lane under the scrub bar: drag the clip to move it, drag its ends
-  to cut it, click it to set volume and timing.
+- **Audio editing.** Two lanes under the scrub bar — Music and Voiceover. Drag a clip to
+  move it, drag its ends to trim, click it for volume, fade in/out, mute, duplicate and
+  delete; press `S` (or the button) to split it at the playhead. Drop an audio file on
+  the lane to add it where you drop it.
+- **Voiceover.** Press *Record*: the scribe plays from the playhead while you narrate; stop
+  (or let it finish) and the take lands on the Voiceover lane at the right time.
+- **Checkpoints.** Every change is saved to this browser's local storage a moment later
+  and restored when you come back (see the status in the top bar). *Save to file / Open
+  file* in that menu gives you a portable `.drawflow.json` backup; *New project* starts over.
 - **Elements play in sequence.** Each has three times, exactly like VideoScribe:
   **Animate** (seconds to draw), **Pause** (hold after drawing) and **Transition**
   (camera travel into it). Start times are derived automatically.
@@ -64,6 +71,6 @@ cross-origin isolated — the dev and preview servers already send the required
 ## Shortcuts
 
 `Space` play/pause · `←/→` step one frame · `Delete` remove selection ·
-`Ctrl+Z` / `Ctrl+Shift+Z` undo/redo · `Ctrl+D` duplicate · `Esc` deselect
+`Ctrl+Z` / `Ctrl+Shift+Z` undo/redo · `Ctrl+D` duplicate · `S` split audio clip at playhead · `Esc` deselect
 
 Asset licences are listed in [CREDITS.md](./CREDITS.md).

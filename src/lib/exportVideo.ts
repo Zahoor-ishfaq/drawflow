@@ -2,7 +2,8 @@
 // each frame is rendered by seeking the pure canvas function to t = frame/fps,
 // rasterized to PNG, written to ffmpeg's virtual FS, then encoded.
 
-import type { AudioTrack, DrawElement, HandStyle, Project } from '../types';
+import type { AudioClip, DrawElement, HandStyle, Project } from '../types';
+import { getSource } from '../store/audioSources';
 import { makeRenderContext, svgStringForTime } from './renderFrame';
 import { getFFmpeg } from './ffmpegClient';
 import { HANDS, loadHandDataUrl } from '../assets/hands';
@@ -15,7 +16,7 @@ export interface ExportOptions {
   height: 720 | 1080;
   project: Project;
   elements: DrawElement[];
-  audio: AudioTrack | null;
+  audioClips: AudioClip[];
   onPhase: (phase: ExportPhase) => void;
   /** 0..1 within the current phase */
   onProgress: (p: number) => void;
@@ -49,7 +50,7 @@ function canvasToPngBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<B
 }
 
 export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
-  const { project, elements, audio, format } = opts;
+  const { project, elements, audioClips, format } = opts;
 
   if (!isCrossOriginIsolated()) {
     throw new Error(
@@ -89,7 +90,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
 
   const frameName = (i: number) => `frame_${String(i).padStart(5, '0')}.png`;
   const written: string[] = [];
-  let audioName: string | null = null;
+  const audioFiles: string[] = [];
 
   try {
     opts.onPhase('capturing');
@@ -114,12 +115,17 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
       if (frame % 5 === 0) await nextFrame(); // keep the UI responsive
     }
 
-    if (audio?.buffer) {
-      const res = await fetch(audio.url);
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      const ext = audio.name.split('.').pop()?.toLowerCase() ?? 'mp3';
-      audioName = `audio_in.${ext}`;
-      await ffmpeg.writeFile(audioName, bytes);
+    // one input file per distinct audio source used by an (unmuted) clip
+    const clips = audioClips.filter((c) => !c.muted && c.duration > 0 && getSource(c.sourceId));
+    const sourceIndex = new Map<string, number>(); // sourceId → ffmpeg input index
+    for (const c of clips) {
+      if (sourceIndex.has(c.sourceId)) continue;
+      const src = getSource(c.sourceId)!;
+      const ext = (src.blob.type.split('/')[1] || 'bin').split(';')[0];
+      const name = `audio_${audioFiles.length}.${ext === 'mpeg' ? 'mp3' : ext}`;
+      await ffmpeg.writeFile(name, new Uint8Array(await src.blob.arrayBuffer()));
+      audioFiles.push(name);
+      sourceIndex.set(c.sourceId, audioFiles.length); // input 0 is the frames
     }
 
     opts.onPhase('encoding');
@@ -131,27 +137,36 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
 
     const outName = format === 'mp4' ? 'out.mp4' : 'out.webm';
     const args: string[] = ['-framerate', String(fps), '-start_number', '0', '-i', 'frame_%05d.png'];
-    if (audioName && audio) {
-      const clipLen = Math.max(0, audio.duration - audio.trimStart - audio.trimEnd);
-      if (audio.trimStart > 0) args.push('-ss', audio.trimStart.toFixed(3));
-      args.push('-t', clipLen.toFixed(3));
-      if (audio.startTime > 0) args.push('-itsoffset', audio.startTime.toFixed(3));
-      args.push('-i', audioName);
-    }
+    for (const name of audioFiles) args.push('-i', name);
     if (format === 'mp4') {
       args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '20');
     } else {
       args.push('-c:v', 'libvpx-vp9', '-crf', '34', '-b:v', '0');
     }
-    args.push(
-      '-pix_fmt', 'yuv420p',
-      '-vf', 'crop=trunc(iw/2)*2:trunc(ih/2)*2', // ffmpeg needs even dimensions
-    );
-    if (audioName && audio) {
-      args.push('-map', '0:v', '-map', '1:a');
-      args.push('-c:a', format === 'mp4' ? 'aac' : 'libopus');
-      if (audio.volume !== 1) args.push('-af', `volume=${audio.volume}`);
-      args.push('-shortest');
+    args.push('-pix_fmt', 'yuv420p', '-vf', 'crop=trunc(iw/2)*2:trunc(ih/2)*2'); // even dimensions
+    if (clips.length > 0) {
+      // trim/fade/delay each clip, then mix them all
+      const parts: string[] = [];
+      const labels: string[] = [];
+      clips.forEach((c, i) => {
+        const inIdx = sourceIndex.get(c.sourceId)!;
+        const f: string[] = [
+          `atrim=start=${c.offset.toFixed(3)}:end=${(c.offset + c.duration).toFixed(3)}`,
+          'asetpts=PTS-STARTPTS',
+          'aresample=44100',
+          `volume=${c.volume.toFixed(3)}`,
+        ];
+        if (c.fadeIn > 0) f.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
+        if (c.fadeOut > 0) f.push(`afade=t=out:st=${Math.max(0, c.duration - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
+        const ms = Math.round(c.startTime * 1000);
+        f.push(`adelay=${ms}|${ms}`);
+        parts.push(`[${inIdx}:a]${f.join(',')}[a${i}]`);
+        labels.push(`[a${i}]`);
+      });
+      parts.push(`${labels.join('')}amix=inputs=${clips.length}:normalize=0:dropout_transition=0[aout]`);
+      args.push('-filter_complex', parts.join(';'), '-map', '0:v', '-map', '[aout]');
+      args.push('-c:a', format === 'mp4' ? 'aac' : 'libopus', '-b:a', '160k');
+      args.push('-t', project.duration.toFixed(3));
     }
     args.push(outName);
 
@@ -179,8 +194,8 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     for (const name of written) {
       try { await ffmpeg.deleteFile(name); } catch { /* best effort */ }
     }
-    if (audioName) {
-      try { await ffmpeg.deleteFile(audioName); } catch { /* best effort */ }
+    for (const name of audioFiles) {
+      try { await ffmpeg.deleteFile(name); } catch { /* best effort */ }
     }
   }
 }

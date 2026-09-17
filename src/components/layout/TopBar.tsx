@@ -4,6 +4,7 @@ import { redo, undo, useCanUndoRedo, useStore } from '../../store/useStore';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { ExportDialog } from '../export/ExportDialog';
+import { ProjectMenu } from './ProjectMenu';
 
 export function TopBar() {
   const name = useStore((s) => s.project.name);
@@ -35,6 +36,8 @@ export function TopBar() {
         onChange={(e) => updateProject({ name: e.target.value })}
         aria-label="Project name"
       />
+
+      <ProjectMenu />
 
       <div className="flex-1" />
 

@@ -43,7 +43,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         height,
         project: s.project,
         elements: s.elements,
-        audio: s.audio,
+        audioClips: s.audioClips,
         onPhase: (phase) => {
           setState({ step: 'working', phase });
           useStore.getState().setExportProgress(0);

@@ -13,10 +13,10 @@ export function usePlaybackClock(): void {
       stopAudio();
       return;
     }
-    const { currentTime, audio } = useStore.getState();
+    const { currentTime, audioClips } = useStore.getState();
     const clockStart = performance.now();
     const offset = currentTime;
-    startAudio(audio, offset);
+    startAudio(audioClips, offset);
 
     let raf = 0;
     const tick = (now: number) => {

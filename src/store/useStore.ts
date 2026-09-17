@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import { useStore as useZustandStore } from 'zustand';
-import type { AudioTrack, DrawElement, Project } from '../types';
+import type { AudioClip, DrawElement, Project } from '../types';
 import { clamp } from '../lib/time';
 import { END_ZOOM_SECONDS } from '../lib/camera';
 
 export interface AppState {
   project: Project;
   elements: DrawElement[];
-  audio: AudioTrack | null;
+  audioClips: AudioClip[];
 
   // playback
   currentTime: number;
@@ -49,8 +49,15 @@ export interface AppState {
   focusOn(id: string): void;
   /** start playback at an element's start time */
   playFrom(id: string): void;
-  setAudio(track: AudioTrack | null): void;
-  updateAudio(patch: Partial<AudioTrack>): void;
+  addAudioClip(clip: AudioClip): void;
+  updateAudioClip(id: string, patch: Partial<AudioClip>): void;
+  removeAudioClip(id: string): void;
+  duplicateAudioClip(id: string): void;
+  /** cut a clip in two at timeline time t (no-op if t is outside it) */
+  splitAudioClip(id: string, t: number): void;
+  /** replace the whole document (project open / restore) */
+  loadDocument(doc: { project: Project; elements: DrawElement[]; audioClips: AudioClip[] }): void;
+  newProject(): void;
   updateProject(patch: Partial<Project>): void;
   setExporting(v: boolean): void;
   setExportProgress(p: number): void;
@@ -97,13 +104,13 @@ function contentEnd(elements: DrawElement[]): number {
   return elements.reduce((m, e) => Math.max(m, e.startTime + e.drawDuration + e.pauseAfter), 0);
 }
 
-function computeDuration(elements: DrawElement[], audio: AudioTrack | null, project: Project): number {
+function computeDuration(elements: DrawElement[], clips: AudioClip[], project: Project): number {
   let end = contentEnd(elements);
   if (elements.length > 0) {
     if (project.zoomAtEnd) end += END_ZOOM_SECONDS;
     end += project.endHold;
   }
-  if (audio) end = Math.max(end, audio.startTime + Math.max(0, audio.duration - audio.trimStart - audio.trimEnd));
+  for (const c of clips) end = Math.max(end, c.startTime + c.duration);
   return Math.max(MIN_DURATION, end);
 }
 
@@ -115,12 +122,12 @@ function commit(
   extra: Partial<AppState> = {},
 ): DrawElement[] {
   const project = { ...get().project, ...(extra.project ?? {}) };
-  const audio = 'audio' in extra ? (extra.audio as AudioTrack | null) : get().audio;
+  const clips = extra.audioClips ?? get().audioClips;
   const chained = rechain(elements);
   set({
     ...extra,
     elements: chained,
-    project: { ...project, duration: computeDuration(chained, audio, project) },
+    project: { ...project, duration: computeDuration(chained, clips, project) },
   });
   return chained;
 }
@@ -130,7 +137,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       project: DEFAULT_PROJECT,
       elements: [],
-      audio: null,
+      audioClips: [],
       currentTime: 0,
       isPlaying: false,
       cameraView: false,
@@ -230,14 +237,55 @@ export const useStore = create<AppState>()(
         set({ currentTime: el.startTime, isPlaying: true, cameraView: true, selectedId: null });
       },
 
-      setAudio(track) {
-        commit(set, get, get().elements, { audio: track });
+      addAudioClip(clip) {
+        commit(set, get, get().elements, { audioClips: [...get().audioClips, clip], selectedId: `clip:${clip.id}` });
       },
 
-      updateAudio(patch) {
-        const { audio } = get();
-        if (!audio) return;
-        commit(set, get, get().elements, { audio: { ...audio, ...patch } });
+      updateAudioClip(id, patch) {
+        commit(set, get, get().elements, {
+          audioClips: get().audioClips.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        });
+      },
+
+      removeAudioClip(id) {
+        const { selectedId } = get();
+        commit(set, get, get().elements, {
+          audioClips: get().audioClips.filter((c) => c.id !== id),
+          selectedId: selectedId === `clip:${id}` ? null : selectedId,
+        });
+      },
+
+      duplicateAudioClip(id) {
+        const src = get().audioClips.find((c) => c.id === id);
+        if (!src) return;
+        const copy: AudioClip = { ...src, id: crypto.randomUUID(), startTime: src.startTime + src.duration };
+        commit(set, get, get().elements, { audioClips: [...get().audioClips, copy], selectedId: `clip:${copy.id}` });
+      },
+
+      splitAudioClip(id, t) {
+        const clips = get().audioClips;
+        const c = clips.find((x) => x.id === id);
+        if (!c) return;
+        const at = t - c.startTime;
+        if (at <= 0.05 || at >= c.duration - 0.05) return;
+        const left: AudioClip = { ...c, duration: at, fadeOut: 0 };
+        const right: AudioClip = {
+          ...c, id: crypto.randomUUID(), startTime: t, offset: c.offset + at, duration: c.duration - at, fadeIn: 0,
+        };
+        commit(set, get, get().elements, {
+          audioClips: clips.flatMap((x) => (x.id === id ? [left, right] : [x])),
+          selectedId: `clip:${right.id}`,
+        });
+      },
+
+      loadDocument(doc) {
+        set({ project: doc.project, isPlaying: false, currentTime: 0, selectedId: null, cameraView: false });
+        commit(set, get, doc.elements, { audioClips: doc.audioClips, project: doc.project });
+      },
+
+      newProject() {
+        set({ isPlaying: false, currentTime: 0, selectedId: null, cameraView: false });
+        commit(set, get, [], { audioClips: [], project: { ...DEFAULT_PROJECT } });
       },
 
       updateProject(patch) {
@@ -251,7 +299,7 @@ export const useStore = create<AppState>()(
     {
       // Only document state goes in history — never currentTime/isPlaying/
       // export fields, or every scrub becomes an undo step (spec pitfall #3).
-      partialize: (s) => ({ elements: s.elements, audio: s.audio, project: s.project }),
+      partialize: (s) => ({ elements: s.elements, audioClips: s.audioClips, project: s.project }),
       limit: 100,
       // collapse rapid-fire updates (drags, slider scrubs) into one undo step
       handleSet: (handleSet) => {
