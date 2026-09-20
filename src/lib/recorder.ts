@@ -97,7 +97,7 @@ async function finish(startedAt: number): Promise<void> {
       fadeIn: 0,
       fadeOut: 0,
       muted: false,
-    });
+    }, { overwrite: true });
   } catch {
     setState({ error: 'Could not decode the recording.' });
   }

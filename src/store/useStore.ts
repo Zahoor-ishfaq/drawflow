@@ -3,6 +3,7 @@ import { temporal } from 'zundo';
 import { useStore as useZustandStore } from 'zustand';
 import type { AudioClip, DrawElement, ImageRef, Marker, Project, Scene } from '../types';
 import { clamp } from '../lib/time';
+import { constrainClipPatch, freeStart, overwriteRange } from '../lib/laneLayout';
 import { END_ZOOM_SECONDS, cameraForElement, elementBounds, unionBounds } from '../lib/camera';
 import { elementEnd, slotEnd } from '../lib/timing';
 import { transformPath } from '../lib/svgPath';
@@ -86,7 +87,9 @@ export interface AppState {
   focusOn(id: string): void;
   /** start playback at an element's start time */
   playFrom(id: string): void;
-  addAudioClip(clip: AudioClip): void;
+  /** Adds a clip in the nearest free gap of its lane; `overwrite` instead keeps its time and cuts what is underneath (recording). */
+  addAudioClip(clip: AudioClip, opts?: { overwrite?: boolean }): void;
+  /** Start/duration changes stop at the neighbouring clips on the lane. */
   updateAudioClip(id: string, patch: Partial<AudioClip>): void;
   removeAudioClip(id: string): void;
   duplicateAudioClip(id: string): void;
@@ -599,13 +602,21 @@ export const useStore = create<AppState>()(
         set({ currentTime: el.startTime, isPlaying: true, cameraView: true, selectedId: null, selectedIds: [] });
       },
 
-      addAudioClip(clip) {
-        commit(set, get, get().elements, { audioClips: [...get().audioClips, clip], selectedId: `clip:${clip.id}`, selectedIds: [] });
+      addAudioClip(clip, opts) {
+        const clips = get().audioClips;
+        const placed = opts?.overwrite
+          ? [...overwriteRange(clips, clip.lane, clip.startTime, clip.startTime + clip.duration), clip]
+          : [...clips, { ...clip, startTime: freeStart(clips, clip.lane, clip.startTime, clip.duration) }];
+        commit(set, get, get().elements, { audioClips: placed, selectedId: `clip:${clip.id}`, selectedIds: [] });
       },
 
       updateAudioClip(id, patch) {
+        const clips = get().audioClips;
+        const cur = clips.find((c) => c.id === id);
+        if (!cur) return;
+        const safe = constrainClipPatch(clips, cur, patch);
         commit(set, get, get().elements, {
-          audioClips: get().audioClips.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+          audioClips: clips.map((c) => (c.id === id ? { ...c, ...safe } : c)),
         });
       },
 
@@ -620,7 +631,7 @@ export const useStore = create<AppState>()(
       duplicateAudioClip(id) {
         const src = get().audioClips.find((c) => c.id === id);
         if (!src) return;
-        const copy: AudioClip = { ...src, id: crypto.randomUUID(), startTime: src.startTime + src.duration };
+        const copy: AudioClip = { ...src, id: crypto.randomUUID(), startTime: freeStart(get().audioClips, src.lane, src.startTime + src.duration, src.duration) };
         commit(set, get, get().elements, { audioClips: [...get().audioClips, copy], selectedId: `clip:${copy.id}`, selectedIds: [] });
       },
 
