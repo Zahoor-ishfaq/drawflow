@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Keyboard, Monitor, Moon, Sun } from 'lucide-react';
+import { Check, ChevronDown, Keyboard, Monitor, Moon, Puzzle, Sun } from 'lucide-react';
 import { useUiStore, type Theme } from '../../store/uiStore';
 import { emitShortcut } from '../../hooks/useKeyboardShortcuts';
 
@@ -82,6 +82,14 @@ export function ViewMenu() {
           </div>
           <div className="my-1 h-px bg-line" />
           <Row label="Full-screen preview" shortcut="Shift+F" onClick={() => { setOpen(false); emitShortcut('fullscreen-preview'); }} />
+          <button
+            type="button"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[12.5px] text-t1 hover:bg-hov"
+            onClick={() => { setOpen(false); emitShortcut('open-plugins'); }}
+          >
+            <span className="flex w-4 justify-center"><Puzzle size={13} className="text-t3" /></span>
+            <span className="flex-1">Plugins…</span>
+          </button>
           <button
             type="button"
             className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[12.5px] text-t1 hover:bg-hov"

@@ -10,6 +10,9 @@ import {
   LIBRARY_CATEGORIES, loadLibraryIndex, searchLibrary, type LibraryEntry,
 } from '../../assets/illustrations';
 import { IconButton } from '../ui/IconButton';
+import { usePlugins } from '../../lib/plugins';
+import { addImportedSvg, addImageElement } from '../../lib/addElements';
+import { loadRasterImage as loadRaster } from '../../lib/images';
 
 function svgThumb(svgText: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`;
@@ -70,6 +73,42 @@ export function ImagesPanel({ onAdded }: { onAdded?: () => void }) {
 
   const [index, setIndex] = useState<LibraryEntry[] | null>(null);
   const [query, setQuery] = useState('');
+  const { assetProviders } = usePlugins();
+  type PluginHit = { providerId: string; id: string; name: string; svg?: string; imageUrl?: string; width?: number; height?: number };
+  const [pluginHits, setPluginHits] = useState<PluginHit[]>([]);
+
+  // ask plugin asset providers (debounced) whenever the search changes
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || assetProviders.length === 0) { setPluginHits([]); return; }
+    let cancelled = false;
+    const id = window.setTimeout(async () => {
+      const all: PluginHit[] = [];
+      for (const p of assetProviders) {
+        try {
+          const res = await p.search(q);
+          for (const r of res.slice(0, 24)) all.push({ providerId: p.id, ...r });
+        } catch { /* a broken provider shouldn't break search */ }
+      }
+      if (!cancelled) setPluginHits(all);
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(id); };
+  }, [query, assetProviders]);
+
+  const usePluginHit = async (h: PluginHit) => {
+    setError(null);
+    try {
+      if (h.svg) addImportedSvg(h.svg, h.name);
+      else if (h.imageUrl) {
+        const blob = await (await fetch(h.imageUrl)).blob();
+        const img = await loadRaster(blob, blob.type || 'image/png');
+        addImageElement(img, h.name);
+      }
+      onAdded?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add this picture.');
+    }
+  };
   const [category, setCategory] = useState<string>('Sketch people');
 
   useEffect(() => {
@@ -316,6 +355,24 @@ export function ImagesPanel({ onAdded }: { onAdded?: () => void }) {
             </div>
           ))}
         </div>
+      )}
+      {pluginHits.length > 0 && (
+        <>
+          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-t2">From plugins</div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {pluginHits.map((h) => (
+              <button
+                key={`${h.providerId}:${h.id}`}
+                type="button"
+                title={h.name}
+                className="df-ui-anim flex h-14 items-center justify-center overflow-hidden rounded-xl border border-line bg-panel2 transition-colors hover:border-accent"
+                onClick={() => void usePluginHit(h)}
+              >
+                <img src={h.svg ? svgThumb(h.svg) : h.imageUrl} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />
+              </button>
+            ))}
+          </div>
+        </>
       )}
       {index && results.length === 0 && (
         <div className="pt-2 text-center text-[12px] text-t3">

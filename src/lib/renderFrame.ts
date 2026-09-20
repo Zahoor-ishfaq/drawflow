@@ -11,6 +11,7 @@ import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
 import { paperDef } from '../assets/paper';
 import { scribblePath, scribbleStrokeWidth } from './scribble';
 import { drawEnd, emphasisWindow, exitWindow, slotEnd } from './timing';
+import { pluginEffect } from './plugins';
 
 export const FILL_FADE_SECONDS = 0.2;
 const HAND_IN_SECONDS = 0.45;
@@ -174,6 +175,9 @@ function entranceFrame(el: DrawElement, t: number, view: { width: number; height
   const m = el.kind === 'image' ? null : measurePaths(el.paths);
   const b = localBounds(el);
 
+  const custom = pluginEffect('entrance', el.style);
+  if (custom) return { ...FULL_FRAME, ...custom.frame({ el, p, t, base: FULL_FRAME, view: { x: 0, y: 0, ...view }, bounds: b }) };
+
   switch (el.style) {
     case 'appear':
       return FULL_FRAME;
@@ -223,6 +227,8 @@ function applyEmphasis(el: DrawElement, t: number, frame: ElementFrame): Element
   const per = Math.max(0.05, e.duration);
   const u = ((t - w.start) % per) / per; // 0..1 within the current repeat
   const b = localBounds(el);
+  const custom = pluginEffect('emphasis', e.kind);
+  if (custom) return { ...frame, ...custom.frame({ el, p: u, t, base: frame, view: { x: 0, y: 0, width: 0, height: 0 }, bounds: b }) };
   switch (e.kind) {
     case 'pulse':
       return { ...frame, scale: frame.scale * (1 + 0.1 * Math.sin(Math.PI * u)) };
@@ -253,6 +259,8 @@ function applyExit(el: DrawElement, t: number, frame: ElementFrame, view: { widt
   if (t >= w.end) return null;
   const p = Math.min(1, (t - w.start) / (w.end - w.start));
   const b = localBounds(el);
+  const custom = pluginEffect('exit', x.kind);
+  if (custom) return { ...frame, ...custom.frame({ el, p, t, base: frame, view: { x: 0, y: 0, ...view }, bounds: b }) };
   switch (x.kind) {
     case 'fade':
       return { ...frame, groupOpacity: frame.groupOpacity * (1 - easeInCubic(p)) };

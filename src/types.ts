@@ -3,7 +3,8 @@
  * 'typewriter' shows text glyph by glyph.
  */
 export type DrawStyle =
-  | 'draw' | 'appear' | 'fade' | 'slide' | 'wipe' | 'scale' | 'pop' | 'bounce' | 'typewriter';
+  | 'draw' | 'appear' | 'fade' | 'slide' | 'wipe' | 'scale' | 'pop' | 'bounce' | 'typewriter'
+  | `plugin:${string}`;
 export type Direction = 'left' | 'right' | 'top' | 'bottom';
 /** @deprecated use Direction */
 export type SlideFrom = Direction;
@@ -18,7 +19,7 @@ export type StrokeOrder =
   | 'file' | 'reverse' | 'leftToRight' | 'rightToLeft' | 'topToBottom' | 'bottomToTop' | 'centerOut';
 export type MotionEasing = 'easeOut' | 'easeIn' | 'easeInOut' | 'linear';
 
-export type EmphasisKind = 'pulse' | 'shake' | 'bounce' | 'spin' | 'grow' | 'highlight';
+export type EmphasisKind = 'pulse' | 'shake' | 'bounce' | 'spin' | 'grow' | 'highlight' | `plugin:${string}`;
 export interface Emphasis {
   kind: EmphasisKind;
   duration: number;   // seconds per repeat
@@ -26,7 +27,7 @@ export interface Emphasis {
   repeat: number;     // 1..n
 }
 
-export type ExitKind = 'fade' | 'slide' | 'wipe' | 'erase' | 'reverseDraw' | 'shrink';
+export type ExitKind = 'fade' | 'slide' | 'wipe' | 'erase' | 'reverseDraw' | 'shrink' | `plugin:${string}`;
 export interface Exit {
   kind: ExitKind;
   duration: number;

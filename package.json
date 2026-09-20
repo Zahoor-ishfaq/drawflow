@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "desktop:dev": "electron . --dev",
     "desktop:start": "npm run build && electron .",
-    "desktop:pack": "npm run build && electron-builder --win"
+    "desktop:pack": "npm run build && electron-builder --win",
+    "cli": "node cli/drawflow.mjs",
+    "render": "node cli/drawflow.mjs render",
+    "bench": "node cli/drawflow.mjs bench",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "0.12.10",
@@ -20,6 +25,7 @@
     "mp4-muxer": "^5.2.2",
     "opentype.js": "^1.3.4",
     "pdfjs-dist": "^4.10.38",
+    "playwright-core": "^1.63.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "webm-muxer": "^5.1.4",
@@ -27,6 +33,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.1.0",
     "@types/opentype.js": "^1.3.8",
     "@types/react": "^18.3.5",
@@ -60,5 +67,15 @@
     }
   },
   "description": "Whiteboard animation studio",
-  "author": "Zahoor Ishfaq"
+  "author": "Zahoor Ishfaq",
+  "bin": {
+    "drawflow": "./cli/drawflow.mjs"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "cli/**/*",
+    "package.json",
+    "!node_modules/**/*"
+  ]
 }

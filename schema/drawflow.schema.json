@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://drawflow.dev/schema/drawflow.schema.json",
+  "title": "DrawFlow project file (.drawflow.json)",
+  "description": "A whiteboard-animation project: settings, elements in play order, audio clips and the audio bytes they reference. Everything is embedded, so the file is portable.",
+  "type": "object",
+  "required": ["app", "format", "project", "elements"],
+  "properties": {
+    "app": { "const": "drawflow" },
+    "format": { "type": "integer", "minimum": 1, "description": "File format version (currently 2)" },
+    "savedAt": { "type": "integer", "description": "Unix ms" },
+    "project": { "$ref": "#/definitions/Project" },
+    "elements": { "type": "array", "items": { "$ref": "#/definitions/DrawElement" } },
+    "audioClips": { "type": "array", "items": { "$ref": "#/definitions/AudioClip" } },
+    "sources": {
+      "type": "array",
+      "description": "Audio files referenced by clips, embedded as data: URLs",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "type", "data"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "description": "MIME type" },
+          "data": { "type": "string", "pattern": "^data:" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Direction": { "enum": ["left", "right", "top", "bottom"] },
+    "PaperStyle": { "enum": ["plain", "grid", "dots", "lined", "cream", "chalkboard", "kraft"] },
+    "CameraView": {
+      "type": "object",
+      "required": ["cx", "cy", "zoom"],
+      "properties": { "cx": { "type": "number" }, "cy": { "type": "number" }, "zoom": { "type": "number", "exclusiveMinimum": 0 } }
+    },
+    "Scene": {
+      "type": "object",
+      "required": ["id", "name", "transition", "transitionDuration"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "transition": { "enum": ["cut", "fade", "wipe"] },
+        "transitionDuration": { "type": "number", "minimum": 0 },
+        "background": { "type": "string" },
+        "paper": { "$ref": "#/definitions/PaperStyle" },
+        "clearBefore": { "type": "boolean" }
+      }
+    },
+    "Marker": {
+      "type": "object",
+      "required": ["id", "time", "name", "color"],
+      "properties": { "id": { "type": "string" }, "time": { "type": "number", "minimum": 0 }, "name": { "type": "string" }, "color": { "type": "string" } }
+    },
+    "CustomHand": {
+      "type": "object",
+      "required": ["id", "name", "src", "width", "height", "tipX", "tipY"],
+      "properties": {
+        "id": { "type": "string" }, "name": { "type": "string" }, "src": { "type": "string", "pattern": "^data:image/" },
+        "width": { "type": "number" }, "height": { "type": "number" }, "tipX": { "type": "number" }, "tipY": { "type": "number" },
+        "frameFraction": { "type": "number" }
+      }
+    },
+    "CustomFont": {
+      "type": "object",
+      "required": ["id", "name", "data"],
+      "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "data": { "type": "string", "pattern": "^data:" } }
+    },
+    "Project": {
+      "type": "object",
+      "required": ["name", "width", "height", "fps", "background", "paper", "duration", "hand", "cameraEasing", "cameraFill", "zoomAtEnd", "endHold"],
+      "properties": {
+        "name": { "type": "string" },
+        "width": { "type": "integer", "minimum": 64 },
+        "height": { "type": "integer", "minimum": 64 },
+        "fps": { "enum": [24, 25, 30, 50, 60] },
+        "background": { "type": "string", "description": "Paper colour (CSS)" },
+        "paper": { "$ref": "#/definitions/PaperStyle" },
+        "duration": { "type": "number", "minimum": 0, "description": "Derived from the elements and clips; recomputed on load" },
+        "hand": { "type": "string", "description": "marker | pen | chalk | pencil | brush | eraser | none | custom:<id>" },
+        "cameraEasing": { "enum": ["easeOut", "linear", "cut"] },
+        "cameraFill": { "type": "number", "minimum": 0.1, "maximum": 1 },
+        "zoomAtEnd": { "type": "boolean" },
+        "endHold": { "type": "number", "minimum": 0 },
+        "scenes": { "type": "array", "items": { "$ref": "#/definitions/Scene" } },
+        "markers": { "type": "array", "items": { "$ref": "#/definitions/Marker" } },
+        "handOffset": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
+        "handSmoothing": { "type": "number", "minimum": 0, "maximum": 1 },
+        "customHands": { "type": "array", "items": { "$ref": "#/definitions/CustomHand" } },
+        "fonts": { "type": "array", "items": { "$ref": "#/definitions/CustomFont" } }
+      }
+    },
+    "Emphasis": {
+      "type": "object",
+      "required": ["kind", "duration", "delay", "repeat"],
+      "properties": {
+        "kind": { "type": "string", "description": "pulse | shake | bounce | spin | grow | highlight | plugin:<id>" },
+        "duration": { "type": "number", "minimum": 0 }, "delay": { "type": "number", "minimum": 0 }, "repeat": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Exit": {
+      "type": "object",
+      "required": ["kind", "duration", "delay", "direction"],
+      "properties": {
+        "kind": { "type": "string", "description": "fade | slide | wipe | erase | reverseDraw | shrink | plugin:<id>" },
+        "duration": { "type": "number", "minimum": 0 }, "delay": { "type": "number", "minimum": 0 }, "direction": { "$ref": "#/definitions/Direction" }
+      }
+    },
+    "DrawElement": {
+      "type": "object",
+      "required": ["id", "kind", "label", "paths", "fillColor", "strokeColor", "strokeWidth", "fillAfterDraw", "x", "y", "scale", "rotation", "startTime", "drawDuration", "pauseAfter", "transitionIn", "style", "slideFrom", "zIndex", "camera", "cameraZoom"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["text", "shape", "svg", "image"] },
+        "label": { "type": "string" },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "SVG path data in local units; for images, the scribble-reveal path" },
+        "pathFills": { "type": "array", "items": { "type": ["string", "null"] } },
+        "pathStrokes": { "type": "array", "items": { "type": ["string", "null"] } },
+        "fillRule": { "enum": ["nonzero", "evenodd"] },
+        "fillColor": { "type": "string" },
+        "strokeColor": { "type": "string" },
+        "strokeWidth": { "type": "number", "minimum": 0 },
+        "fillAfterDraw": { "type": "boolean" },
+        "x": { "type": "number" }, "y": { "type": "number" },
+        "scale": { "type": "number", "exclusiveMinimum": 0 },
+        "rotation": { "type": "number" },
+        "flipX": { "type": "boolean" }, "flipY": { "type": "boolean" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "crop": { "type": "object", "properties": { "left": { "type": "number" }, "top": { "type": "number" }, "right": { "type": "number" }, "bottom": { "type": "number" } } },
+        "locked": { "type": "boolean" }, "hidden": { "type": "boolean" },
+        "layer": { "type": "integer" },
+        "groupChildren": { "type": "array", "items": { "$ref": "#/definitions/DrawElement" } },
+        "sceneId": { "type": "string" },
+        "startTime": { "type": "number", "minimum": 0, "description": "Derived from play order; recomputed on load" },
+        "drawDuration": { "type": "number", "exclusiveMinimum": 0 },
+        "pauseAfter": { "type": "number", "minimum": 0 },
+        "transitionIn": { "type": "number", "minimum": 0 },
+        "withPrevious": { "type": "boolean" },
+        "style": { "type": "string", "description": "draw | appear | fade | slide | wipe | scale | pop | bounce | typewriter | plugin:<id>" },
+        "slideFrom": { "$ref": "#/definitions/Direction" },
+        "easing": { "enum": ["easeOut", "easeIn", "easeInOut", "linear"] },
+        "strokeOrder": { "enum": ["file", "reverse", "leftToRight", "rightToLeft", "topToBottom", "bottomToTop", "centerOut"] },
+        "revealMode": { "enum": ["scribble", "wipe", "radial", "center"] },
+        "emphasis": { "oneOf": [{ "$ref": "#/definitions/Emphasis" }, { "type": "null" }] },
+        "exit": { "oneOf": [{ "$ref": "#/definitions/Exit" }, { "type": "null" }] },
+        "zIndex": { "type": "number", "description": "Play order" },
+        "image": { "type": "object", "required": ["src", "width", "height"], "properties": { "src": { "type": "string", "pattern": "^data:image/" }, "width": { "type": "number" }, "height": { "type": "number" } } },
+        "camera": { "enum": ["auto", "whole", "previous", "custom", "scene"] },
+        "cameraZoom": { "type": "number", "minimum": 0.25, "maximum": 3 },
+        "customCamera": { "$ref": "#/definitions/CameraView" },
+        "hand": { "type": "string" },
+        "text": { "type": "string" }, "fontSize": { "type": "number" }, "fontFamily": { "type": "string" },
+        "fontWeight": { "enum": ["normal", "bold"] }, "italic": { "type": "boolean" },
+        "align": { "enum": ["left", "center", "right"] }, "lineHeight": { "type": "number" }, "letterSpacing": { "type": "number" }, "rtl": { "type": "boolean" }
+      }
+    },
+    "AudioClip": {
+      "type": "object",
+      "required": ["id", "name", "lane", "sourceId", "startTime", "offset", "duration", "volume", "fadeIn", "fadeOut", "muted"],
+      "properties": {
+        "id": { "type": "string" }, "name": { "type": "string" },
+        "lane": { "enum": ["music", "voice", "sfx"] },
+        "sourceId": { "type": "string", "description": "id of an entry in sources" },
+        "startTime": { "type": "number", "minimum": 0 }, "offset": { "type": "number", "minimum": 0 },
+        "duration": { "type": "number", "exclusiveMinimum": 0 },
+        "volume": { "type": "number", "minimum": 0, "maximum": 1.5 },
+        "fadeIn": { "type": "number", "minimum": 0 }, "fadeOut": { "type": "number", "minimum": 0 },
+        "muted": { "type": "boolean" }, "solo": { "type": "boolean" },
+        "sceneId": { "type": "string" }
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ import { ExportDialog } from '../export/ExportDialog';
 import { ProjectMenu } from './ProjectMenu';
 import { ViewMenu } from './ViewMenu';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { PluginsDialog } from './PluginsDialog';
 import { onShortcut } from '../../hooks/useKeyboardShortcuts';
 
 export function TopBar() {
@@ -17,9 +18,11 @@ export function TopBar() {
   const { canUndo, canRedo } = useCanUndoRedo();
   const [showExport, setShowExport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
   useEffect(() => onShortcut((n) => {
     if (n === 'shortcuts-help') setShowShortcuts((v) => !v);
     if (n === 'open-export') setShowExport(true);
+    if (n === 'open-plugins') setShowPlugins(true);
   }), []);
 
   const preview = () => {
@@ -70,6 +73,7 @@ export function TopBar() {
 
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
       {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+      {showPlugins && <PluginsDialog onClose={() => setShowPlugins(false)} />}
     </header>
   );
 }

@@ -9,9 +9,11 @@ import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
 import { AiPanel } from '../library/AiPanel';
 import { LayersPanel } from '../library/LayersPanel';
+import { usePlugins } from '../../lib/plugins';
+import { useEffect, useRef as useRef2 } from 'react';
 import { IconButton } from '../ui/IconButton';
 
-type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'layers' | 'hand' | 'paper';
+type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'images', label: 'Images', Icon: Image },
@@ -27,7 +29,20 @@ const SETUP_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'paper', label: 'Paper', Icon: StickyNote },
 ];
 
-const PANEL_TITLES: Record<Tool, string> = {
+/** Host for a plugin-provided panel: the plugin renders into a plain element. */
+function PluginPanelHost({ id }: { id: string }) {
+  const { panels } = usePlugins();
+  const panel = panels.find((p) => p.id === id);
+  const host = useRef2<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!panel || !host.current) return;
+    const cleanup = panel.mount(host.current);
+    return () => { cleanup?.(); };
+  }, [panel]);
+  return <div ref={host} className="p-4 text-[12.5px]" />;
+}
+
+const PANEL_TITLES: Record<string, string> = {
   images: 'Images',
   text: 'Add text',
   shapes: 'Shapes & icons',
@@ -61,6 +76,7 @@ function RailButton({
 
 export function IconRail() {
   const [open, setOpen] = useState<Tool | null>(null);
+  const { panels } = usePlugins();
   const width = useUiStore((s) => s.libraryWidth);
   const setUi = useUiStore((s) => s.set);
   const resize = useRef<{ x: number; w: number } | null>(null);
@@ -77,6 +93,10 @@ export function IconRail() {
         {SETUP_TOOLS.map((t) => (
           <RailButton key={t.id} tool={t} open={open === t.id} onClick={() => toggle(t.id)} />
         ))}
+        {panels.length > 0 && <div className="my-1.5 h-px w-8 bg-line" />}
+        {panels.map((p) => (
+          <RailButton key={p.id} tool={{ id: `plugin:${p.id}`, label: p.label.slice(0, 8), Icon: Sparkles }} open={open === `plugin:${p.id}`} onClick={() => toggle(`plugin:${p.id}`)} />
+        ))}
       </div>
 
       {open && (
@@ -90,7 +110,7 @@ export function IconRail() {
             onPointerCancel={() => { resize.current = null; }}
           />
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-line pr-2 pl-4">
-            <span className="text-[14px] font-semibold">{PANEL_TITLES[open]}</span>
+            <span className="text-[14px] font-semibold">{PANEL_TITLES[open] ?? panels.find((p) => `plugin:${p.id}` === open)?.label ?? 'Plugin'}</span>
             <IconButton label="Close panel" onClick={close}>
               <X size={15} />
             </IconButton>
@@ -102,6 +122,7 @@ export function IconRail() {
             {open === 'music' && <AudioPanel onAdded={close} />}
             {open === 'ai' && <AiPanel />}
             {open === 'layers' && <LayersPanel />}
+            {open.startsWith('plugin:') && <PluginPanelHost id={open.slice(7)} />}
             {open === 'hand' && <HandPanel />}
             {open === 'paper' && <PaperPanel />}
           </div>

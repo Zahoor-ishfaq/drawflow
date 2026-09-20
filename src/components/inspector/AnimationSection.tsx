@@ -10,6 +10,7 @@ import { Field, SectionHeader } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
 import { Slider } from '../ui/Slider';
 import { HandPicker } from '../library/HandPanel';
+import { usePlugins, PLUGIN_EFFECT_PREFIX } from '../../lib/plugins';
 
 const DIRECTIONS: { value: Direction; label: string }[] = [
   { value: 'left', label: 'Left' },
@@ -82,6 +83,9 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
   const isImage = el.kind === 'image';
   const isText = el.kind === 'text';
   const hasScenes = (project.scenes?.length ?? 0) > 0;
+  const { effects: pluginEffects } = usePlugins();
+  const pluginOpts = (kind: 'entrance' | 'emphasis' | 'exit') =>
+    pluginEffects.filter((e) => e.kind === kind).map((e) => ({ value: `${PLUGIN_EFFECT_PREFIX}${e.id}` as never, label: `${e.label} (plugin)` }));
 
   const entranceOptions: { value: DrawStyle; label: string }[] = [
     { value: 'draw', label: isImage ? 'Hand reveals it' : 'Hand draws it' },
@@ -93,6 +97,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
     { value: 'bounce', label: 'Bounce in' },
     ...(isText ? [{ value: 'typewriter' as DrawStyle, label: 'Typewriter' }] : []),
     { value: 'appear', label: 'Appear' },
+    ...(pluginOpts('entrance') as { value: DrawStyle; label: string }[]),
   ];
 
   const exitW = exitWindow(el);
@@ -171,7 +176,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
       <Field label="After it is drawn">
         <Select<EmphasisKind | 'none'>
           value={el.emphasis?.kind ?? 'none'}
-          options={EMPHASIS}
+          options={[...EMPHASIS, ...(pluginOpts('emphasis') as { value: EmphasisKind; label: string }[])]}
           onChange={(v) => patch({
             emphasis: v === 'none' ? null : { kind: v, duration: el.emphasis?.duration ?? 0.8, delay: el.emphasis?.delay ?? 0.2, repeat: el.emphasis?.repeat ?? 2 },
           })}
@@ -198,7 +203,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
       <Field label="Leaves the board">
         <Select<ExitKind | 'none'>
           value={el.exit?.kind ?? 'none'}
-          options={EXITS}
+          options={[...EXITS, ...(pluginOpts('exit') as { value: ExitKind; label: string }[])]}
           onChange={(v) => patch({
             exit: v === 'none' ? null : { kind: v, duration: el.exit?.duration ?? 0.8, delay: el.exit?.delay ?? 0, direction: el.exit?.direction ?? 'right' },
           })}

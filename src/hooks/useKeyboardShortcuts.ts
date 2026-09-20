@@ -17,7 +17,7 @@ function inTextField(e: KeyboardEvent): boolean {
 export type ShortcutEvent =
   | 'zoom-in' | 'zoom-out' | 'zoom-fit' | 'zoom-100' | 'zoom-selection'
   | 'command-palette' | 'fullscreen-preview' | 'shortcuts-help'
-  | 'open-projects' | 'open-templates' | 'open-versions' | 'open-export';
+  | 'open-projects' | 'open-templates' | 'open-versions' | 'open-export' | 'open-plugins';
 
 export function emitShortcut(name: ShortcutEvent): void {
   window.dispatchEvent(new CustomEvent('drawflow:shortcut', { detail: name }));

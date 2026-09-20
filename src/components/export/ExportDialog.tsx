@@ -12,6 +12,7 @@ import { Segmented } from '../ui/Segmented';
 import { NumberInput } from '../ui/NumberInput';
 import { sequenceOrder } from '../../store/useStore';
 import { slotEnd } from '../../lib/timing';
+import { usePlugins } from '../../lib/plugins';
 
 type DialogState =
   | { step: 'options' }
@@ -53,6 +54,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   }).filter((x): x is { id: string; name: string; start: number; end: number } => !!x);
   const range = scenes.find((sc) => sc.id === rangeId);
   const abortRef = useRef<AbortController | null>(null);
+  const { exporters } = usePlugins();
 
   const native = hasNativeEncoder();
   const fallbackBlocked = !native && !isCrossOriginIsolated();
@@ -222,6 +224,14 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 <Download size={15} />
                 Download {state.result.filename}
               </a>
+              {exporters.map((x) => (
+                <Button key={x.id} variant="secondary" className="justify-center" onClick={() => {
+                  const r = state.result;
+                  void fetch(r.url).then((res) => res.blob()).then((blob) => x.run(r, blob));
+                }}>
+                  {x.label}
+                </Button>
+              ))}
               <Button className="justify-center" onClick={() => setState({ step: 'options' })}>
                 Export another
               </Button>

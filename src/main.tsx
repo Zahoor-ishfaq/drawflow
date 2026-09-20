@@ -2,9 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
-import { useStore } from './store/useStore';
 import { useUiStore, applyTheme } from './store/uiStore';
-import { exportBench } from './lib/exportBench';
+import { installApi, type DrawFlowApi } from './lib/api';
 
 // eslint-disable-next-line no-console
 console.info('[DrawFlow] crossOriginIsolated =', self.crossOriginIsolated);
@@ -13,11 +12,11 @@ console.info('[DrawFlow] crossOriginIsolated =', self.crossOriginIsolated);
 applyTheme(useUiStore.getState().theme);
 useUiStore.subscribe((s, prev) => { if (s.theme !== prev.theme) applyTheme(s.theme); });
 
-// a small scripting surface for automation, tests and plugins
+// scripting surface for the CLI, tests, benchmarks and plugins
 declare global {
-  interface Window { DrawFlow: { store: typeof useStore; ui: typeof useUiStore; bench: typeof exportBench } }
+  interface Window { DrawFlow: DrawFlowApi }
 }
-window.DrawFlow = { store: useStore, ui: useUiStore, bench: exportBench };
+installApi();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
