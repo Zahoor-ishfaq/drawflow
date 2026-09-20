@@ -55,7 +55,7 @@ export function AudioSection({ clip }: { clip: AudioClip }) {
         <Button variant="secondary" className="justify-center" disabled={!canSplit}
           title="Cut this clip in two at the playhead (S)"
           onClick={() => splitAudioClip(clip.id, currentTime)}>
-          <Scissors size={13} /> Split at playhead
+          <Scissors size={13} /> Split
         </Button>
         <Button variant="secondary" className="justify-center" onClick={() => patch({ muted: !clip.muted })}>
           {clip.muted ? <VolumeX size={13} /> : <Volume2 size={13} />} {clip.muted ? 'Unmute' : 'Mute'}

@@ -18,7 +18,7 @@ export function Segmented<T extends string>({ value, options, onChange, classNam
           role="tab"
           aria-selected={opt.value === value}
           className={
-            `df-ui-anim h-6.5 flex-1 rounded-full px-2 text-[12px] font-medium transition-all ` +
+            `df-ui-anim h-6.5 min-w-0 flex-1 truncate whitespace-nowrap rounded-full px-2 text-[12px] font-medium transition-all ` +
             (opt.value === value
               ? 'bg-panel text-t1 shadow-[0_1px_4px_rgba(20,30,50,0.15)]'
               : 'text-t2 hover:text-t1')

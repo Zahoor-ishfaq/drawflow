@@ -16,7 +16,7 @@ export function Button({ variant = 'ghost', className = '', children, ...rest }:
     <button
       type="button"
       className={
-        `df-ui-anim inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium ` +
+        `df-ui-anim inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium ` +
         `transition-all disabled:pointer-events-none disabled:opacity-40 ` +
         `${styles[variant]} ${className}`
       }

@@ -416,7 +416,7 @@ export function AiPanel({ onAdded }: { onAdded?: () => void }) {
           className="flex-1"
           value={tab}
           onChange={setTab}
-          options={[{ value: 'create', label: 'Create' }, { value: 'script', label: 'Script → scribe' }, { value: 'photo', label: 'From a photo' }]}
+          options={[{ value: 'create', label: 'Create' }, { value: 'script', label: 'Script' }, { value: 'photo', label: 'Photo' }]}
         />
         <IconButton label="AI settings (API keys, models)" onClick={() => setShowSettings(true)}>
           <Settings size={15} />
