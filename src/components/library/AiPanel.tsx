@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, Loader2, Settings, Sparkles, Upload, Wand2 } from 'lucide-react';
+import { AlertTriangle, Check, Circle, Image as ImageIcon, Loader2, Play, RotateCcw, Settings, Sparkles, Square, Upload, Wand2 } from 'lucide-react';
 import { useAiSettings, imageReady, textReady, PROVIDER_LABELS, type ImageProvider } from '../../lib/ai/settings';
 import { plan, type Proposal } from '../../lib/ai/planner';
-import { planScript, buildScript, type ScriptPlan } from '../../lib/ai/script';
+import { planScript, buildScript, narratePlan, releaseTakes, type NarrationTake, type ScriptPlan } from '../../lib/ai/script';
 import { TTS_MODELS, type SpeechProvider } from '../../lib/ai/speech';
 import { generateImage } from '../../lib/ai/providers';
 import { sketchFromImage, type SketchResult } from '../../lib/sketch';
@@ -306,6 +306,68 @@ function PhotoTab({ onAdded }: { onAdded?: () => void }) {
 // ---------------------------------------------------------------------------
 
 /** Script → scribe: scenes, pictures, text, narration and timing from a script or topic. */
+type ScriptStage = 'idle' | 'planning' | 'narrating' | 'ready' | 'adding';
+
+/** Step list with a progress bar — what is happening right now. */
+function Progress({ steps, active, detail, fraction }: { steps: string[]; active: number; detail?: string; fraction?: number }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel2 p-3">
+      <ol className="flex flex-col gap-1.5">
+        {steps.map((label, i) => {
+          const state = i < active ? 'done' : i === active ? 'active' : 'todo';
+          return (
+            <li key={label} className={'flex items-start gap-2 text-[12.5px] ' + (state === 'todo' ? 'text-t3' : state === 'done' ? 'text-t2' : 'font-medium text-t1')}>
+              <span className="mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                {state === 'done' ? <Check size={13} className="text-accent" /> : state === 'active' ? <Loader2 size={13} className="animate-spin text-accent" /> : <Circle size={9} className="text-t3" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                {label}
+                {state === 'active' && detail && <span className="mt-0.5 block truncate text-[11px] font-normal text-t2">{detail}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-line">
+        {fraction === undefined
+          ? <div className="df-indeterminate absolute inset-y-0 w-1/3 rounded-full bg-accent" />
+          : <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${Math.round(fraction * 100)}%` }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Play/stop one spoken take. */
+function TakePlayer({ take }: { take: NarrationTake }) {
+  const [playing, setPlaying] = useState(false);
+  const ref = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => { ref.current?.pause(); }, []);
+  const toggle = () => {
+    if (!ref.current) {
+      ref.current = new Audio(take.url);
+      ref.current.onended = () => setPlaying(false);
+    }
+    if (playing) {
+      ref.current.pause();
+      ref.current.currentTime = 0;
+      setPlaying(false);
+    } else {
+      void ref.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    }
+  };
+  return (
+    <button
+      type="button"
+      className={'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10.5px] tabular ' + (playing ? 'border-accent bg-accent-weak text-accent' : 'border-line bg-panel text-t2 hover:text-t1')}
+      onClick={toggle}
+      title={playing ? 'Stop' : 'Listen to this scene\'s narration'}
+    >
+      {playing ? <Square size={10} /> : <Play size={10} />}
+      {take.duration.toFixed(1)} s
+    </button>
+  );
+}
+
 function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const s = useAiSettings();
   const ready = textReady(s);
@@ -314,95 +376,177 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const [narrate, setNarrate] = useState(speech.length > 0);
   const [provider, setProvider] = useState<SpeechProvider>(speech[0] ?? 'openai');
   const [voice, setVoice] = useState(TTS_MODELS[speech[0] ?? 'openai'].voices[0].id);
-  const [planned, setPlanned] = useState<ScriptPlan | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<ScriptStage>('idle');
+  const [detail, setDetail] = useState<string | undefined>();
+  const [fraction, setFraction] = useState<number | undefined>();
+  const [plan, setPlan] = useState<ScriptPlan | null>(null);
+  const [takes, setTakes] = useState<NarrationTake[]>([]);
+  const [warning, setWarning] = useState<string | null>(null);
+  const willNarrate = narrate && speech.length > 0;
+  const busy = stage === 'planning' || stage === 'narrating' || stage === 'adding';
 
-  const makePlan = async () => {
-    if (!prompt.trim() || busy) return;
-    setBusy('Planning scenes…');
-    setError(null);
-    setPlanned(null);
-    try {
-      setPlanned(await planScript(prompt.trim()));
-    } catch (e) {
-      setError(reportAiError(e, s.textProvider, 'text').title);
-    } finally {
-      setBusy(null);
-    }
+  // object URLs die with the component
+  useEffect(() => () => releaseTakes(takes), [takes]);
+
+  const reset = () => {
+    releaseTakes(takes);
+    setTakes([]);
+    setPlan(null);
+    setWarning(null);
+    setDetail(undefined);
+    setFraction(undefined);
+    setStage('idle');
   };
 
-  const build = async () => {
-    if (!planned || busy) return;
-    setBusy('Building…');
-    setError(null);
+  const generate = async () => {
+    if (!prompt.trim() || busy) return;
+    reset();
+    setStage('planning');
+    let planned: ScriptPlan;
     try {
-      await buildScript(planned, { narrate: narrate && speech.length ? { provider, voice } : undefined, onProgress: setBusy });
-      setPlanned(null);
+      planned = await planScript(prompt.trim());
+      setPlan(planned);
+    } catch (e) {
+      reportAiError(e, s.textProvider, 'text');
+      setStage('idle');
+      return;
+    }
+    if (willNarrate) {
+      setStage('narrating');
+      setFraction(0);
+      try {
+        const { takes: spoken, failed } = await narratePlan(planned, {
+          provider, voice,
+          onProgress: (msg, i, n) => { setDetail(msg); setFraction(n ? i / n : undefined); },
+        });
+        setTakes(spoken);
+        if (failed.length) setWarning(`Narration could not be made for scene${failed.length > 1 ? 's' : ''} ${failed.map((f) => f.scene + 1).join(', ')} — those scenes will be timed without a voice.`);
+      } catch (e) {
+        reportAiError(e, provider, 'voice');
+        setWarning('The narration could not be generated — you can still add the scenes without a voice, or try again.');
+      }
+    }
+    setDetail(undefined);
+    setFraction(undefined);
+    setStage('ready');
+  };
+
+  const add = async () => {
+    if (!plan || busy) return;
+    setStage('adding');
+    setDetail(undefined);
+    try {
+      await buildScript(plan, { narration: takes, onProgress: setDetail });
+      reset();
       onAdded?.();
     } catch (e) {
-      setError(reportAiError(e, s.textProvider, 'text').title);
-    } finally {
-      setBusy(null);
+      reportAiError(e, s.textProvider, 'text');
+      setStage('ready');
     }
   };
+
+  const steps = willNarrate ? ['Planning the scenes', 'Generating the narration audio', 'Ready to add'] : ['Planning the scenes', 'Ready to add'];
+  const activeStep = stage === 'planning' ? 0 : stage === 'narrating' ? 1 : steps.length - 1;
+  const totalSpoken = takes.reduce((sum, t) => sum + t.duration, 0);
 
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Your script, or just a topic">
-        <textarea
-          className="df-input min-h-[110px] resize-y"
-          placeholder={'e.g. "Explain how a bill becomes law in 4 scenes" — or paste the narration you already wrote.'}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-        />
-      </Field>
-      {speech.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel2 p-2.5">
-          <label className="flex items-center gap-2 text-[12px] text-t1">
-            <input type="checkbox" checked={narrate} onChange={(e) => setNarrate(e.target.checked)} />
-            Narrate each scene with an AI voice and time the drawing to it
-          </label>
-          {narrate && (
-            <div className="grid grid-cols-2 gap-2">
-              <select className="df-input !h-7 text-[12px]" value={provider} onChange={(e) => { const p = e.target.value as SpeechProvider; setProvider(p); setVoice(TTS_MODELS[p].voices[0].id); }}>
-                {speech.map((p) => <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'groq' ? 'Groq (PlayAI)' : 'Gemini'}</option>)}
-              </select>
-              <select className="df-input !h-7 text-[12px]" value={voice} onChange={(e) => setVoice(e.target.value)}>
-                {TTS_MODELS[provider].voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-              </select>
+      {stage === 'idle' ? (
+        <>
+          <Field label="Your script, or just a topic">
+            <textarea
+              className="df-input min-h-[110px] resize-y"
+              placeholder={'e.g. "Explain how a bill becomes law in 4 scenes" — or paste the narration you already wrote.'}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </Field>
+          {speech.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel2 p-2.5">
+              <label className="flex items-center gap-2 text-[12px] text-t1">
+                <input type="checkbox" checked={narrate} onChange={(e) => setNarrate(e.target.checked)} />
+                Add narration — an AI voice speaks each scene and the drawing is timed to it
+              </label>
+              {narrate && (
+                <div className="grid grid-cols-2 gap-2">
+                  <select className="df-input !h-7 text-[12px]" value={provider} onChange={(e) => { const p = e.target.value as SpeechProvider; setProvider(p); setVoice(TTS_MODELS[p].voices[0].id); }}>
+                    {speech.map((p) => <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'groq' ? 'Groq (PlayAI)' : 'Gemini'}</option>)}
+                  </select>
+                  <select className="df-input !h-7 text-[12px]" value={voice} onChange={(e) => setVoice(e.target.value)}>
+                    {TTS_MODELS[provider].voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
           )}
+        </>
+      ) : (
+        // while working / reviewing, the request shrinks to a summary so the progress and result stay in view
+        <div className="rounded-xl border border-line bg-panel2 px-3 py-2">
+          <div className="line-clamp-2 text-[12px] leading-snug text-t1">“{prompt.trim()}”</div>
+          <div className="mt-1 text-[10.5px] text-t3">
+            {willNarrate ? `Narration: ${provider === 'openai' ? 'OpenAI' : provider === 'groq' ? 'Groq' : 'Gemini'} · ${TTS_MODELS[provider].voices.find((v) => v.id === voice)?.label ?? voice}` : 'No narration'}
+          </div>
         </div>
       )}
-      <Button variant="primary" className="justify-center" disabled={!ready || !prompt.trim() || !!busy} onClick={() => void makePlan()}>
-        {busy && !planned ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-        {busy && !planned ? busy : 'Plan the scenes'}
-      </Button>
-      {!ready && <p className="text-[11.5px] text-t3">Add an API key in the settings (gear) to use this.</p>}
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-[12px] text-red-600">{error}</div>}
-      {planned && (
+
+      {(stage === 'idle') && (
+        <Button variant="primary" className="justify-center" disabled={!ready || !prompt.trim()} onClick={() => void generate()}>
+          <Sparkles size={14} /> {willNarrate ? 'Generate scenes & narration' : 'Generate scenes'}
+        </Button>
+      )}
+      {!ready && stage === 'idle' && <p className="text-[11.5px] text-t3">Add an API key in the settings (gear) to use this.</p>}
+
+      {(stage === 'planning' || stage === 'narrating') && (
+        <Progress steps={steps} active={activeStep} detail={detail} fraction={stage === 'narrating' ? fraction : undefined} />
+      )}
+
+      {plan && (stage === 'ready' || stage === 'adding') && (
         <div className="flex flex-col gap-2">
-          <div className="text-[12.5px] font-semibold text-t1">{planned.title}</div>
-          {planned.scenes.map((sc, i) => (
-            <div key={i} className="rounded-xl border border-line p-2.5">
-              <div className="text-[12px] font-medium text-t1">{i + 1}. {sc.name}</div>
-              <div className="mt-0.5 text-[11.5px] text-t2">“{sc.narration}”</div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {sc.items.map((it, k) => (
-                  <span key={k} className="rounded-full bg-panel2 px-2 py-0.5 text-[10.5px] text-t2">
-                    {it.type === 'text' ? `“${it.text}”` : it.type === 'library' ? `🖼 ${it.label}` : `✏ ${it.label}`}
-                  </span>
-                ))}
-              </div>
+          <div className="flex items-center justify-between">
+            <div className="text-[12.5px] font-semibold text-t1">{plan.title}</div>
+            <span className="text-[10.5px] text-t3">
+              {plan.scenes.length} scenes{takes.length ? ` · ${totalSpoken.toFixed(0)} s of narration` : ''}
+            </span>
+          </div>
+          {warning && (
+            <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11.5px] text-amber-800">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {warning}
             </div>
-          ))}
-          <Button variant="primary" className="justify-center" disabled={!!busy} onClick={() => void build()}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-            {busy ?? `Build ${planned.scenes.length} scenes${narrate && speech.length ? ' with narration' : ''}`}
-          </Button>
+          )}
+          {stage === 'adding' ? (
+            <Progress steps={['Building the scenes on the canvas']} active={0} detail={detail} />
+          ) : (
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Button variant="primary" className="justify-center" onClick={() => void add()}>
+                <Wand2 size={14} /> Add to canvas
+              </Button>
+              <Button variant="secondary" onClick={reset} title="Discard this plan and start again">
+                <RotateCcw size={13} /> Start over
+              </Button>
+            </div>
+          )}
+          {plan.scenes.map((sc, i) => {
+            const take = takes.find((t) => t.scene === i);
+            return (
+              <div key={i} className="rounded-xl border border-line p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 truncate text-[12px] font-medium text-t1">{i + 1}. {sc.name}</div>
+                  {take && <TakePlayer take={take} />}
+                </div>
+                {sc.narration && <div className="mt-0.5 text-[11.5px] text-t2">“{sc.narration}”</div>}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {sc.items.map((it, k) => (
+                    <span key={k} className="rounded-full bg-panel2 px-2 py-0.5 text-[10.5px] text-t2">
+                      {it.type === 'text' ? `“${it.text}”` : it.type === 'library' ? `🖼 ${it.label}` : `✏ ${it.label}`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
           <p className="text-[11px] leading-relaxed text-t3">
-            Scenes are appended to the current project with fade transitions; everything stays editable. Undo removes it all.
+            Scenes are appended to the current project with fade transitions{takes.length ? ', the narration goes on the Voice lane' : ''}; everything stays editable. Undo removes it all.
           </p>
         </div>
       )}

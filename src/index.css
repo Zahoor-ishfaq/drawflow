@@ -201,3 +201,10 @@ input[type='color'].df-color::-webkit-color-swatch {
 @media (prefers-reduced-motion: reduce) {
   .df-ui-anim, .df-ui-anim * { transition: none !important; }
 }
+
+/* indeterminate progress bar (AI steps) */
+@keyframes df-indeterminate {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+.df-indeterminate { animation: df-indeterminate 1.2s ease-in-out infinite; }

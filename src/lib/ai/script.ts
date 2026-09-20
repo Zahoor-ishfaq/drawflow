@@ -8,12 +8,13 @@ import { chat } from './providers';
 import { getAiSettings } from './settings';
 import { synthesizeSpeech, type SpeechProvider } from './speech';
 import { drawSvg, extractSvg } from './planner';
-import { loadLibraryIndex, loadLibrarySvg, searchLibrary, type LibraryEntry } from '../../assets/illustrations';
+import { loadLibraryIndex, loadLibrarySvg, type LibraryEntry } from '../../assets/illustrations';
+import { buildIndex, searchAll } from '../librarySearch';
 import { normalizeSvg } from '../svgImport';
 import { textToPaths } from '../textToPaths';
 import { measurePaths } from '../drawing';
 import { useStore } from '../../store/useStore';
-import { decodeToSource } from '../../store/audioSources';
+import { audioContext, decodeToSource } from '../../store/audioSources';
 import { fitToPhrases } from '../narration';
 import { speechSegments } from '../audioTools';
 import { paperDef } from '../../assets/paper';
@@ -59,8 +60,57 @@ export async function planScript(request: string): Promise<ScriptPlan> {
   return { title: typeof parsed.title === 'string' && parsed.title ? parsed.title : 'AI scribe', scenes: scenes.slice(0, 8) };
 }
 
+/** One scene's narration, spoken and decoded, ready to preview or import. */
+export interface NarrationTake {
+  scene: number;
+  name: string;
+  blob: Blob;
+  buffer: AudioBuffer;
+  duration: number;
+  /** object URL for previewing; revoke with `releaseTakes` */
+  url: string;
+}
+
+export interface NarrateOptions {
+  provider: SpeechProvider;
+  voice: string;
+  onProgress?: (msg: string, index: number, total: number) => void;
+}
+
+/**
+ * Speak every scene's narration. Scenes without narration are skipped; a
+ * scene whose synthesis fails is reported through `failed` rather than
+ * aborting the rest, unless nothing at all could be spoken.
+ */
+export async function narratePlan(plan: ScriptPlan, opts: NarrateOptions): Promise<{ takes: NarrationTake[]; failed: { scene: number; error: unknown }[] }> {
+  const keys = getAiSettings().keys;
+  const todo = plan.scenes.map((sc, i) => ({ i, text: sc.narration?.trim() ?? '' })).filter((x) => x.text);
+  const takes: NarrationTake[] = [];
+  const failed: { scene: number; error: unknown }[] = [];
+  for (let k = 0; k < todo.length; k++) {
+    const { i, text } = todo[k];
+    opts.onProgress?.(`Scene ${i + 1} of ${plan.scenes.length}: “${text.slice(0, 48)}${text.length > 48 ? '…' : ''}”`, k, todo.length);
+    try {
+      const blob = await synthesizeSpeech(opts.provider, keys[opts.provider], text, opts.voice);
+      const buffer = await audioContext().decodeAudioData(await blob.arrayBuffer());
+      takes.push({ scene: i, name: `Narration — ${plan.scenes[i].name || `Scene ${i + 1}`}`, blob, buffer, duration: buffer.duration, url: URL.createObjectURL(blob) });
+    } catch (error) {
+      failed.push({ scene: i, error });
+      if (takes.length === 0 && k === todo.length - 1) throw error;
+    }
+  }
+  if (todo.length && takes.length === 0 && failed.length) throw failed[0].error;
+  return { takes, failed };
+}
+
+export function releaseTakes(takes: NarrationTake[]): void {
+  for (const t of takes) { try { URL.revokeObjectURL(t.url); } catch { /* already gone */ } }
+}
+
 export interface BuildOptions {
-  /** speak each scene's narration with this provider (needs a key) */
+  /** narration already spoken with `narratePlan` — goes on the voice lane and times the drawing */
+  narration?: NarrationTake[];
+  /** or speak it now with this provider (needs a key) */
   narrate?: { provider: SpeechProvider; voice: string };
   onProgress?: (msg: string) => void;
 }
@@ -71,6 +121,12 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
   const { width: W, height: H } = st.project;
   const ink = paperDef(st.project.paper).ink;
   const index = await loadLibraryIndex().catch(() => [] as LibraryEntry[]);
+  // the same ranked search as the Library panel (synonyms, plurals, typos), pictures only
+  const searchIndex = buildIndex({ illustrations: index, icons: [], uploads: [] });
+  const findPicture = (q: string): LibraryEntry | null => {
+    const hit = searchAll(searchIndex, q, 8).find((h) => h.kind === 'illustration');
+    return hit && hit.kind === 'illustration' ? hit.entry : null;
+  };
   const elements: DrawElement[] = [];
   const scenes: Scene[] = [];
   let z = st.elements.reduce((m, e) => Math.max(m, e.zIndex), -1) + 1;
@@ -118,9 +174,10 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
           let label = it.label || 'Drawing';
           if (it.type === 'library') {
             const q = (it.keywords ?? []).join(' ');
-            let hits = q ? searchLibrary(index, q, null) : [];
-            for (const k of it.keywords ?? []) { if (hits.length) break; hits = searchLibrary(index, k, null); }
-            if (hits.length) { svg = await loadLibrarySvg(hits[0].src); label = hits[0].name; }
+            let hit = q ? findPicture(q) : null;
+            for (const k of it.keywords ?? []) { if (hit) break; hit = findPicture(k); }
+            if (!hit && it.label) hit = findPicture(it.label);
+            if (hit) { svg = await loadLibrarySvg(hit.src); label = hit.name; }
             else { try { svg = await drawSvg(it.label || q); } catch { svg = null; } }
           } else {
             svg = extractSvg(it.svg) ?? it.svg;
@@ -154,32 +211,30 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
 
   // narration: clips laid end to end on the voice lane (a short gap between
   // scenes), then the elements are retimed so each is drawn during its phrase
-  if (opts.narrate) {
-    const keys = getAiSettings().keys;
+  let takes = opts.narration ?? [];
+  if (!takes.length && opts.narrate) {
+    takes = (await narratePlan(plan, { ...opts.narrate, onProgress: (m) => opts.onProgress?.(`Narrating ${m}`) })).takes;
+  }
+  if (takes.length) {
     const phrases: { start: number; end: number }[] = [];
     let at = 0;
-    for (let si = 0; si < plan.scenes.length; si++) {
-      const text = plan.scenes[si].narration?.trim();
-      if (!text) continue;
-      opts.onProgress?.(`Narrating scene ${si + 1}: “${text.slice(0, 40)}…”`);
-      try {
-        const blob = await synthesizeSpeech(opts.narrate.provider, keys[opts.narrate.provider], text, opts.narrate.voice);
-        const src = await decodeToSource(blob, `Narration — ${scenes[si].name}`);
-        useStore.getState().addAudioClip({ id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration, volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scenes[si].id });
-        const segs = speechSegments(src.buffer, 0, src.duration, 0.3);
-        // one phrase per item in the scene: split or merge the detected segments
-        const wanted = elements.filter((e) => e.sceneId === scenes[si].id).length;
-        const local = segs.length ? segs : [{ start: 0, end: src.duration }];
-        const span = { start: local[0].start, end: local[local.length - 1].end };
-        for (let k = 0; k < wanted; k++) {
-          const a = span.start + ((span.end - span.start) * k) / wanted;
-          const b = span.start + ((span.end - span.start) * (k + 1)) / wanted;
-          phrases.push({ start: at + a, end: at + b });
-        }
-        at += src.duration + 0.6;
-      } catch (e) {
-        opts.onProgress?.(`Narration failed for scene ${si + 1}: ${e instanceof Error ? e.message : e}`);
+    for (const take of takes) {
+      const si = take.scene;
+      if (!scenes[si]) continue;
+      opts.onProgress?.(`Placing narration for scene ${si + 1} of ${plan.scenes.length}`);
+      const src = await decodeToSource(take.blob, take.name);
+      useStore.getState().addAudioClip({ id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration, volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scenes[si].id });
+      const segs = speechSegments(src.buffer, 0, src.duration, 0.3);
+      // one phrase per item in the scene: split or merge the detected segments
+      const wanted = elements.filter((e) => e.sceneId === scenes[si].id).length;
+      const local = segs.length ? segs : [{ start: 0, end: src.duration }];
+      const span = { start: local[0].start, end: local[local.length - 1].end };
+      for (let k = 0; k < wanted; k++) {
+        const a = span.start + ((span.end - span.start) * k) / wanted;
+        const b = span.start + ((span.end - span.start) * (k + 1)) / wanted;
+        phrases.push({ start: at + a, end: at + b });
       }
+      at += src.duration + 0.6;
     }
     if (phrases.length) {
       const cur = useStore.getState();
