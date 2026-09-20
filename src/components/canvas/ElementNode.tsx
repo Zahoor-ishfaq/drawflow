@@ -25,6 +25,7 @@ export const ElementNode = memo(function ElementNode({
 
   return (
     <g
+      data-id={el.id}
       transform={elementTransform(el, frame)}
       opacity={frame.groupOpacity}
       onPointerDown={clickable ? (e) => onPointerDown(e, el) : undefined}

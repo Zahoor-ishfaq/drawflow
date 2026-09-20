@@ -6,7 +6,7 @@ import type { DrawElement } from '../../types';
 import {
   elementFrameAt, FULL_FRAME, handFrameAt, paperAt, sceneOverlayAt, visibleAt,
 } from '../../lib/renderFrame';
-import { cameraAt, cameraForElement, elementBounds, viewBoxFor, viewFromRect } from '../../lib/camera';
+import { cameraAt, cameraForElement, elementBounds, viewBoxFor } from '../../lib/camera';
 import { paperDef } from '../../assets/paper';
 import { ElementNode } from './ElementNode';
 import { Hand } from './Hand';
@@ -32,9 +32,7 @@ type DragState =
   | { mode: 'scale'; id: string; startDist: number; startScale: number }
   | { mode: 'rotate'; id: string; startAngle: number; startRotation: number }
   | { mode: 'pan'; lastX: number; lastY: number; moved: boolean }
-  | { mode: 'marquee'; x0: number; y0: number; x1: number; y1: number; additive: boolean }
-  | { mode: 'camMove'; id: string; offsetX: number; offsetY: number; width: number; height: number }
-  | { mode: 'camResize'; id: string; anchorX: number; anchorY: number; sx: number; sy: number };
+  | { mode: 'marquee'; x0: number; y0: number; x1: number; y1: number; additive: boolean };
 
 const ACCENT = '#0d9d97';
 const CLICK_SLOP = 4; // px of movement below which a drag counts as a click
@@ -83,8 +81,9 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const overlay = cameraMode ? sceneOverlayAt(currentTime, ctx.scenes) : null;
   const drawn = cameraMode ? visibleAt(ctx, currentTime) : ctx.stacked;
 
-  // The selected element's recorded shot. Shown only when it differs from
-  // the on-screen boundary — when they coincide the boundary says it all.
+  // Where the camera will be while the selected element draws. Shown (as a
+  // passive outline under the artwork) only when it differs from the
+  // on-screen boundary — when they coincide the boundary says it all.
   const cameraGuide = useMemo(() => {
     if (!selected || cameraMode || selectedIds.length !== 1) return null;
     const idx = ordered.findIndex((e) => e.id === selected.id);
@@ -171,33 +170,6 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
     capture(e);
   };
 
-  // camera frame: drag its border/label to move, a corner to resize (aspect locked)
-  const onCamFrameDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !selected || !cameraGuide) return;
-    e.stopPropagation();
-    const p = toCanvasPoint(e.clientX, e.clientY);
-    dragRef.current = {
-      mode: 'camMove', id: selected.id,
-      offsetX: p.x - cameraGuide.x, offsetY: p.y - cameraGuide.y,
-      width: cameraGuide.width, height: cameraGuide.height,
-    };
-    capture(e);
-  };
-  const onCamCornerDown = (e: React.PointerEvent, corner: 'nw' | 'ne' | 'se' | 'sw') => {
-    if (e.button !== 0 || !selected || !cameraGuide) return;
-    e.stopPropagation();
-    const g = cameraGuide;
-    // the opposite corner stays put
-    const anchorX = corner === 'nw' || corner === 'sw' ? g.x + g.width : g.x;
-    const anchorY = corner === 'nw' || corner === 'ne' ? g.y + g.height : g.y;
-    dragRef.current = {
-      mode: 'camResize', id: selected.id, anchorX, anchorY,
-      sx: corner === 'nw' || corner === 'sw' ? -1 : 1,
-      sy: corner === 'nw' || corner === 'ne' ? -1 : 1,
-    };
-    capture(e);
-  };
-
   /** Smart guides: pull a single moving element onto other elements' edges/centres. */
   const guideSnap = (el: DrawElement, x: number, y: number): { x: number; y: number; gx?: number; gy?: number } => {
     if (!showGuides || cameraMode) return { x, y };
@@ -228,27 +200,6 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current;
     if (!drag) return;
-    if (drag.mode === 'camMove') {
-      const p = toCanvasPoint(e.clientX, e.clientY);
-      const rect = { x: p.x - drag.offsetX, y: p.y - drag.offsetY, width: drag.width, height: drag.height };
-      updateElement(drag.id, { camera: 'custom', customCamera: viewFromRect(rect, project) });
-      return;
-    }
-    if (drag.mode === 'camResize') {
-      const p = toCanvasPoint(e.clientX, e.clientY);
-      const aspect = project.width / project.height;
-      const dx = Math.max(0, (p.x - drag.anchorX) * drag.sx);
-      const dy = Math.max(0, (p.y - drag.anchorY) * drag.sy);
-      const width = Math.max(200, Math.max(dx, dy * aspect));
-      const height = width / aspect;
-      const rect = {
-        x: drag.sx > 0 ? drag.anchorX : drag.anchorX - width,
-        y: drag.sy > 0 ? drag.anchorY : drag.anchorY - height,
-        width, height,
-      };
-      updateElement(drag.id, { camera: 'custom', customCamera: viewFromRect(rect, project) });
-      return;
-    }
     if (drag.mode === 'pan') {
       const dx = e.clientX - drag.lastX;
       const dy = e.clientY - drag.lastY;
@@ -387,6 +338,43 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
         </g>
       )}
 
+      {/* the selected element's shot: an outline only — the Inspector's Camera section moves it */}
+      {cameraGuide && (
+        <g pointerEvents="none">
+          <rect
+            x={cameraGuide.x}
+            y={cameraGuide.y}
+            width={cameraGuide.width}
+            height={cameraGuide.height}
+            fill={ACCENT}
+            fillOpacity={0.035}
+            stroke={ACCENT}
+            strokeOpacity={0.6}
+            strokeWidth={guideStroke}
+            strokeDasharray={`${8 / pxPerUnit} ${6 / pxPerUnit}`}
+            rx={4 / pxPerUnit}
+          />
+          <text
+            x={cameraGuide.x + 12 / pxPerUnit}
+            y={cameraGuide.y + cameraGuide.height - 10 / pxPerUnit}
+            fontSize={11.5 / pxPerUnit}
+            fontFamily="Inter, system-ui, sans-serif"
+            fill={ACCENT}
+            fillOpacity={0.9}
+          >
+            {selected?.camera === 'previous'
+              ? 'camera while this draws (unchanged from the previous element)'
+              : selected?.camera === 'whole'
+                ? 'camera while this draws (everything)'
+                : selected?.camera === 'scene'
+                  ? 'camera while this draws (the scene)'
+                  : selected?.camera === 'auto'
+                    ? 'camera while this draws (zoomed in)'
+                    : 'camera while this draws'}
+          </text>
+        </g>
+      )}
+
       {drawn.map((el) => {
         const frame = cameraMode ? elementFrameAt(el, currentTime, vb) : FULL_FRAME;
         if (!frame) return null;
@@ -419,85 +407,6 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
         <line x1={vb.x} y1={guides.y} x2={vb.x + vb.width} y2={guides.y} stroke="#ff4d8d" strokeWidth={1 / pxPerUnit} pointerEvents="none" />
       )}
 
-      {cameraGuide && (
-        <g>
-          <rect
-            x={cameraGuide.x}
-            y={cameraGuide.y}
-            width={cameraGuide.width}
-            height={cameraGuide.height}
-            fill="none"
-            stroke={ACCENT}
-            strokeOpacity={0.55}
-            strokeWidth={guideStroke}
-            strokeDasharray={`${8 / pxPerUnit} ${6 / pxPerUnit}`}
-            rx={4 / pxPerUnit}
-            pointerEvents="none"
-          />
-          {/* fat invisible border: drag the frame */}
-          {interactive && (
-            <rect
-              x={cameraGuide.x}
-              y={cameraGuide.y}
-              width={cameraGuide.width}
-              height={cameraGuide.height}
-              fill="none"
-              stroke="transparent"
-              strokeWidth={14 / pxPerUnit}
-              pointerEvents="stroke"
-              style={{ cursor: 'move' }}
-              onPointerDown={onCamFrameDown}
-            />
-          )}
-          {/* label tab (also a drag handle) */}
-          <g
-            transform={`translate(${cameraGuide.x} ${cameraGuide.y - 22 / pxPerUnit})`}
-            style={{ cursor: interactive ? 'move' : 'default' }}
-            onPointerDown={interactive ? onCamFrameDown : undefined}
-          >
-            <rect width={190 / pxPerUnit} height={20 / pxPerUnit} rx={4 / pxPerUnit} fill={ACCENT} fillOpacity={0.9} />
-            <text
-              x={8 / pxPerUnit}
-              y={14 / pxPerUnit}
-              fontSize={11.5 / pxPerUnit}
-              fontFamily="Inter, system-ui, sans-serif"
-              fill="#ffffff"
-              pointerEvents="none"
-            >
-              {selected?.camera === 'previous'
-                ? "this element's shot (stays)"
-                : selected?.camera === 'whole'
-                  ? "this element's shot (everything)"
-                  : selected?.camera === 'scene'
-                    ? "this element's shot (scene)"
-                    : selected?.camera === 'auto'
-                      ? "this element's shot (zoomed)"
-                      : "this element's shot"}
-            </text>
-          </g>
-          {/* corner handles: resize (aspect locked) */}
-          {interactive &&
-            (['nw', 'ne', 'se', 'sw'] as const).map((corner) => {
-              const hx = corner === 'nw' || corner === 'sw' ? cameraGuide.x : cameraGuide.x + cameraGuide.width;
-              const hy = corner === 'nw' || corner === 'ne' ? cameraGuide.y : cameraGuide.y + cameraGuide.height;
-              const hs = 6 / pxPerUnit;
-              return (
-                <rect
-                  key={corner}
-                  x={hx - hs}
-                  y={hy - hs}
-                  width={hs * 2}
-                  height={hs * 2}
-                  fill="#ffffff"
-                  stroke={ACCENT}
-                  strokeWidth={guideStroke}
-                  style={{ cursor: corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize' }}
-                  onPointerDown={(e) => onCamCornerDown(e, corner)}
-                />
-              );
-            })}
-        </g>
-      )}
 
       {!isPlaying && !cameraMode && selectedEls.map((el) => (
         <SelectionBox

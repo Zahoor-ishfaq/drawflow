@@ -5,6 +5,7 @@ import { useStore } from '../../store/useStore';
 import { useSequence } from '../../store/selectors';
 import { cameraForElement, viewFromRect } from '../../lib/camera';
 import { slotEnd, exitWindow } from '../../lib/timing';
+import { Camera, Crosshair } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Field, SectionHeader } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
@@ -76,6 +77,7 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
   const project = useStore((s) => s.project);
   const cameraBoundary = useStore((s) => s.cameraBoundary);
   const cameraView = useStore((s) => s.cameraView);
+  const focusOn = useStore((s) => s.focusOn);
   const sequence = useSequence();
   const index = sequence.findIndex((e) => e.id === el.id);
   const isFirst = index === 0;
@@ -256,20 +258,30 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
         </Field>
       )}
       {!cameraView && cameraBoundary && (
-        <Button
-          variant="secondary"
-          className="justify-center"
-          onClick={() => patch({ camera: 'custom', customCamera: viewFromRect(cameraBoundary, project) })}
-          title="Record the grey boundary on the canvas as the shot for this element"
-        >
-          Use the boundary as this element's shot
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            className="justify-center"
+            onClick={() => focusOn(el.id)}
+            title="Bring the canvas to where the camera will be while this element draws"
+          >
+            <Crosshair size={13} /> Go to shot
+          </Button>
+          <Button
+            variant="secondary"
+            className="justify-center"
+            onClick={() => patch({ camera: 'custom', customCamera: viewFromRect(cameraBoundary, project) })}
+            title="Record the dashed boundary on the canvas as the camera shot for this element"
+          >
+            <Camera size={13} /> Set from boundary
+          </Button>
+        </div>
       )}
       <p className="text-[11px] leading-relaxed text-t3">
         {el.camera === 'previous'
-          ? 'Stays: the camera does not move for this element — it keeps the previous shot. Pan the canvas to where you want the camera and press the button above to start a new shot here.'
+          ? 'Stays: the camera keeps the previous shot for this element. To start a new shot here, pan or zoom the canvas until the dashed boundary frames what you want, then press Set from boundary.'
           : el.camera === 'custom'
-            ? 'This element starts a new shot. When its teal frame differs from the grey boundary you can drag the frame (or its corners) to adjust it, or re-aim it with the button above.'
+            ? 'This element starts a new shot (the teal outline on the canvas when it differs from the boundary). To change it: Go to shot, pan or zoom the canvas, then Set from boundary.'
             : el.camera === 'whole'
               ? 'The camera pulls back to show every element.'
               : el.camera === 'scene'

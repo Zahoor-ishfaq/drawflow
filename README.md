@@ -58,8 +58,8 @@ duplicate, and single-scene export.
 
 **Camera** — the dashed boundary in Edit view is what the video captures.
 Elements you add share that shot until you pan away; per element choose Stay /
-This shot / Zoom to it / Scene / All, or drag the frame by hand. Ease-out,
-linear or cut moves.
+This shot / Zoom to it / Scene / All, or aim the boundary and press *Set from
+boundary*. Ease-out, linear or cut moves.
 
 **Audio** — import MP3/WAV/M4A/OGG, record a voiceover while the scribe plays,
 split/trim/move, volume, fades, mute, solo, normalise, background-noise
