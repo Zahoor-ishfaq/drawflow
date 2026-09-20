@@ -52,6 +52,7 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const updateElement = useStore((s) => s.updateElement);
   const updateElements = useStore((s) => s.updateElements);
   const showGuides = useUiStore((s) => s.showGuides);
+  const lowQuality = useUiStore((s) => s.lowQualityPreview);
   const ctx = useRenderContext();
   const { ordered, timeline } = ctx;
 
@@ -334,6 +335,8 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
       ref={svgRef}
       viewBox={`${vb.x} ${vb.y} ${vb.width} ${vb.height}`}
       preserveAspectRatio="none"
+      shapeRendering={lowQuality && isPlaying ? 'optimizeSpeed' : undefined}
+      className={lowQuality && isPlaying ? 'df-lowq' : undefined}
       style={{
         width: cssWidth,
         height: cssHeight,

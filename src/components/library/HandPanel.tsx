@@ -36,14 +36,14 @@ export function HandPicker({ value, onChange, allowDefault = false, compact = fa
             key={opt.id ?? 'default'}
             type="button"
             className={
-              'df-ui-anim relative flex flex-col items-center gap-1.5 rounded-xl border-2 bg-white p-2 text-left transition-colors ' +
+              'df-ui-anim relative flex flex-col items-center gap-1.5 rounded-xl border-2 bg-panel p-2 text-left transition-colors ' +
               (active ? 'border-accent' : 'border-line hover:border-[#b9c2cf]')
             }
             onClick={() => onChange(opt.id)}
             title={opt.sub}
           >
             <div
-              className={`flex w-full items-center justify-center overflow-hidden rounded-lg bg-[#f4f6f9] ${compact ? 'h-14' : 'h-20'}`}
+              className={`flex w-full items-center justify-center overflow-hidden rounded-lg bg-panel2 ${compact ? 'h-14' : 'h-20'}`}
             >
               {opt.src ? (
                 <img src={opt.src} alt="" className={opt.custom ? 'h-full w-auto max-w-none object-contain' : 'h-[140%] w-auto max-w-none translate-x-[8%] translate-y-[22%] object-contain'} draggable={false} />

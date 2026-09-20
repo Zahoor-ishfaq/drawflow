@@ -57,18 +57,18 @@ export function LayersPanel() {
           </span>
         )}
         <span className="flex shrink-0 items-center opacity-0 group-hover:opacity-100">
-          <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-t2 hover:bg-white hover:text-t1 disabled:opacity-30" title="Bring forward" disabled={i === 0}
+          <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-t2 hover:bg-panel hover:text-t1 disabled:opacity-30" title="Bring forward" disabled={i === 0}
             onClick={(e) => { e.stopPropagation(); setLayer([el.id], 'forward'); }}>
             <ChevronUp size={13} />
           </button>
-          <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-t2 hover:bg-white hover:text-t1 disabled:opacity-30" title="Send backward" disabled={i === stacked.length - 1}
+          <button type="button" className="flex h-6 w-6 items-center justify-center rounded text-t2 hover:bg-panel hover:text-t1 disabled:opacity-30" title="Send backward" disabled={i === stacked.length - 1}
             onClick={(e) => { e.stopPropagation(); setLayer([el.id], 'backward'); }}>
             <ChevronDown size={13} />
           </button>
         </span>
         <button
           type="button"
-          className={'flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white ' + (el.locked ? 'text-accent' : 'text-t3 opacity-0 group-hover:opacity-100')}
+          className={'flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-panel ' + (el.locked ? 'text-accent' : 'text-t3 opacity-0 group-hover:opacity-100')}
           title={el.locked ? 'Unlock' : 'Lock'}
           onClick={(e) => { e.stopPropagation(); updateElement(el.id, { locked: !el.locked }); }}
         >
@@ -76,7 +76,7 @@ export function LayersPanel() {
         </button>
         <button
           type="button"
-          className={'flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-white ' + (el.hidden ? 'text-accent' : 'text-t3')}
+          className={'flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-panel ' + (el.hidden ? 'text-accent' : 'text-t3')}
           title={el.hidden ? 'Show in the video' : 'Hide from the video'}
           onClick={(e) => { e.stopPropagation(); updateElement(el.id, { hidden: !el.hidden }); }}
         >

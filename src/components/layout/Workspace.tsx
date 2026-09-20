@@ -7,6 +7,7 @@ import { clamp } from '../../lib/time';
 import { emitShortcut, onShortcut } from '../../hooks/useKeyboardShortcuts';
 import { Stage } from '../canvas/Stage';
 import { Rulers } from '../canvas/Rulers';
+import { StatsOverlay } from './StatsOverlay';
 
 // Edit view is an infinite sheet of paper (VideoScribe-style): drag empty
 // paper to pan, wheel to zoom, place elements anywhere. Camera view shows the
@@ -27,6 +28,7 @@ export function Workspace() {
   const setCameraBoundary = useStore((s) => s.setCameraBoundary);
   const focusRequest = useStore((s) => s.focusRequest);
   const showRulers = useUiStore((s) => s.showRulers);
+  const showStats = useUiStore((s) => s.showStats);
   const snapToGrid = useUiStore((s) => s.snapToGrid);
   const gridSize = useUiStore((s) => s.gridSize);
 
@@ -280,6 +282,8 @@ export function Workspace() {
           </div>
         </div>
       )}
+
+      {showStats && <StatsOverlay />}
 
       {/* edit / camera view toggle */}
       <div className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-line bg-panel p-0.5 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">

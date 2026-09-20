@@ -71,7 +71,7 @@ export function Rulers({ view, width, height }: { view: Rect; width: number; hei
     <>
       <canvas ref={topRef} className="pointer-events-none absolute top-0 left-0" style={{ width, height: RULER_SIZE }} />
       <canvas ref={leftRef} className="pointer-events-none absolute top-0 left-0" style={{ width: RULER_SIZE, height }} />
-      <div className="pointer-events-none absolute top-0 left-0 bg-[#eef1f5]" style={{ width: RULER_SIZE, height: RULER_SIZE }} />
+      <div className="pointer-events-none absolute top-0 left-0 bg-panel2" style={{ width: RULER_SIZE, height: RULER_SIZE }} />
     </>
   );
 }

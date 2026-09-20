@@ -106,7 +106,7 @@ export function TimeRuler({ pxPerSec, width }: { pxPerSec: number; width: number
         {ticks.map(({ t, big }) => (
           <span
             key={t}
-            className="absolute bottom-0 w-px bg-[#c3cad4]"
+            className="absolute bottom-0 w-px bg-line"
             style={{ left: t * pxPerSec, height: big ? 10 : 5 }}
           >
             {big && (

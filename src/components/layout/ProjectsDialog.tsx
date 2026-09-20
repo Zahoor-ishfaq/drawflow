@@ -22,7 +22,7 @@ function when(ts: number): string {
 
 function Thumb({ src, label }: { src?: string; label: string }) {
   return (
-    <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-line bg-white">
+    <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-line bg-artboard">
       {src ? <img src={src} alt="" className="h-full w-full object-cover" draggable={false} /> : <span className="text-[11px] text-t3">{label}</span>}
     </div>
   );
@@ -114,7 +114,7 @@ export function ProjectsDialog({ onClose, initialTab = 'projects' }: { onClose: 
               <div className="grid grid-cols-4 gap-3">
                 {TEMPLATES.map((t) => (
                   <button key={t.id} type="button" className="flex flex-col gap-1.5 rounded-xl border border-line p-2 text-left hover:border-accent disabled:opacity-60" disabled={!!busy} onClick={() => void startTemplate(t)}>
-                    <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-line bg-white text-[24px]">
+                    <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-line bg-artboard text-[24px]">
                       {busy === t.id ? <span className="text-[12px] text-t3">Building…</span> : <LayoutTemplate size={26} className="text-accent" />}
                     </div>
                     <div className="truncate text-[12.5px] font-medium text-t1">{t.name}</div>

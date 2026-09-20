@@ -97,7 +97,7 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
     <div className="flex items-start">
       {index > 0 && (
         <div className="flex h-[62px] flex-col items-center justify-center" style={{ width: CONNECTOR_W }}>
-          <div className="h-px w-full bg-[#c9d0da]" />
+          <div className="h-px w-full bg-line" />
           <span
             className="tabular mt-1 text-[9.5px] text-t3"
             title="Transition: camera travel time into this element"
@@ -125,7 +125,7 @@ function Card({ el, index, count }: { el: DrawElement; index: number; count: num
         <div
           className={
             'df-ui-anim relative h-[62px] overflow-hidden rounded-xl border-2 p-1.5 transition-colors ' +
-            (paperDark ? 'bg-[#2c473d] ' : 'bg-white ') +
+            (paperDark ? 'bg-[#2c473d] ' : 'bg-artboard ') +
             (selected
               ? 'border-accent shadow-[0_2px_10px_rgba(13,157,151,0.25)]'
               : active

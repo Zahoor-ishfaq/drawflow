@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useUiStore } from '../../store/uiStore';
 import { Hand, Image, Layers, Music, Shapes, Sparkles, StickyNote, Type, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
 import { ShapesPanel } from '../library/ShapesPanel';
@@ -60,6 +61,9 @@ function RailButton({
 
 export function IconRail() {
   const [open, setOpen] = useState<Tool | null>(null);
+  const width = useUiStore((s) => s.libraryWidth);
+  const setUi = useUiStore((s) => s.set);
+  const resize = useRef<{ x: number; w: number } | null>(null);
   const toggle = (id: Tool) => setOpen((cur) => (cur === id ? null : id));
   const close = () => setOpen(null);
 
@@ -76,7 +80,15 @@ export function IconRail() {
       </div>
 
       {open && (
-        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] w-[340px] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]">
+        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]" style={{ width }}>
+          <div
+            className="absolute top-0 -right-0.5 bottom-0 z-10 w-2 cursor-ew-resize hover:bg-accent/30"
+            title="Drag to resize"
+            onPointerDown={(e) => { resize.current = { x: e.clientX, w: width }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }}
+            onPointerMove={(e) => { const r = resize.current; if (r) setUi({ libraryWidth: Math.max(280, Math.min(620, r.w + (e.clientX - r.x))) }); }}
+            onPointerUp={() => { resize.current = null; }}
+            onPointerCancel={() => { resize.current = null; }}
+          />
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-line pr-2 pl-4">
             <span className="text-[14px] font-semibold">{PANEL_TITLES[open]}</span>
             <IconButton label="Close panel" onClick={close}>

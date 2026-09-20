@@ -7,11 +7,21 @@ import { usePlaybackClock } from './hooks/usePlaybackClock';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useEffect, useState } from 'react';
 import { restoreLast, startAutosave } from './lib/persistence';
+import { useUiStore } from './store/uiStore';
+import { onShortcut } from './hooks/useKeyboardShortcuts';
+import { FullscreenPreview } from './components/layout/FullscreenPreview';
+import { CommandPalette } from './components/layout/CommandPalette';
 
 export default function App() {
   usePlaybackClock();
   useKeyboardShortcuts();
   const [restored, setRestored] = useState<boolean | null>(null);
+  const [palette, setPalette] = useState(false);
+  const fullscreen = useUiStore((s) => s.fullscreenPreview);
+  useEffect(() => onShortcut((n) => {
+    if (n === 'command-palette') setPalette((v) => !v);
+    if (n === 'fullscreen-preview') useUiStore.getState().set({ fullscreenPreview: !useUiStore.getState().fullscreenPreview });
+  }), []);
 
   // restore the last checkpoint, then keep checkpointing every change
   useEffect(() => {
@@ -34,6 +44,8 @@ export default function App() {
       </div>
       <TimelineBar />
       {restored && <RestoredToast onDone={() => setRestored(null)} />}
+      {fullscreen && <FullscreenPreview />}
+      {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   );
 }

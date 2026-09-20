@@ -44,7 +44,7 @@ export function PaperPanel() {
               key={p.id}
               type="button"
               className={
-                'df-ui-anim relative overflow-hidden rounded-xl border-2 bg-white text-left transition-colors ' +
+                'df-ui-anim relative overflow-hidden rounded-xl border-2 bg-panel text-left transition-colors ' +
                 (active ? 'border-accent' : 'border-line hover:border-[#b9c2cf]')
               }
               onClick={() => choose(p.id)}

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useUiStore } from '../../store/uiStore';
 import { ArrowLeft, ArrowRight, ClipboardCopy, ClipboardPaste, Copy, Eye, EyeOff, Group, Lock, LockOpen, Trash2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useSelectedElement, useSequence } from '../../store/selectors';
@@ -80,12 +81,23 @@ export function Inspector() {
   });
   const { duplicateElement, removeElement, removeElements, reorder, copyAnimation, pasteAnimation } = useStore.getState();
   const [tab, setTab] = useState<Tab>('animation');
+  const width = useUiStore((s) => s.inspectorWidth);
+  const setUi = useUiStore((s) => s.set);
+  const resize = useRef<{ x: number; w: number } | null>(null);
 
   const multi = selectedIds.length > 1;
   const index = selected ? sequence.findIndex((e) => e.id === selected.id) : -1;
 
   return (
-    <aside className="flex w-[290px] shrink-0 flex-col border-l border-line bg-panel">
+    <aside className="relative flex shrink-0 flex-col border-l border-line bg-panel" style={{ width }}>
+      <div
+        className="absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-ew-resize hover:bg-accent/30"
+        title="Drag to resize"
+        onPointerDown={(e) => { resize.current = { x: e.clientX, w: width }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }}
+        onPointerMove={(e) => { const r = resize.current; if (r) setUi({ inspectorWidth: Math.max(240, Math.min(520, r.w - (e.clientX - r.x))) }); }}
+        onPointerUp={() => { resize.current = null; }}
+        onPointerCancel={() => { resize.current = null; }}
+      />
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3.5">
         <span className="truncate text-[14px] font-semibold">
           {multi ? `${selectedIds.length} elements` : selected ? `${index + 1}. ${selected.label}` : selectedClip ? selectedClip.name : 'Project settings'}
