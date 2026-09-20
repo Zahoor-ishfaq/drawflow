@@ -23,7 +23,9 @@ async function readError(res: Response): Promise<string> {
   try {
     const j = JSON.parse(body);
     const m = j.error?.message ?? j.message ?? j.error;
-    if (typeof m === 'string') return `${res.status}: ${m}`;
+    // keep the provider's error code too (insufficient_quota, RESOURCE_EXHAUSTED…) — it tells the two "quota" cases apart
+    const code = [j.error?.code, j.error?.type, j.error?.status].find((c) => typeof c === 'string' && !/^\d+$/.test(c));
+    if (typeof m === 'string') return `${res.status}: ${m}${code ? ` [${code}]` : ''}`;
   } catch { /* not json */ }
   return `${res.status}: ${body.slice(0, 200) || res.statusText}`;
 }

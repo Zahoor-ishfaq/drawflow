@@ -11,6 +11,7 @@ import { useUiStore } from './store/uiStore';
 import { onShortcut } from './hooks/useKeyboardShortcuts';
 import { FullscreenPreview } from './components/layout/FullscreenPreview';
 import { CommandPalette } from './components/layout/CommandPalette';
+import { ProblemHost } from './components/dialogs/ProblemDialog';
 
 export default function App() {
   usePlaybackClock();
@@ -46,6 +47,7 @@ export default function App() {
       {restored && <RestoredToast onDone={() => setRestored(null)} />}
       {fullscreen && <FullscreenPreview />}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      <ProblemHost />
     </div>
   );
 }

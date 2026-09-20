@@ -13,6 +13,7 @@ import { AiSettingsDialog } from './AiSettingsDialog';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
+import { reportAiError } from '../../store/problemStore';
 import { Slider } from '../ui/Slider';
 import { Field } from '../ui/Field';
 
@@ -63,7 +64,7 @@ function CreateTab({ onAdded }: { onAdded?: () => void }) {
         setProposals(await plan(prompt.trim()));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      setError(reportAiError(e, asPicture ? s.imageProvider : s.textProvider).title);
     } finally {
       setBusy(false);
     }
@@ -209,7 +210,7 @@ function PhotoTab({ onAdded }: { onAdded?: () => void }) {
       const img = await generateImage(s.imageProvider, s.keys[s.imageProvider], s.imageModel[s.imageProvider], CARTOON_PROMPT, splitDataUrl(src));
       setCartoon(`data:${img.mime};base64,${img.base64}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not make the cartoon.');
+      setError(reportAiError(e, s.imageProvider).title);
     } finally {
       setBusy(false);
     }
@@ -318,7 +319,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
     try {
       setPlanned(await planScript(prompt.trim()));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(reportAiError(e, s.textProvider).title);
     } finally {
       setBusy(null);
     }
@@ -333,7 +334,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
       setPlanned(null);
       onAdded?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(reportAiError(e, s.textProvider).title);
     } finally {
       setBusy(null);
     }

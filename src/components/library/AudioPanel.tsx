@@ -8,6 +8,7 @@ import { SFX, previewSfx, sfxSource } from '../../lib/audioTools';
 import { fitToPhrases, narrationPhrases } from '../../lib/narration';
 import { synthesizeSpeech, transcribe, TTS_MODELS, type SpeechProvider } from '../../lib/ai/speech';
 import { useAiSettings } from '../../lib/ai/settings';
+import { reportAiError } from '../../store/problemStore';
 import { Button } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { SectionHeader } from '../ui/Field';
@@ -39,7 +40,7 @@ function AiVoice({ at }: { at: number }) {
       const src = await decodeToSource(blob, `AI voice — ${text.trim().slice(0, 28)}`);
       addClip(src.id, src.name, 'voice', src.duration, at);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(reportAiError(e, provider).title);
     } finally {
       setBusy(false);
     }
@@ -138,7 +139,7 @@ export function AudioPanel({ onAdded }: { onAdded?: () => void }) {
       for (const [id, p] of patches) s.updateElement(id, p);
       setFitNote(`Transcribed ${phrases.length} sentences; matched ${patches.size} elements.`);
     } catch (e) {
-      setFitNote(e instanceof Error ? e.message : String(e));
+      setFitNote(reportAiError(e, provider).title);
     } finally {
       setBusy(null);
     }

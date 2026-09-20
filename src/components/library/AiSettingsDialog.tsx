@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { explainAiError } from '../../lib/ai/errors';
 import { Eye, EyeOff, RefreshCw, X } from 'lucide-react';
 import {
   KEY_HELP, PROVIDER_LABELS, updateAiSettings, useAiSettings,
@@ -32,7 +33,9 @@ function ProviderRow({ id }: { id: TextProvider }) {
         if (img && !s.imageModel.gemini) updateAiSettings({ imageModel: { ...s.imageModel, gemini: img.id } });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load models.');
+      // inside the settings dialog the explanation goes inline (the dialog is already the place to fix it)
+      const why = explainAiError(e, id);
+      setError(`${why.title}. ${why.steps[0] ?? ''}`);
     } finally {
       setBusy(false);
     }
