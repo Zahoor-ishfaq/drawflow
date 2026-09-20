@@ -1,7 +1,7 @@
 # DrawFlow — Whiteboard Animation Studio
 
 An open-source, local-first whiteboard animation tool in the spirit of VideoScribe.
-Add text, shapes, pictures and characters; a photographed (or cartoon) hand draws
+Add text, shapes, pictures and characters; a photographed hand (right- or left-handed) draws
 each one while the camera glides from shot to shot; add music, a voiceover or AI
 narration; export MP4/WebM/GIF entirely on your machine — in the browser, as a
 Windows desktop app, or from the command line.
