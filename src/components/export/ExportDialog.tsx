@@ -117,8 +117,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <p className="text-[11.5px] leading-relaxed text-t3">
-                Rendering happens entirely in your browser. A 20–30&#8202;s clip can take
-                1–3 minutes at 1080p.
+                Rendering happens entirely in your browser using its built-in video encoder —
+                a 30&#8202;s clip usually takes under a minute. WebM, or browsers without
+                hardware encoding, fall back to a slower software encoder.
               </p>
               <Button
                 variant="primary"

@@ -37,7 +37,7 @@ export function startAudio(clips: AudioClip[], t: number): void {
 }
 
 /** Volume envelope: fade in/out expressed on the AudioContext clock. */
-function scheduleGain(gain: GainNode, clip: AudioClip, startAt: number, skipped: number): void {
+export function scheduleGain(gain: GainNode, clip: AudioClip, startAt: number, skipped: number): void {
   const v = clip.volume;
   const g = gain.gain;
   g.cancelScheduledValues(0);

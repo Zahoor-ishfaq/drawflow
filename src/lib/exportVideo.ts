@@ -1,9 +1,14 @@
 // Deterministic, frame-by-frame export (spec §8). No screen recording:
-// each frame is rendered by seeking the pure canvas function to t = frame/fps,
-// rasterized to PNG, written to ffmpeg's virtual FS, then encoded.
+// each frame is rendered by seeking the pure canvas function to t = frame/fps
+// and rasterized to a canvas. MP4 goes through the browser's own H.264
+// encoder (WebCodecs) with ffmpeg.wasm only attaching the audio; WebM and
+// browsers without WebCodecs fall back to JPEG frames + ffmpeg's software codecs.
+// Audio is always pre-mixed in the browser to one WAV — ffmpeg.wasm crashed
+// ("memory access out of bounds") decoding WebM/Opus recordings directly.
 
 import type { AudioClip, DrawElement, HandStyle, Project } from '../types';
-import { getSource } from '../store/audioSources';
+import { mixdownWav } from './audioMix';
+import { createH264Session } from './webcodecsEncoder';
 import { makeRenderContext, svgStringForTime } from './renderFrame';
 import { getFFmpeg } from './ffmpegClient';
 import { HANDS, loadHandDataUrl } from '../assets/hands';
@@ -42,10 +47,15 @@ function makeCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
   return c;
 }
 
-function canvasToPngBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Blob> {
-  if (canvas instanceof OffscreenCanvas) return canvas.convertToBlob({ type: 'image/png' });
+// Frames go to the encoder as high-quality JPEGs: several times faster to
+// encode than PNG at 1080p, and the video codec is lossy anyway.
+const FRAME_TYPE = 'image/jpeg';
+const FRAME_QUALITY = 0.94;
+
+function canvasToFrameBlob(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Blob> {
+  if (canvas instanceof OffscreenCanvas) return canvas.convertToBlob({ type: FRAME_TYPE, quality: FRAME_QUALITY });
   return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png'),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), FRAME_TYPE, FRAME_QUALITY),
   );
 }
 
@@ -88,44 +98,61 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     | null;
   if (!ctx) throw new Error('Could not create a 2D canvas context.');
 
-  const frameName = (i: number) => `frame_${String(i).padStart(5, '0')}.png`;
+  const frameName = (i: number) => `frame_${String(i).padStart(5, '0')}.jpg`;
   const written: string[] = [];
   const audioFiles: string[] = [];
 
+  // MP4: the browser's own (usually hardware) H.264 encoder takes frames
+  // straight from the canvas; ffmpeg then only attaches the audio (a copy).
+  const hw = format === 'mp4' ? await createH264Session(outW, outH, fps) : null;
+
+  const timing = { svg: 0, raster: 0, encode: 0, write: 0, ffmpeg: 0 };
   try {
     opts.onPhase('capturing');
     for (let frame = 0; frame < totalFrames; frame++) {
       const t = frame / fps;
+      let t0 = performance.now();
       const svg = svgStringForTime(render, t, outW, outH, handImages);
+      timing.svg += performance.now() - t0; t0 = performance.now();
       const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
       try {
         const img = new Image();
         img.src = svgUrl;
         await img.decode();
-        ctx.clearRect(0, 0, outW, outH);
+        // JPEG has no alpha: paint the paper colour first
+        ctx.fillStyle = project.background;
+        ctx.fillRect(0, 0, outW, outH);
         ctx.drawImage(img, 0, 0, outW, outH);
       } finally {
         URL.revokeObjectURL(svgUrl);
       }
-      const png = await canvasToPngBlob(canvas);
-      const name = frameName(frame);
-      await ffmpeg.writeFile(name, new Uint8Array(await png.arrayBuffer()));
-      written.push(name);
+      timing.raster += performance.now() - t0; t0 = performance.now();
+      if (hw) {
+        await hw.addFrame(canvas, frame);
+        timing.encode += performance.now() - t0;
+      } else {
+        const shot = await canvasToFrameBlob(canvas);
+        const bytes = new Uint8Array(await shot.arrayBuffer());
+        timing.encode += performance.now() - t0; t0 = performance.now();
+        const name = frameName(frame);
+        await ffmpeg.writeFile(name, bytes);
+        timing.write += performance.now() - t0;
+        written.push(name);
+      }
       opts.onProgress(frame / totalFrames);
       if (frame % 5 === 0) await nextFrame(); // keep the UI responsive
     }
 
-    // one input file per distinct audio source used by an (unmuted) clip
-    const clips = audioClips.filter((c) => !c.muted && c.duration > 0 && getSource(c.sourceId));
-    const sourceIndex = new Map<string, number>(); // sourceId → ffmpeg input index
-    for (const c of clips) {
-      if (sourceIndex.has(c.sourceId)) continue;
-      const src = getSource(c.sourceId)!;
-      const ext = (src.blob.type.split('/')[1] || 'bin').split(';')[0];
-      const name = `audio_${audioFiles.length}.${ext === 'mpeg' ? 'mp3' : ext}`;
-      await ffmpeg.writeFile(name, new Uint8Array(await src.blob.arrayBuffer()));
-      audioFiles.push(name);
-      sourceIndex.set(c.sourceId, audioFiles.length); // input 0 is the frames
+    // all clips mixed in the browser into one WAV — the encoder never decodes
+    // compressed audio (that crashed the WASM build on some inputs)
+    let hasAudio = false;
+    if (audioClips.some((c) => !c.muted)) {
+      const wav = await mixdownWav(audioClips, project.duration);
+      if (wav) {
+        await ffmpeg.writeFile('mix.wav', wav);
+        audioFiles.push('mix.wav');
+        hasAudio = true;
+      }
     }
 
     opts.onPhase('encoding');
@@ -136,44 +163,46 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     ffmpeg.on('progress', onFfProgress);
 
     const outName = format === 'mp4' ? 'out.mp4' : 'out.webm';
-    const args: string[] = ['-framerate', String(fps), '-start_number', '0', '-i', 'frame_%05d.png'];
-    for (const name of audioFiles) args.push('-i', name);
-    if (format === 'mp4') {
-      args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '20');
-    } else {
-      args.push('-c:v', 'libvpx-vp9', '-crf', '34', '-b:v', '0');
+    if (hw) {
+      const tHw = performance.now();
+      const video = await hw.finish();
+      timing.ffmpeg = performance.now() - tHw;
+      if (!hasAudio) {
+        console.info('[export] frames', totalFrames, 'hardware —', Object.fromEntries(Object.entries(timing).map(([k, v]) => [k, Math.round(v)])));
+        const safe = project.name.replace(/[^\w\- ]+/g, '').trim() || 'drawflow';
+        const blob = new Blob([video.buffer as ArrayBuffer], { type: 'video/mp4' });
+        return { url: URL.createObjectURL(blob), filename: `${safe}.mp4`, sizeBytes: blob.size };
+      }
+      await ffmpeg.writeFile('video.mp4', video);
+      written.push('video.mp4');
     }
-    args.push('-pix_fmt', 'yuv420p', '-vf', 'crop=trunc(iw/2)*2:trunc(ih/2)*2'); // even dimensions
-    if (clips.length > 0) {
-      // trim/fade/delay each clip, then mix them all
-      const parts: string[] = [];
-      const labels: string[] = [];
-      clips.forEach((c, i) => {
-        const inIdx = sourceIndex.get(c.sourceId)!;
-        const f: string[] = [
-          `atrim=start=${c.offset.toFixed(3)}:end=${(c.offset + c.duration).toFixed(3)}`,
-          'asetpts=PTS-STARTPTS',
-          'aresample=44100',
-          `volume=${c.volume.toFixed(3)}`,
-        ];
-        if (c.fadeIn > 0) f.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
-        if (c.fadeOut > 0) f.push(`afade=t=out:st=${Math.max(0, c.duration - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-        const ms = Math.round(c.startTime * 1000);
-        f.push(`adelay=${ms}|${ms}`);
-        parts.push(`[${inIdx}:a]${f.join(',')}[a${i}]`);
-        labels.push(`[a${i}]`);
-      });
-      parts.push(`${labels.join('')}amix=inputs=${clips.length}:normalize=0:dropout_transition=0[aout]`);
-      args.push('-filter_complex', parts.join(';'), '-map', '0:v', '-map', '[aout]');
-      args.push('-c:a', format === 'mp4' ? 'aac' : 'libopus', '-b:a', '160k');
+    const args: string[] = hw
+      ? ['-i', 'video.mp4']
+      : ['-framerate', String(fps), '-start_number', '0', '-i', 'frame_%05d.jpg'];
+    if (hasAudio) args.push('-i', 'mix.wav');
+    if (hw) {
+      args.push('-c:v', 'copy');
+    } else if (format === 'mp4') {
+      // veryfast is ~3× quicker than medium in the single-threaded WASM build;
+      // whiteboard footage compresses well regardless
+      args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21');
+    } else {
+      args.push('-c:v', 'libvpx-vp9', '-crf', '34', '-b:v', '0', '-deadline', 'realtime', '-cpu-used', '8');
+    }
+    if (!hw) args.push('-pix_fmt', 'yuv420p', '-vf', 'crop=trunc(iw/2)*2:trunc(ih/2)*2'); // even dimensions
+    if (hasAudio) {
+      args.push('-map', '0:v', '-map', '1:a', '-c:a', format === 'mp4' ? 'aac' : 'libopus', '-b:a', '160k');
       args.push('-t', project.duration.toFixed(3));
     }
     args.push(outName);
 
+    const tEnc = performance.now();
     try {
       await ffmpeg.exec(args);
     } finally {
       ffmpeg.off('progress', onFfProgress);
+      timing.ffmpeg = performance.now() - tEnc;
+      console.info('[export] frames', totalFrames, hw ? 'hardware+mux —' : 'software —', Object.fromEntries(Object.entries(timing).map(([k, v]) => [k, Math.round(v)])));
     }
 
     const data = await ffmpeg.readFile(outName);
@@ -190,6 +219,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
       sizeBytes: blob.size,
     };
   } finally {
+    hw?.abort();
     // clear the virtual FS so repeated exports don't leak memory (pitfall #8)
     for (const name of written) {
       try { await ffmpeg.deleteFile(name); } catch { /* best effort */ }
