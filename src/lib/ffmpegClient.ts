@@ -27,3 +27,10 @@ export function getFFmpeg(): Promise<FFmpeg> {
   }
   return loading;
 }
+
+/** Kill a running ffmpeg (cancelled export). The next getFFmpeg() reloads it. */
+export function terminateFFmpeg(): void {
+  try { instance?.terminate(); } catch { /* already gone */ }
+  instance = null;
+  loading = null;
+}

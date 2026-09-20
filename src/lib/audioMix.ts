@@ -1,20 +1,20 @@
-// Mixes every clip into one PCM WAV using the browser's own audio engine
+// Mixes every clip into one PCM buffer using the browser's own audio engine
 // (OfflineAudioContext), reusing the exact volume/fade scheduling the preview
-// uses. The encoder then only ever sees uncompressed WAV — no WebM/Opus/MP3
+// uses. The encoders then only ever see uncompressed PCM — no WebM/Opus/MP3
 // demuxing inside the WASM build, and export audio matches playback exactly.
 
 import type { AudioClip } from '../types';
 import { getSource } from '../store/audioSources';
 import { scheduleGain } from './audioEngine';
 
-const SAMPLE_RATE = 44100;
+export const MIX_SAMPLE_RATE = 48000;
 
-export async function mixdownWav(clips: AudioClip[], duration: number): Promise<Uint8Array | null> {
+/** All audible clips rendered into one stereo buffer, or null when there is nothing to hear. */
+export async function mixdownBuffer(clips: AudioClip[], duration: number): Promise<AudioBuffer | null> {
   const live = clips.filter((c) => !c.muted && c.duration > 0 && getSource(c.sourceId));
   if (live.length === 0) return null;
-  const channels = live.some((c) => getSource(c.sourceId)!.buffer.numberOfChannels > 1) ? 2 : 1;
-  const frames = Math.max(1, Math.ceil(duration * SAMPLE_RATE));
-  const ctx = new OfflineAudioContext(channels, frames, SAMPLE_RATE);
+  const frames = Math.max(1, Math.ceil(duration * MIX_SAMPLE_RATE));
+  const ctx = new OfflineAudioContext(2, frames, MIX_SAMPLE_RATE);
 
   for (const clip of live) {
     const source = getSource(clip.sourceId)!;
@@ -29,12 +29,17 @@ export async function mixdownWav(clips: AudioClip[], duration: number): Promise<
     src.start(clip.startTime, clip.offset, len);
   }
 
-  const rendered = await ctx.startRendering();
-  return encodeWav(rendered);
+  return ctx.startRendering();
+}
+
+/** Convenience for the ffmpeg fallback: the mix as a 16-bit PCM WAV file. */
+export async function mixdownWav(clips: AudioClip[], duration: number): Promise<Uint8Array | null> {
+  const buffer = await mixdownBuffer(clips, duration);
+  return buffer ? encodeWav(buffer) : null;
 }
 
 /** 16-bit PCM WAV. */
-function encodeWav(buffer: AudioBuffer): Uint8Array {
+export function encodeWav(buffer: AudioBuffer): Uint8Array {
   const ch = buffer.numberOfChannels;
   const n = buffer.length;
   const bytesPerSample = 2;

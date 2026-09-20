@@ -14,11 +14,14 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "0.12.10",
     "@ffmpeg/util": "^0.12.1",
+    "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
     "lucide-react": "^0.441.0",
     "mp4-muxer": "^5.2.2",
     "opentype.js": "^1.3.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "webm-muxer": "^5.1.4",
     "zundo": "^2.1.0",
     "zustand": "^4.5.5"
   },
