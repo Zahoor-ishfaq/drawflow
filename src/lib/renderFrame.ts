@@ -5,7 +5,7 @@
 // export pipeline consume these, so preview and exported video always match.
 
 import type { Direction, DrawElement, HandStyle, MotionEasing, Project, Scene } from '../types';
-import { applyTransform, dashPropsAt, handTransformAt, measurePaths, type DashProps, type PathMeasure } from './drawing';
+import { applyTransform, dashPropsAt, handTransformAt, measurePaths, pointAt, type DashProps, type PathMeasure } from './drawing';
 import { buildCameraTimeline, cameraAt, localBounds, viewBoxFor, type CameraTimeline } from './camera';
 import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
 import { paperDef } from '../assets/paper';
@@ -89,9 +89,7 @@ export function strokeOrder(el: DrawElement, m: PathMeasure): number[] {
   if (!byM) { byM = new Map(); orderCache.set(m, byM); }
   const hit = byM.get(mode);
   if (hit) return hit;
-  const centres = m.els.map((p) => {
-    try { const b = p.getBBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; } catch { return { x: 0, y: 0 }; }
-  });
+  const centres = m.boxes.map((b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 }));
   const cx = m.bbox.x + m.bbox.width / 2, cy = m.bbox.y + m.bbox.height / 2;
   let out: number[];
   switch (mode) {
@@ -288,7 +286,7 @@ function applyExit(el: DrawElement, t: number, frame: ElementFrame, view: { widt
 }
 
 /** Scribble covering the local bounds, used by the erase exit. */
-function eraseScribble(b: Rect): string {
+export function eraseScribble(b: Rect): string {
   const pad = Math.max(b.width, b.height) * 0.06;
   const w = b.width + pad * 2, h = b.height + pad * 2;
   // scribblePath is anchored at the origin; shift it over the bounds
@@ -417,10 +415,8 @@ function tipPointOn(el: DrawElement, m: PathMeasure, progress: number, order?: n
       const len = m.lengths[i];
       if (total <= acc + len || i === order[order.length - 1]) {
         const local = Math.min(Math.max(total - acc, 0), len);
-        try {
-          const pt = m.els[i].getPointAtLength(local);
-          pose = { x: pt.x, y: pt.y, angle: 0 };
-        } catch { pose = null; }
+        const pt = pointAt(m, i, local);
+        pose = pt ? { x: pt.x, y: pt.y, angle: 0 } : null;
         break;
       }
       acc += len;

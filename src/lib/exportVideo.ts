@@ -11,6 +11,7 @@
 import type { AudioClip, DrawElement, HandStyle, Project } from '../types';
 import { encodeWav, mixdownBuffer, MIX_SAMPLE_RATE } from './audioMix';
 import { createEncodeSession } from './mediaEncoder';
+import { canRenderFast, renderAndEncodeParallel } from './parallelRender';
 import { makeRenderContext, svgStringForTime } from './renderFrame';
 import { getFFmpeg, terminateFFmpeg } from './ffmpegClient';
 import { HANDS, loadHandDataUrl } from '../assets/hands';
@@ -41,6 +42,10 @@ export interface ExportResult {
   sizeBytes: number;
   /** what actually did the work, for the UI / diagnostics */
   engine: 'webcodecs' | 'webcodecs+ffmpeg' | 'ffmpeg' | 'js';
+  /** wall-clock export time, ms */
+  elapsedMs: number;
+  /** frames painted by the worker pool (0 = single-threaded SVG path) */
+  parallelFrames: number;
 }
 
 export const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
@@ -134,8 +139,13 @@ function safeName(project: Project): string {
   return project.name.replace(/[^\w\- ]+/g, '').trim() || 'drawflow';
 }
 
-function result(blob: Blob, project: Project, ext: string, engine: ExportResult['engine']): ExportResult {
-  return { url: URL.createObjectURL(blob), filename: `${safeName(project)}.${ext}`, sizeBytes: blob.size, engine };
+function result(
+  blob: Blob, project: Project, ext: string, engine: ExportResult['engine'], t0: number, parallelFrames = 0,
+): ExportResult {
+  return {
+    url: URL.createObjectURL(blob), filename: `${safeName(project)}.${ext}`, sizeBytes: blob.size, engine,
+    elapsedMs: Math.round(performance.now() - t0), parallelFrames,
+  };
 }
 
 export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
@@ -143,6 +153,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   const { outW, outH } = outputSize(project, opts.height);
   const check = () => { if (signal?.aborted) throw new ExportCancelled(); };
 
+  const t0 = performance.now();
   opts.onPhase('loading');
   const renderer = await makeFrameRenderer(project, elements, outW, outH);
   const { canvas, ctx } = renderer;
@@ -154,12 +165,11 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   if (format === 'png') {
     await renderer.paint(opts.time ?? 0);
     const blob = await canvasToBlob(canvas, 'image/png');
-    return result(blob, project, 'png', 'js');
+    return result(blob, project, 'png', 'js', t0);
   }
 
   const totalFrames = Math.max(1, Math.ceil(duration * fps));
   const timing = { raster: 0, encode: 0, finish: 0 };
-  const t0 = performance.now();
 
   /** Paint frame i (time within the range) and hand it to `sink`. */
   const captureAll = async (step: number, sink: (i: number) => Promise<void>) => {
@@ -186,7 +196,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     });
     opts.onPhase('finishing');
     const zipped = zipSync(files, { level: 0 }); // PNGs are already compressed
-    return result(new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' }), project, 'zip', 'js');
+    return result(new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' }), project, 'zip', 'js', t0);
   }
 
   // ---- GIF ----------------------------------------------------------------
@@ -204,7 +214,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     opts.onPhase('finishing');
     gif.finish();
     const bytes = gif.bytes();
-    return result(new Blob([bytes.buffer as ArrayBuffer], { type: 'image/gif' }), project, 'gif', 'js');
+    return result(new Blob([bytes.buffer as ArrayBuffer], { type: 'image/gif' }), project, 'gif', 'js', t0);
   }
 
   // ---- MP4 / WebM ---------------------------------------------------------
@@ -215,8 +225,33 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   });
 
   if (session) {
+    let parallelFrames = 0;
     try {
-      await captureAll(1, (i) => session.addFrame(canvas, i));
+      // frames painted with Canvas2D and encoded by several encoders at
+      // once; the SVG path remains the fallback (and the reference renderer)
+      let painted = false;
+      if (canRenderFast()) {
+        opts.onPhase('capturing');
+        let delivered = 0;
+        try {
+          const s = performance.now();
+          const stats = await renderAndEncodeParallel({
+            ctx: makeRenderContext(project, elements), outW, outH, fps,
+            start: range.start, totalFrames, signal,
+            videoConfig: session.videoConfig, keyEvery: session.keyEvery,
+            onSegment: (chunks, description) => { session.addRawChunks(chunks, description); delivered++; },
+            onProgress: (done) => opts.onProgress(done / totalFrames),
+          });
+          timing.raster = performance.now() - s;
+          console.info('[export] parallel', Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])));
+          parallelFrames = totalFrames;
+          painted = true;
+        } catch (e) {
+          if (isCancelled(e) || delivered > 0) throw e;
+          console.warn('[export] parallel renderer failed, using the SVG renderer:', e);
+        }
+      }
+      if (!painted) await captureAll(1, (i) => session.addFrame(canvas, i));
       let mix: AudioBuffer | null = null;
       if (wantAudio) {
         opts.onPhase('encoding');
@@ -230,13 +265,13 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
       timing.finish = performance.now() - s;
       const type = format === 'mp4' ? 'video/mp4' : 'video/webm';
       if (!mix || session.audioSupported) {
-        console.info('[export]', format, `${outW}x${outH}`, totalFrames, 'frames in', Math.round(performance.now() - t0), 'ms', timing);
-        return result(new Blob([file.buffer as ArrayBuffer], { type }), project, format, 'webcodecs');
+        console.info('[export]', format, `${outW}x${outH}`, totalFrames, 'frames in', Math.round(performance.now() - t0), 'ms', parallelFrames ? 'parallel' : 'svg', timing);
+        return result(new Blob([file.buffer as ArrayBuffer], { type }), project, format, 'webcodecs', t0, parallelFrames);
       }
       // video done natively, but no audio encoder here: let ffmpeg attach the WAV
       const blob = await ffmpegMuxAudio(file, encodeWav(mix), format, duration, opts);
       console.info('[export]', format, 'webcodecs+ffmpeg', Math.round(performance.now() - t0), 'ms', timing);
-      return result(blob, project, format, 'webcodecs+ffmpeg');
+      return result(blob, project, format, 'webcodecs+ffmpeg', t0, parallelFrames);
     } finally {
       session.abort();
     }
@@ -248,7 +283,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
     clips: rangeClips(audioClips, range), wantAudio, opts,
   });
   console.info('[export]', format, 'ffmpeg software', Math.round(performance.now() - t0), 'ms', timing);
-  return result(blob, project, format, 'ffmpeg');
+  return result(blob, project, format, 'ffmpeg', t0);
 }
 
 /** Shift clips so the exported range starts at 0 (for scene exports). */

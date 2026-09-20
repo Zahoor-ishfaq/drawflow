@@ -12,8 +12,16 @@ export type ContainerFormat = 'mp4' | 'webm';
 export interface EncodeSession {
   /** true when the session will also take audio via addAudio() */
   audioSupported: boolean;
+  /** the encoder configuration in use (workers replicate it for segment encoding) */
+  videoConfig: VideoEncoderConfig;
+  /** keyframe interval in frames */
+  keyEvery: number;
   /** submit the current canvas contents as frame `index` */
   addFrame(canvas: OffscreenCanvas | HTMLCanvasElement, index: number): Promise<void>;
+  /** submit a ready-made frame (takes ownership and closes it) */
+  addVideoFrame(frame: VideoFrame, index: number): Promise<void>;
+  /** submit already-encoded chunks (from a worker), in timestamp order */
+  addRawChunks(chunks: { type: 'key' | 'delta'; timestamp: number; duration: number; data: ArrayBuffer }[], description: ArrayBuffer | null): void;
   /** encode a whole mixed-down buffer (call once, after or during frames) */
   addAudio(buffer: AudioBuffer): Promise<void>;
   /** finish and return the complete file */
@@ -43,6 +51,16 @@ function h264Candidates(width: number, height: number): string[] {
   return [`avc1.6400${level}`, `avc1.4d00${level}`, `avc1.4200${level}`, 'avc1.42E01E'];
 }
 
+/** Power-user overrides (e.g. {"latencyMode":"realtime"}) kept in localStorage. */
+export function encoderTweaks(): Partial<VideoEncoderConfig> {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('drawflow.encoder') : null;
+    return raw ? (JSON.parse(raw) as Partial<VideoEncoderConfig>) : {};
+  } catch {
+    return {};
+  }
+}
+
 async function pickVideoConfig(opts: SessionOptions): Promise<VideoEncoderConfig | null> {
   if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return null;
   const base = {
@@ -52,6 +70,7 @@ async function pickVideoConfig(opts: SessionOptions): Promise<VideoEncoderConfig
     bitrate: bitrateFor(opts.width, opts.height, opts.fps),
     bitrateMode: 'variable',
     latencyMode: 'quality',
+    ...encoderTweaks(),
   };
   const codecs = opts.format === 'mp4' ? h264Candidates(opts.width, opts.height) : ['vp09.00.10.08', 'vp8'];
   for (const codec of codecs) {
@@ -121,11 +140,20 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
   let failure: Error | null = null;
   const fail = (e: unknown) => { failure = e instanceof Error ? e : new Error(String(e)); };
 
-  const video = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta ?? {}),
-    error: fail,
-  });
-  video.configure(videoConfig);
+  // the main-thread encoder is only spun up if frames are submitted here
+  // (segment-parallel export encodes in workers and sends chunks instead)
+  let video: VideoEncoder | null = null;
+  const videoEncoder = () => {
+    if (!video) {
+      video = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta ?? {}),
+        error: fail,
+      });
+      video.configure(videoConfig);
+    }
+    return video;
+  };
+  let rawDescription: ArrayBuffer | null = null;
 
   let audio: AudioEncoder | null = null;
   if (audioConfig) {
@@ -146,18 +174,47 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
 
   return {
     audioSupported: !!audioConfig,
+    videoConfig,
+    keyEvery,
 
     async addFrame(canvas, index) {
       if (failure) throw failure;
-      await waitForQueue(() => video.encodeQueueSize);
+      const enc = videoEncoder();
+      await waitForQueue(() => enc.encodeQueueSize);
       const frame = new VideoFrame(canvas as unknown as CanvasImageSource, {
         timestamp: Math.round(index * frameMicros),
         duration: Math.round(frameMicros),
       });
       try {
-        video.encode(frame, { keyFrame: index % keyEvery === 0 });
+        enc.encode(frame, { keyFrame: index % keyEvery === 0 });
       } finally {
         frame.close();
+      }
+    },
+
+    async addVideoFrame(frame, index) {
+      try {
+        if (failure) throw failure;
+        const enc = videoEncoder();
+        await waitForQueue(() => enc.encodeQueueSize);
+        enc.encode(frame, { keyFrame: index % keyEvery === 0 });
+      } finally {
+        frame.close();
+      }
+    },
+
+    addRawChunks(chunks, description) {
+      for (const c of chunks) {
+        // the decoder config (avcC) rides along with the first chunk only
+        // (VP9 has no out-of-band description; the muxer wants an object or nothing)
+        let meta: EncodedVideoChunkMetadata = {};
+        if (!rawDescription && description) {
+          rawDescription = description;
+          meta = { decoderConfig: { codec: videoConfig.codec, codedWidth: width, codedHeight: height, description } };
+        }
+        // the two muxers disagree on the signature: WebM has no duration argument
+        if (isMp4) (muxer as Mp4Muxer<Mp4Target>).addVideoChunkRaw(new Uint8Array(c.data), c.type, c.timestamp, c.duration, meta);
+        else (muxer as WebmMuxer<WebmTarget>).addVideoChunkRaw(new Uint8Array(c.data), c.type, c.timestamp, meta);
       }
     },
 
@@ -192,17 +249,17 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
     },
 
     async finish() {
-      await video.flush();
+      if (video) await video.flush();
       if (audio) await audio.flush();
       if (failure) throw failure;
-      video.close();
+      video?.close();
       audio?.close();
       muxer.finalize();
       return new Uint8Array((muxer.target as Mp4Target | WebmTarget).buffer);
     },
 
     abort() {
-      try { if (video.state !== 'closed') video.close(); } catch { /* noop */ }
+      try { if (video && video.state !== 'closed') video.close(); } catch { /* noop */ }
       try { if (audio && audio.state !== 'closed') audio.close(); } catch { /* noop */ }
     },
   };

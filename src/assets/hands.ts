@@ -87,9 +87,9 @@ export function allHands(project?: Pick<Project, 'customHands'>): HandDef[] {
 // --- SVG markup ---------------------------------------------------------
 
 const SLEEVE_LENGTH = 9000; // image px — far beyond any frame at any zoom
-const CUFF = 48;
+export const CUFF = 48;
 
-function sleevePath(s: SleeveDef, fromX = 0): string {
+export function sleevePath(s: SleeveDef, fromX = 0): string {
   const { hw0, hw1 } = s;
   const hw2 = hw1 * 1.15;
   const c = hw0 * 0.35; // cuff edge bulges toward the hand
@@ -100,7 +100,7 @@ function sleevePath(s: SleeveDef, fromX = 0): string {
   );
 }
 
-function cuffPath(s: SleeveDef): string {
+export function cuffPath(s: SleeveDef): string {
   const { hw0, hw1 } = s;
   const c = hw0 * 0.35;
   const hwC = hw0 + ((hw1 - hw0) * CUFF) / 260;
