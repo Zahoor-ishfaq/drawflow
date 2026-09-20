@@ -75,8 +75,11 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
   const scenes: Scene[] = [];
   let z = st.elements.reduce((m, e) => Math.max(m, e.zIndex), -1) + 1;
 
+  // scenes sit side by side on the paper (to the right of anything already there)
+  const existing = st.elements.length ? Math.max(...st.elements.map((e) => e.x)) + W * 1.2 : 0;
   for (let si = 0; si < plan.scenes.length; si++) {
     const sc = plan.scenes[si];
+    const ox = existing + si * W * 1.2;
     opts.onProgress?.(`Building scene ${si + 1} of ${plan.scenes.length}: ${sc.name}`);
     const scene: Scene = {
       id: crypto.randomUUID(), name: sc.name || `Scene ${si + 1}`, transition: si === 0 ? 'cut' : 'fade', transitionDuration: 0.6, clearBefore: si > 0,
@@ -90,7 +93,7 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
     const slotW = W / Math.max(1, bodies.length);
     for (const it of items) {
       const isTitle = it.type === 'text' && it.size === 'title';
-      const cx = isTitle ? W / 2 : slotW * (bodyIndex + 0.5);
+      const cx = ox + (isTitle ? W / 2 : slotW * (bodyIndex + 0.5));
       const cy = isTitle ? H * 0.2 : titles.length ? H * 0.6 : H * 0.5;
       if (!isTitle) bodyIndex++;
       const base = {

@@ -78,7 +78,7 @@
         "background": { "type": "string", "description": "Paper colour (CSS)" },
         "paper": { "$ref": "#/definitions/PaperStyle" },
         "duration": { "type": "number", "minimum": 0, "description": "Derived from the elements and clips; recomputed on load" },
-        "hand": { "type": "string", "description": "marker | pen | chalk | pencil | brush | eraser | none | custom:<id>" },
+        "hand": { "type": "string", "description": "marker | pen | chalk | marker-left | pen-left | chalk-left | none | custom:<id>" },
         "cameraEasing": { "enum": ["easeOut", "linear", "cut"] },
         "cameraFill": { "type": "number", "minimum": 0.1, "maximum": 1 },
         "zoomAtEnd": { "type": "boolean" },

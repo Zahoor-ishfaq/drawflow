@@ -32,9 +32,11 @@ export interface HandDef {
   frameFraction: number;
   /** built-in hands get a drawn sleeve; uploaded hands are used as-is */
   sleeve?: SleeveDef;
+  /** draw the picture flipped horizontally (a left hand made from a right-hand photo) */
+  mirror?: boolean;
 }
 
-export const HANDS: HandDef[] = [
+const RIGHT_HANDS: HandDef[] = [
   {
     id: 'marker', label: 'Marker', description: 'Black felt-tip — classic whiteboard look',
     src: markerSrc, width: 725, height: 734, tipX: 218, tipY: 13, frameFraction: 0.72,
@@ -51,6 +53,24 @@ export const HANDS: HandDef[] = [
     sleeve: { x: 455, y: 495, angle: 28, hw0: 92, hw1: 128 },
   },
 ];
+
+/** The same photo flipped: a left hand whose arm comes in from the left. */
+function mirrored(def: HandDef): HandDef {
+  return {
+    ...def,
+    id: `${def.id}-left`,
+    label: `${def.label} · left hand`,
+    description: `${def.description} — left-handed, arm from the left`,
+    tipX: def.width - def.tipX,
+    mirror: true,
+  };
+}
+
+/** Photographic hands: each as a right hand (arm from the right) and a left hand. */
+export const HANDS: HandDef[] = RIGHT_HANDS.flatMap((h) => [
+  { ...h, label: `${h.label} · right hand`, description: `${h.description} — right-handed, arm from the right` },
+  mirrored(h),
+]);
 
 export const CUSTOM_PREFIX = 'custom:';
 
@@ -69,11 +89,8 @@ export function customHandDef(h: CustomHand): HandDef {
 }
 
 /** Resolve a hand style; `project` supplies the user's uploaded hands. */
-// the flat cartoon set lives in its own module (SVG, no photos)
-import { CARTOON_HANDS } from './cartoonHands';
-
-/** Photographic and cartoon hands shipped with the app. */
-export const BUILT_IN_HANDS: HandDef[] = [...HANDS, ...CARTOON_HANDS];
+/** Hands shipped with the app. */
+export const BUILT_IN_HANDS: HandDef[] = HANDS;
 
 export function handDef(style: HandStyle, project?: Pick<Project, 'customHands'>): HandDef | null {
   if (style === 'none') return null;
@@ -122,6 +139,12 @@ export function cuffPath(s: SleeveDef): string {
 export function handInnerSvg(def: HandDef, href: string): string {
   const s = def.sleeve;
   if (!s) return `<image href="${href}" width="${def.width}" height="${def.height}"/>`;
+  // a mirrored hand is the unflipped picture inside a horizontal flip
+  const inner = handInnerSvgUnflipped(def, href, s);
+  return def.mirror ? `<g transform="translate(${def.width} 0) scale(-1 1)">${inner}</g>` : inner;
+}
+
+function handInnerSvgUnflipped(def: HandDef, href: string, s: SleeveDef): string {
   const gid = `sleeve-${def.id}`;
   const hw2 = s.hw1 * 1.15;
   return (

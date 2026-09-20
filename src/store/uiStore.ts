@@ -13,6 +13,8 @@ export interface UiState {
   theme: Theme;
   timelineHeight: number;    // px
   timelineZoom: number;      // 1 = whole project fits
+  /** audio lanes the user wants shown even when empty */
+  lanes: { music: boolean; voice: boolean; sfx: boolean };
   libraryWidth: number;      // px
   inspectorWidth: number;    // px
   showStats: boolean;        // fps / render timing overlay
@@ -40,6 +42,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   theme: 'system',
   timelineHeight: 0, // 0 = default layout
   timelineZoom: 1,
+  lanes: { music: false, voice: true, sfx: false },
   libraryWidth: 340,
   inspectorWidth: 290,
   showStats: false,

@@ -1,27 +1,23 @@
 import { useRef, useState } from 'react';
 import { useUiStore } from '../../store/uiStore';
-import { Hand, Image, Layers, Music, Shapes, Sparkles, StickyNote, Type, Users, X } from 'lucide-react';
+import { Hand, Layers, LibraryBig, Mic, Sparkles, StickyNote, Type, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
-import { ShapesPanel } from '../library/ShapesPanel';
-import { ImagesPanel } from '../library/ImagesPanel';
+import { LibraryPanel } from '../library/LibraryPanel';
 import { AudioPanel } from '../library/AudioPanel';
 import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
 import { AiPanel } from '../library/AiPanel';
 import { LayersPanel } from '../library/LayersPanel';
-import { CharactersPanel } from '../library/CharactersPanel';
 import { usePlugins } from '../../lib/plugins';
 import { useEffect, useRef as useRef2 } from 'react';
 import { IconButton } from '../ui/IconButton';
 
-type Tool = 'images' | 'text' | 'shapes' | 'characters' | 'music' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
+type Tool = 'library' | 'text' | 'voice' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
-  { id: 'images', label: 'Images', Icon: Image },
+  { id: 'library', label: 'Library', Icon: LibraryBig },
   { id: 'text', label: 'Text', Icon: Type },
-  { id: 'shapes', label: 'Shapes', Icon: Shapes },
-  { id: 'characters', label: 'People', Icon: Users },
-  { id: 'music', label: 'Music', Icon: Music },
+  { id: 'voice', label: 'Voice', Icon: Mic },
   { id: 'ai', label: 'AI', Icon: Sparkles },
 ];
 
@@ -45,11 +41,9 @@ function PluginPanelHost({ id }: { id: string }) {
 }
 
 const PANEL_TITLES: Record<string, string> = {
-  images: 'Images',
+  library: 'Library',
   text: 'Add text',
-  shapes: 'Shapes & icons',
-  characters: 'Characters',
-  music: 'Music',
+  voice: 'Voice & sound',
   ai: 'AI assistant',
   layers: 'Layers',
   hand: 'Set hand',
@@ -66,13 +60,13 @@ function RailButton({
       title={label}
       aria-label={label}
       className={
-        'df-ui-anim flex h-12 w-12 flex-col items-center justify-center gap-0.5 rounded-xl transition-colors ' +
+        'df-ui-anim flex h-[52px] w-[52px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl transition-colors ' +
         (open ? 'bg-accent-weak text-accent' : 'text-t2 hover:bg-hov hover:text-t1')
       }
       onClick={onClick}
     >
-      <Icon size={19} />
-      <span className="text-[9.5px] leading-none font-medium">{label}</span>
+      <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+      <span className="h-[11px] text-[9.5px] leading-[11px] font-medium">{label}</span>
     </button>
   );
 }
@@ -88,15 +82,15 @@ export function IconRail() {
 
   return (
     <div className="relative z-30 flex shrink-0">
-      <div className="flex w-[64px] flex-col items-center gap-1 border-r border-line bg-panel py-3">
+      <div className="flex w-[64px] flex-col items-center gap-1.5 overflow-y-auto border-r border-line bg-panel py-2.5">
         {ADD_TOOLS.map((t) => (
           <RailButton key={t.id} tool={t} open={open === t.id} onClick={() => toggle(t.id)} />
         ))}
-        <div className="my-1.5 h-px w-8 bg-line" />
+        <div className="my-1 h-px w-8 shrink-0 bg-line" />
         {SETUP_TOOLS.map((t) => (
           <RailButton key={t.id} tool={t} open={open === t.id} onClick={() => toggle(t.id)} />
         ))}
-        {panels.length > 0 && <div className="my-1.5 h-px w-8 bg-line" />}
+        {panels.length > 0 && <div className="my-1 h-px w-8 shrink-0 bg-line" />}
         {panels.map((p) => (
           <RailButton key={p.id} tool={{ id: `plugin:${p.id}`, label: p.label.slice(0, 8), Icon: Sparkles }} open={open === `plugin:${p.id}`} onClick={() => toggle(`plugin:${p.id}`)} />
         ))}
@@ -119,11 +113,9 @@ export function IconRail() {
             </IconButton>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {open === 'images' && <ImagesPanel />}
+            {open === 'library' && <LibraryPanel />}
             {open === 'text' && <TextPanel onAdded={close} />}
-            {open === 'shapes' && <ShapesPanel />}
-            {open === 'characters' && <CharactersPanel onAdded={close} />}
-            {open === 'music' && <AudioPanel onAdded={close} />}
+            {open === 'voice' && <AudioPanel onAdded={close} />}
             {open === 'ai' && <AiPanel />}
             {open === 'layers' && <LayersPanel />}
             {open.startsWith('plugin:') && <PluginPanelHost id={open.slice(7)} />}

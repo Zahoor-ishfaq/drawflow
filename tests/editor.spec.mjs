@@ -71,8 +71,10 @@ test.describe('editor', () => {
     await openApp(page);
     await addText(page, 'A', 1);
     await addText(page, 'B', 2);
-    await page.getByRole('button', { name: /^Scenes$/ }).click();
-    await page.getByRole('button', { name: 'Add scene' }).click();
+    const addScene = page.getByTitle(/^Add a scene/);
+    await addScene.click();
+    await page.keyboard.press('Escape');
+    await addScene.click();
     await page.keyboard.press('Escape');
     expect((await project(page)).scenes).toEqual(['Scene 1', 'Scene 2']);
     const ids = (await elements(page)).map((e) => e.id);

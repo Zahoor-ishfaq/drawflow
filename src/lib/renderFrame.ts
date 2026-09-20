@@ -480,7 +480,8 @@ export function handFrameAt(
 ): HandFrame | null {
   const cam = cameraAt(t, timeline, project);
   const vb = viewBoxFor(cam, project);
-  const offscreen = { x: vb.x + vb.width * 1.08, y: vb.y + vb.height * 1.08 };
+  // the hand waits just outside the frame on the side its arm comes from
+  const offscreenFor = (def: HandDef) => ({ x: def.mirror ? vb.x - vb.width * 0.08 : vb.x + vb.width * 1.08, y: vb.y + vb.height * 1.08 });
   const offset = project.handOffset ?? { x: 0, y: 0 };
   const smoothing = Math.min(1, Math.max(0, project.handSmoothing ?? 0));
 
@@ -518,6 +519,7 @@ export function handFrameAt(
     const style: HandStyle = el.hand ?? project.hand;
     const def = handDef(style, project);
     if (!def) continue;
+    const offscreen = offscreenFor(def);
 
     const { start, end } = act;
     const sample = (time: number) => {

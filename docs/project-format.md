@@ -25,7 +25,7 @@ draft-07); this page explains the ideas behind it.
 |---|---|
 | `width`, `height`, `fps` | Video size and frame rate (24/25/30/50/60). |
 | `background`, `paper` | Paper colour and style (`plain`, `grid`, `dots`, `lined`, `cream`, `chalkboard`, `kraft`). |
-| `hand` | Default hand: `marker`, `pen`, `chalk`, `pencil`, `brush`, `eraser`, `none` or `custom:<id>`. |
+| `hand` | Default hand: `marker`, `pen`, `chalk` (right hands), `marker-left`, `pen-left`, `chalk-left`, `none` or `custom:<id>`. |
 | `cameraEasing`, `cameraFill`, `zoomAtEnd`, `endHold` | Camera behaviour; `duration` is derived and recomputed on load. |
 | `scenes[]` | `{ id, name, transition: cut|fade|wipe, transitionDuration, clearBefore?, paper?, background? }`. Elements point at a scene by `sceneId`; scene order is the element order. |
 | `markers[]` | `{ id, time, name, color }` on the timeline ruler. |

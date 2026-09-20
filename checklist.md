@@ -3,7 +3,7 @@
 Status as of 20 Sep 2026, checked against the code in this repo.
 
 | Symbol | Meaning |
-|---|---|
+| --- | --- |
 | ✅ | Done and working |
 | 🟡 | Partly there — see note |
 | ⬜ | Not started |
@@ -11,361 +11,369 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 ## At a glance
 
 | Section | ✅ Done | 🟡 Partial | ⬜ Not yet |
-|---|---:|---:|---:|
-| 1. Core canvas / editor | 6 | 4 | 9 |
-| 2. Drawing / whiteboard effect | 10 | 0 | 11 |
-| 3. Animation system | 4 | 0 | 6 |
-| 4. Timeline | 10 | 5 | 11 |
-| 5. Camera | 8 | 3 | 1 |
-| 6. Scenes | 0 | 0 | 6 |
-| 7. Assets | 10 | 4 | 8 |
-| 8. Characters | 0 | 1 | 3 |
-| 9. Text | 4 | 3 | 7 |
-| 10. Audio | 10 | 2 | 5 |
-| 11. Export / rendering | 7 | 2 | 13 |
-| 12. Project system | 8 | 1 | 2 |
-| 13. Templates | 1 | 0 | 3 |
+| --- | ---: | ---: | ---: |
+| 1. Core canvas / editor | 19 | 0 | 0 |
+| 2. Drawing / whiteboard effect | 18 | 1 | 1 |
+| 3. Animation system | 11 | 0 | 0 |
+| 4. Timeline | 23 | 1 | 2 |
+| 5. Camera | 7 | 2 | 1 |
+| 6. Scenes | 9 | 1 | 0 |
+| 7. Assets | 19 | 2 | 0 |
+| 8. Characters | 4 | 2 | 1 |
+| 9. Text | 14 | 1 | 0 |
+| 10. Audio | 13 | 0 | 0 |
+| 11. Export / rendering | 19 | 2 | 1 |
+| 12. Project system | 11 | 0 | 0 |
+| 13. Templates | 4 | 1 | 0 |
 | 14. Collaboration | 1 | 0 | 1 |
-| 15. AI | 5 | 4 | 5 |
-| 16. Keyboard shortcuts | 4 | 1 | 6 |
-| 17. Developer / open-source | 2 | 1 | 8 |
-| 18. Professional UX | 6 | 0 | 9 |
-| **Total** | **96** | **31** | **114** |
+| 15. AI | 14 | 0 | 0 |
+| 16. Keyboard shortcuts | 12 | 0 | 0 |
+| 17. Developer / open-source | 14 | 1 | 1 |
+| 18. Professional UX | 13 | 1 | 1 |
+| **Total** | **225** | **15** | **9** |
 
-**V1 is complete apart from Scenes.** Export, audio, camera, project files and the AI assistant are all working; the remaining work is mostly editor polish (multi-select, copy/paste), more animation types, scenes, templates and the open-source tooling (CLI, plugins).
+**Every roadmap phase (V1–V3) is complete** apart from keyframes (a deliberate design choice) and things that need a server (collaboration). What remains is listed at the end under *Not built, and why*.
 
 ---
 
 ## 1. Core canvas / editor
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Infinite canvas | Artboard sits on an unbounded pasteboard |
 | ✅ | Video presets 16:9, 9:16, 1:1 | Project panel |
-| ✅ | Zoom in / out | Mouse wheel on the stage |
-| ✅ | Pan canvas | Hand cursor over empty paper, drag to pan |
-| 🟡 | Grid / guides | Grid, dots and lined *paper styles* only; no smart guides |
-| ⬜ | Snap to grid | |
-| ⬜ | Rulers | |
+| ✅ | Zoom in / out | Wheel, Ctrl+= / Ctrl+-, Ctrl+0 fit, Ctrl+1 100% |
+| ✅ | Pan canvas | Hand cursor over empty paper, middle-drag anywhere |
+| ✅ | Grid / guides | Grid overlay when snapping is on; smart alignment guides to other elements and the frame while dragging |
+| ✅ | Snap to grid | View menu / Ctrl+', grid size 10–100 px |
+| ✅ | Rulers | Ctrl+R |
 | ✅ | Undo / redo | Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y |
-| ⬜ | Copy / paste | |
+| ✅ | Copy / paste | Ctrl+C/X/V, survives reloads, repeated pastes offset |
 | ✅ | Duplicate | Ctrl+D |
-| ⬜ | Multi-select | Single selection only |
-| ⬜ | Group / ungroup | |
-| ⬜ | Lock objects | |
-| ⬜ | Hide objects | |
-| 🟡 | Layers | Stacking follows draw order (VideoScribe model); no layers panel |
-| ⬜ | Alignment tools | |
-| ⬜ | Distribute objects | |
-| 🟡 | Bring forward / send backward | Reorder on the timeline strip changes stacking too |
-| 🟡 | Delete / replace asset | Delete yes; replace-in-place no |
+| ✅ | Multi-select | Shift-click, Ctrl+A, Shift-drag marquee; group move |
+| ✅ | Group / ungroup | Ctrl+G / Ctrl+Shift+G — vector elements are merged with transforms baked in (rasters can't be merged) |
+| ✅ | Lock objects | Ctrl+L; locked elements are skipped by canvas clicks |
+| ✅ | Hide objects | Ctrl+Shift+H; hidden elements take no time and are left out of the video |
+| ✅ | Layers | Layers panel: drag rows (or arrows) to reorder, rename, lock, hide; stacking follows draw order plus optional per-element layer offsets |
+| ✅ | Alignment tools | Left / centre / right / top / middle / bottom — to each other, or to the frame for one element |
+| ✅ | Distribute objects | Even horizontal / vertical spacing |
+| ✅ | Bring forward / send backward | `[` `]` and Ctrl+`[` `]`, plus the Layers panel |
+| ✅ | Delete / replace asset | "Replace image…" keeps timing and transform |
 
 ## 2. Drawing / whiteboard effect
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | SVG stroke-by-stroke drawing | Dash-offset reveal per path |
-| ✅ | PNG / JPG reveal | Scribble-mask reveal with the hand |
+| ✅ | PNG / JPG reveal | Scribble (default), wipe, radial or centre-out reveal |
 | ✅ | Automatic drawing-path detection | Path order from the SVG; auto scribble path for rasters |
 | ✅ | Progressive stroke drawing | |
 | ✅ | Adjustable drawing speed | "Animate" seconds per element |
-| ✅ | Outline reveal | Outline first, fill appears after (`fillAfterDraw`) |
-| ⬜ | Draw left→right / right→left / top→bottom / centre | Only stroke-order draw |
-| ⬜ | Radial reveal | |
-| ⬜ | Wipe reveal | |
-| ⬜ | Fill reveal | |
-| ⬜ | Adjustable stroke order | Follows SVG order |
-| ✅ | Hand follows drawing path | |
-| ⬜ | Hand movement smoothing | Hand sits exactly on the path point |
-| ⬜ | Hand position offset | Fixed per hand |
-| ⬜ | Custom drawing hands | No user upload |
+| ✅ | Outline reveal | Outline first, fill fades in after (`fillAfterDraw`) |
+| ✅ | Draw left→right / right→left / top→bottom / centre | Stroke order for vector art; wipe direction and centre-out for photos |
+| ✅ | Radial reveal | Photos |
+| ✅ | Wipe reveal | Photos (any side) |
+| 🟡 | Fill reveal | Fill fades in after the outline; no directional fill sweep |
+| ✅ | Adjustable stroke order | File order, reverse, left→right, right→left, top→bottom, bottom→top, centre out |
+| ✅ | Hand follows drawing path | Also follows erase and reverse-draw exits |
+| ✅ | Hand movement smoothing | Project setting 0–1 |
+| ✅ | Hand position offset | Project setting, for uploaded hands whose tip is slightly off |
+| ✅ | Custom drawing hands | Upload a transparent PNG/WebP, click the pen tip, set the size |
 | ✅ | Pen hand | Photographic, arm runs off the board |
 | ✅ | Marker hand | |
-| ✅ | Chalk hand | (in place of pencil) |
-| ⬜ | Pencil hand | |
-| ⬜ | Brush hand | |
-| ⬜ | Eraser hand | |
+| ✅ | Chalk hand | |
+| ✅ | Left- and right-handed variants | Every photographic hand comes as a right hand (arm from the right) and a mirrored left hand |
+| ⬜ | Pencil / brush / eraser hands | No photographs yet (cartoon versions were removed as not realistic enough); upload your own photo meanwhile |
 
 ## 3. Animation system
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Entrance · Draw | |
-| ✅ | Entrance · Fade in | |
-| ✅ | Entrance · Slide in | From left / right / top / bottom |
-| ✅ | Entrance · Appear | (extra) |
-| ⬜ | Entrance · Wipe | |
-| ⬜ | Entrance · Scale in | |
-| ⬜ | Entrance · Pop | |
-| ⬜ | Entrance · Bounce | |
-| ⬜ | Emphasis · Pulse / Shake / Bounce / Rotate / Scale / Highlight | No emphasis effects yet |
-| ⬜ | Exit · Fade out / Slide out / Wipe out / Erase / Reverse draw | No exit effects yet — elements stay on the board |
+| ✅ | Entrance · Fade in | With easing |
+| ✅ | Entrance · Slide in | From any side, with easing |
+| ✅ | Entrance · Wipe | From any side |
+| ✅ | Entrance · Scale in | |
+| ✅ | Entrance · Pop | Overshoot |
+| ✅ | Entrance · Bounce | Drops in and bounces |
+| ✅ | Entrance · Typewriter / Appear | Typewriter for text (glyph by glyph) |
+| ✅ | Emphasis · Pulse / Shake / Bounce / Rotate / Scale / Highlight | Spin = rotate, Grow = scale; duration, delay and repeat count; the next element waits |
+| ✅ | Exit · Fade out / Slide out / Wipe out / Erase / Reverse draw | Plus Shrink; delay after the element's pause; erase and reverse draw are performed by the hand |
+| ✅ | Plugin effects | Plugins can add entrance / emphasis / exit effects that render in preview, export and CLI |
 
 ## 4. Timeline
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Horizontal timeline | Element strip + audio lanes + scrub bar |
-| 🟡 | Object tracks | One sequential strip (VideoScribe style), not free tracks |
-| ✅ | Audio tracks | Music + Voice lanes |
-| ⬜ | Scene tracks | |
-| ✅ | Playhead | |
-| 🟡 | Drag object duration | Edited by numbers on the card, not by dragging |
-| 🟡 | Move object timing | Drag to reorder; elements always play one after another |
+| --- | --- | --- |
+| ✅ | Horizontal timeline | Ruler, element track, three audio lanes, film strip |
+| ✅ | Object tracks | Time-proportional element track (transition gap, draw, emphasis, pause, exit) |
+| ✅ | Audio tracks | Music, voice, sound effects — a lane shows when it has clips or is switched on |
+| ✅ | Scene tracks | Scene headers group the film strip (right-click for rename, settings, reorder, duplicate, delete); element blocks coloured by scene |
+| ✅ | Playhead | Auto-scrolls while playing when zoomed |
+| ✅ | Drag object duration | Drag the draw / pause / transition edges of a block |
+| ✅ | Move object timing | Drag a block to reorder; elements always play in sequence |
 | ✅ | Animation duration | Animate |
 | ✅ | Delay before animation | Transition (camera move) + Pause (hold after) |
-| ✅ | Start / end times | Derived from the sequence, shown on cards |
-| ⬜ | Timeline zoom | Strip fits the project length |
-| 🟡 | Snap timing | Audio clips snap to clip edges / playhead |
+| ✅ | Start / end times | Derived from the sequence, shown on blocks and cards |
+| ✅ | Timeline zoom | Ctrl+wheel around the cursor, ± buttons, fit |
+| ✅ | Snap timing | Markers, clip edges, other elements, playhead, whole seconds (with a snap line) |
 | ✅ | Split | Audio clips, `S` at playhead |
 | ✅ | Trim | Audio clip edge drag |
-| ⬜ | Copy / paste timing | |
-| ⬜ | Multiple objects at the same time | |
+| ✅ | Copy / paste timing | Ctrl+Shift+C / V copies Animate, Pause, Transition, effects, camera and hand |
+| ✅ | Multiple objects at the same time | "Start together with the previous element" |
 | ✅ | Sequential animation | |
-| ⬜ | Parallel animation | |
-| ⬜ | Keyframes | |
-| 🟡 | Easing | Camera easing only (ease-out / linear / cut) |
+| ✅ | Parallel animation | Start-with-previous groups |
+| ⬜ | Keyframes | By design the model is effect-based; plugins can implement keyframed motion as effects |
+| ✅ | Easing | Camera easing and per-effect easing (ease out / in / smooth / linear) |
 | ⬜ | Curve editor | |
-| ✅ | Audio waveform under objects | Waveforms drawn in the lanes |
-| ⬜ | "Fit animation to narration" | |
-| ⬜ | Select sentence → adjust timing | |
-| ⬜ | Snap object timing to waveform | |
-| ⬜ | Markers on timeline | |
+| ✅ | Audio waveform under objects | |
+| ✅ | "Fit animation to narration" | From silence detection (offline) or Whisper sentence timestamps (Groq / OpenAI) |
+| 🟡 | Select sentence → adjust timing | Sentences come from the transcript and are matched in order; no click-a-sentence UI |
+| ✅ | Snap object timing to waveform | Element edges snap to clip boundaries; phrase fitting aligns to speech |
+| ✅ | Markers on timeline | `M` / double-click the ruler; drag, rename, colour, delete; everything snaps to them |
 
 ## 5. Camera
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Camera position | |
-| ✅ | Camera zoom | |
-| ✅ | Camera pan | |
+| --- | --- | --- |
+| ✅ | Camera position / zoom / pan | |
 | ⬜ | Camera rotation | |
-| 🟡 | Camera keyframes | One "shot" per element (auto / previous / whole / custom); no free keyframes |
+| 🟡 | Camera keyframes | One shot per element (stay / this shot / zoom / scene / all); no free keyframes |
 | ✅ | Camera easing | ease-out / linear / cut |
 | 🟡 | Camera path | Straight interpolation between shots |
 | ✅ | Automatic camera framing | Fill % + per-element zoom tightness |
-| ✅ | Focus on object | Click a card; resizable camera boundary on the stage |
-| 🟡 | Focus on scene | "Whole scribe" mode; no scenes yet |
-| ✅ | Camera preview | Boundary frame in Edit view, exact frame in Preview |
-| ✅ | End on last shot / optional pull-back | (extra) |
+| ✅ | Focus on object | Click a card; resizable camera boundary on the stage; `F` frames the selection |
+| ✅ | Focus on scene | "Scene" framing shows everything in the element's scene |
+| ✅ | Camera preview | Boundary frame in Edit view, exact frame in Preview and full-screen preview |
+| ✅ | End on last shot / optional pull-back | |
 
 ## 6. Scenes
 
 | Status | Feature | Note |
-|---|---|---|
-| ⬜ | Create / delete / duplicate / rename / reorder scenes | Project is one continuous scribe |
-| ⬜ | Scene duration | |
-| ⬜ | Scene thumbnails | |
-| ⬜ | Scene transitions | |
-| ⬜ | Scene-specific background / audio / camera | |
-| ⬜ | Scene templates | |
+| --- | --- | --- |
+| ✅ | Create / delete / duplicate / rename / reorder scenes | Chips above the timeline; delete keeps or removes the elements |
+| ✅ | Scene duration | Shown on the chip tooltip and the coloured track |
+| 🟡 | Scene thumbnails | Chips show element counts; project thumbnails exist, per-scene pictures don't |
+| ✅ | Scene transitions | Cut, fade, wipe with adjustable length |
+| ✅ | Scene-specific background | Paper style / colour per scene |
+| ✅ | Scene-specific audio | A clip can belong to a scene and moves with it |
+| ✅ | Scene-specific camera | "Camera: whole scene" |
+| ✅ | Clear the board between scenes | "Clear before" |
+| ✅ | Scene templates | Save a scene as a template; insert it into any project |
+| ✅ | Render one scene | Export dialog and `drawflow render --scene` |
 
 ## 7. Assets
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Import SVG | Arcs, even-odd fills, per-path colours preserved |
-| ✅ | Import PNG / JPG / WebP | Alpha kept for PNG / WebP |
+| --- | --- | --- |
+| ✅ | Import SVG / PNG / JPG / WebP | |
 | 🟡 | Import GIF | First frame only (still) |
-| ⬜ | PDF → assets | |
-| ✅ | Drag / drop files | Drop zone in the Images panel |
-| ✅ | Asset library | OpenMoji line-art + Open Doodles people |
-| ✅ | Categories | 11 categories |
-| ✅ | Search | Names + tags |
-| 🟡 | Tags | Used by search; no tag editing |
-| ⬜ | Favorites | |
-| ⬜ | Recently used | |
-| 🟡 | Custom asset collections | Persistent Uploads gallery (IndexedDB) |
-| ⬜ | Import asset packs | |
-| ⬜ | Export asset packs | |
-| ✅ | Resize | |
-| ✅ | Rotate | |
-| ⬜ | Crop | |
-| ⬜ | Flip | |
+| ✅ | PDF → assets | Each page becomes a picture (pdf.js) |
+| ✅ | Drag / drop files | Images panel drop zone; audio onto lanes |
+| ✅ | Asset library | OpenMoji line-art + Open Doodles people, 1,400 pieces |
+| ✅ | Categories | 11 categories plus Favourites and Recent |
+| ✅ | Search | One search over illustrations, shapes, icons, people and uploads — ranked, with synonyms, plurals and typo tolerance |
+| ✅ | Tags | Editable on uploads; used by search |
+| ✅ | Favorites | Star any library picture or upload |
+| ✅ | Recently used | |
+| ✅ | Custom asset collections | Persistent Uploads gallery; packs |
+| ✅ | Import asset packs | .zip of pictures with optional manifest.json; folders become tags |
+| ✅ | Export asset packs | Uploads → .zip with manifest |
+| ✅ | Plugin asset providers | Plugins can add searchable sources |
+| ✅ | Resize / Rotate | Handles + numeric |
+| ✅ | Crop | Image inset per side |
+| ✅ | Flip | Horizontal / vertical |
 | ✅ | Change colour | Stroke / fill |
-| ⬜ | Opacity | |
+| ✅ | Opacity | |
 | ✅ | Stroke width | |
 | 🟡 | Recolour SVG | One stroke + one fill override; multi-colour art keeps its own colours |
 
 ## 8. Characters
 
 | Status | Feature | Note |
-|---|---|---|
-| 🟡 | Character library | "Sketch people" — static Open Doodles poses (standing, sitting, …) |
-| ⬜ | Custom characters, poses, expressions, hand positions | |
-| ⬜ | Walking / talking / pointing | |
+| --- | --- | --- |
+| ✅ | Character library | "People" tab: poses, expressions, gestures, roles with search |
+| 🟡 | Custom characters | Compose a pose + face + prop and group them; no rig editor |
+| ✅ | Multiple poses | 33 full-body sketch poses (sitting, standing, reading, running, dancing…) |
+| ✅ | Facial expressions | 70 faces |
+| ✅ | Different hand positions | Gesture pictures |
+| 🟡 | Walking / talking / pointing | Static poses animated with emphasis effects; no skeletal animation |
 | ⬜ | Custom character parts | |
 
 ## 9. Text
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Text objects | Converted to glyph outlines so the hand can draw them |
-| 🟡 | Custom fonts | 3 bundled (Caveat, Shadows Into Light, Inter); no user font upload |
+| --- | --- | --- |
+| ✅ | Text objects | Glyph outlines drawn by the hand |
+| ✅ | Custom fonts | Three bundled + upload your own TTF/OTF (kept in the project) |
 | ✅ | Font size | |
-| ⬜ | Bold | |
-| ⬜ | Italic | |
-| ⬜ | Alignment | |
-| ⬜ | Line spacing | |
-| ⬜ | Letter spacing | |
+| ✅ | Bold | Synthetic weight |
+| ✅ | Italic | Synthetic skew |
+| ✅ | Alignment | Left / centre / right |
+| ✅ | Line spacing | |
+| ✅ | Letter spacing | |
 | ✅ | Text colour | |
-| ✅ | Text draw / reveal (handwritten effect) | |
-| 🟡 | Text animation | Draw / fade / slide / appear |
-| ⬜ | Typewriter effect | |
-| 🟡 | Multilingual | Latin scripts only (bundled fonts) |
-| ⬜ | RTL support | |
+| ✅ | Text animation | Draw / typewriter / any entrance, emphasis, exit |
+| ✅ | Handwritten text effect | |
+| ✅ | Typewriter effect | |
+| ✅ | Text draw / reveal | |
+| ✅ | Multilingual text | Any script whose font you add |
+| 🟡 | RTL support | Right-to-left ordering with auto-detection; Arabic letters are not joined (no shaping engine) |
 
 ## 10. Audio
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Import MP3 / WAV | Anything the browser decodes (also OGG, M4A, WebM) |
-| ✅ | Voiceover | Recorded in-app or imported |
+| ✅ | Voiceover | Recorded in-app, imported, or generated |
 | ✅ | Background music | |
-| 🟡 | Sound effects | Any clip can go on either lane; no SFX library |
-| ✅ | Volume | Per clip, live while playing |
-| ✅ | Fade in / fade out | |
-| ✅ | Trim | |
-| ✅ | Split | `S` at playhead |
+| ✅ | Sound effects | Dedicated lane, twelve built-in synthesised effects, or your own |
+| ✅ | Volume / fade in / fade out / trim / split | |
 | ✅ | Audio waveform | |
-| 🟡 | Multiple audio tracks | Two lanes (music, voice), many clips per lane |
-| ✅ | Mute | |
-| ⬜ | Solo | |
-| ✅ | Record microphone | With live level meter, lands on the Voice lane |
-| ⬜ | Noise reduction | |
-| ⬜ | Audio normalisation | |
-| ⬜ | AI voice generation | |
-| ⬜ | Automatic narration sync | |
+| ✅ | Multiple audio tracks | Music, voice, sfx lanes, many clips each |
+| ✅ | Mute / solo | |
+| ✅ | Record microphone | Live level meter, lands on the Voice lane |
+| ✅ | Noise reduction | Basic: high-pass + noise gate rendered into a clean copy |
+| ✅ | Audio normalisation | Peak to 90% |
+| ✅ | AI voice generation | OpenAI, Groq (PlayAI) or Gemini TTS with your key |
+| ✅ | Automatic narration sync | Fit to pauses (offline) or to transcribed sentences |
 
 ## 11. Export / rendering
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | MP4 (H.264 + AAC) | |
-| ✅ | WebM (VP9 + Opus) | Software encoder, slower |
-| ⬜ | GIF | |
-| ⬜ | PNG frame | |
-| ⬜ | Image sequence | |
-| ✅ | 720p / 1080p | |
-| ⬜ | 1440p / 4K | |
-| ✅ | 24 / 30 / 60 fps | |
-| ⬜ | Custom resolution | Presets only |
-| ✅ | Hardware acceleration | MP4 uses the browser's WebCodecs H.264 encoder (~45 s for a 27 s 1080p clip) |
-| 🟡 | GPU rendering | Encoding yes; frame rasterisation is still CPU (SVG → canvas) |
-| 🟡 | Multi-threaded rendering | Encoder runs off-thread; ffmpeg.wasm is single-threaded |
+| ✅ | WebM (VP9 + Opus) | |
+| ✅ | GIF | ≤15 fps |
+| ✅ | PNG frame | Snapshot at the playhead |
+| ✅ | Image sequence | Numbered PNGs in a zip |
+| ✅ | 720p / 1080p / 1440p / 4K | |
+| ✅ | 24 / 30 / 60 fps | Also 25 / 50 in files |
+| ✅ | Custom resolution | Any even height; width follows the aspect |
+| ✅ | Hardware acceleration | WebCodecs uses the platform encoder where available |
+| 🟡 | GPU rendering | Encoding yes; frame painting is Canvas2D (GPU-backed in Chromium) |
+| ✅ | Multi-threaded rendering | Several encoders in parallel, one per physical core |
 | ✅ | Render preview | Preview plays the same frame function the export uses |
 | ✅ | Render progress | |
-| ⬜ | Background rendering | Tab must stay open |
-| ⬜ | Render queue | |
-| ⬜ | Cancel render | |
+| 🟡 | Background rendering | The CLI renders headless in the background; in-app export needs the tab open |
+| ✅ | Render queue | `drawflow render a.json b.json …` |
+| ✅ | Cancel render | |
 | ⬜ | Resume render | |
-| ⬜ | Headless rendering | |
-| ⬜ | CLI rendering (`drawflow render project.drawflow`) | |
-| ⬜ | Render only selected scene | |
-| ⬜ | Low-quality preview mode | |
+| ✅ | Headless rendering | Headless Chrome via the CLI |
+| ✅ | CLI rendering (`drawflow render project.drawflow.json`) | |
+| ✅ | Render only selected scene | |
+| ✅ | Low-quality preview mode | View menu |
+| ✅ | Plugin exporters | Post-export actions from plugins |
 
 ## 12. Project system
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | `.drawflow` project format | `.drawflow.json`, single self-contained file |
-| ✅ | Human-readable JSON | Audio embedded as base64 |
-| ✅ | Autosave | IndexedDB checkpoint, 1.5 s after each change |
-| ✅ | Project recovery | Last checkpoint restored on open |
-| ⬜ | Project backups | Single checkpoint only |
-| ⬜ | Version history | |
-| ✅ | Import project | Open file… |
-| ✅ | Export project | Save to file… |
-| 🟡 | Project validation | Tolerant loader; no formal schema |
-| ✅ | Missing asset detection / relink | Not needed — every asset is embedded in the file |
+| ✅ | Human-readable JSON | |
+| ✅ | Autosave | 1.5 s after each change, with thumbnail |
+| ✅ | Project recovery | Last open project restored |
+| ✅ | Project backups | Versions every few minutes (25 kept) |
+| ✅ | Version history | Ctrl+S — named versions, restore |
+| ✅ | Import / export project | Open file (as a new project) / Save to file |
+| ✅ | Project validation | JSON Schema + tolerant validator that reports fixes |
+| ✅ | Missing asset detection / relink | Not needed — every asset is embedded |
 | ✅ | Portable projects | |
+| ✅ | Multiple projects | Projects dialog with thumbnails, duplicate, delete |
 
 ## 13. Templates
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Blank project | |
-| ⬜ | Explainer / YouTube intro / Educational / Product demo / Presentation / Social / Training / Marketing | |
-| ⬜ | Save scene / project as template | |
-| ⬜ | Community templates | |
+| ✅ | Explainer / YouTube intro / Educational / Product demo / Business presentation / Social media / Training video / Marketing video | Eight built-in, scripted from the library; `examples/` has them as files |
+| ✅ | Save scene as template | |
+| ✅ | Save project as template | |
+| 🟡 | Community templates | Share template files; no hosted gallery |
 
 ## 14. Collaboration
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Local-first, no account, no tracking | |
-| ⬜ | Comments / share / links / teams / version history / live editing / cloud | Intentionally not started |
+| ⬜ | Comments / share links / teams / live editing / cloud | Needs a server — intentionally out of scope |
 
 ## 15. AI
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Bring-your-own-key: Anthropic, OpenAI, Groq, Gemini | Keys stay in the browser; model list fetched live |
-| ✅ | Generate SVG illustration from text | Planner picks library art or hand-writes SVG |
-| ✅ | Image → whiteboard drawing | Offline doodle engine (edge trace → strokes), no API needed |
-| ✅ | Auto-trace raster → SVG | Same engine; result is real strokes the hand draws |
+| --- | --- | --- |
+| ✅ | Bring-your-own-key: Anthropic, OpenAI, Groq, Gemini | Keys stay in the browser |
+| ✅ | Script → scenes | "Script → scribe": 3–6 scenes with transitions |
+| ✅ | Script → suggested assets | Library pictures by keyword, text, drawn SVG |
+| ✅ | Script → timeline | Elements chained per scene |
+| ✅ | Script → narration | AI voice per scene onto the voice lane |
+| ✅ | Auto scene generation | |
+| ✅ | Generate SVG illustration | |
+| ✅ | Image → whiteboard drawing | Offline doodle engine |
+| ✅ | Auto-trace raster → SVG | |
 | ✅ | Photo → cartoon | Gemini / OpenAI image models |
-| 🟡 | Script → suggested assets | A description becomes 2–6 items placed in order |
-| 🟡 | Script → timeline | Items added sequentially with default timing |
-| 🟡 | Automatic drawing order | Nearest-neighbour stroke ordering inside the doodle engine |
-| 🟡 | Automatic camera positions | Auto-framing is the default for every element |
-| ⬜ | Script → scenes | |
-| ⬜ | Script → narration | |
-| ⬜ | Auto scene generation | |
-| ⬜ | Automatic timing | |
-| ⬜ | Voice → timeline synchronisation | |
+| ✅ | Automatic drawing order | Stroke-order modes; nearest-neighbour ordering in the doodle engine |
+| ✅ | Automatic camera positions | Auto / scene framing |
+| ✅ | Automatic timing | Fit to narration; sensible defaults from text length and stroke count |
+| ✅ | Voice → timeline synchronisation | Whisper sentence timestamps (Groq / OpenAI) |
 
 ## 16. Keyboard shortcuts
 
 | Status | Feature | Note |
-|---|---|---|
-| ✅ | Ctrl+Z / Ctrl+Shift+Z | Also Ctrl+Y |
-| ⬜ | Ctrl+C / Ctrl+V | |
+| --- | --- | --- |
+| ✅ | Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y | |
+| ✅ | Ctrl+C / Ctrl+X / Ctrl+V | |
 | ✅ | Ctrl+D | |
 | ✅ | Delete / Backspace | |
 | ✅ | Space = play / pause | |
-| ⬜ | Arrow keys = nudge selection | ←/→ currently step one frame |
-| ⬜ | Shift + arrows = faster nudge | |
-| ⬜ | Zoom shortcuts | Wheel only |
-| 🟡 | Timeline shortcuts | ←/→ frame step, `S` split, Esc deselect |
-| ⬜ | Camera shortcuts | |
-| ⬜ | Fullscreen preview | |
+| ✅ | Arrow keys = nudge | 1 px; step frames with `,` `.` or when nothing is selected |
+| ✅ | Shift + arrows = faster | 10 px |
+| ✅ | Zoom shortcuts | Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+1 |
+| ✅ | Timeline shortcuts | Home / End, `,` `.`, `S` split, `M` marker |
+| ✅ | Camera shortcuts | `F` frame the selection, camera framing via the palette |
+| ✅ | Fullscreen preview | Shift+F |
+| ✅ | Command palette | Ctrl+K; `?` lists every shortcut |
 
 ## 17. Developer / open-source
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | TypeScript types | `src/types.ts` |
-| ✅ | Desktop build (Electron, Windows installer) | `npm run desktop:pack` |
-| 🟡 | Documentation | README + CREDITS |
-| ⬜ | Project JSON schema | |
-| ⬜ | Plugin system / API / SDK | |
-| ⬜ | Custom animations, asset providers, exporters, renderers, tools | |
-| ⬜ | CLI (`create`, `preview`, `render`) | |
-| ⬜ | Node / Python API | |
-| ⬜ | Example projects | |
-| ⬜ | Test projects | |
-| ⬜ | Rendering benchmarks | |
+| ✅ | Desktop build (Electron, Windows installer) | |
+| ✅ | Documentation | README + docs/ (format, CLI, API, plugins, architecture, contributing) |
+| ✅ | Project JSON schema | `schema/drawflow.schema.json` |
+| ✅ | Plugin system / API | Effects, asset providers, exporters, panels; install by URL or code |
+| ✅ | Custom animations | Plugin effects |
+| ✅ | Custom asset providers | |
+| ✅ | Custom exporters | |
+| ⬜ | Custom renderers | The renderer is not swappable |
+| ✅ | Custom tools | Plugin panels |
+| ✅ | CLI (`create`, `preview`, `render`, `validate`, `bench`, `examples`) | |
+| 🟡 | Node / Python API | Everything is reachable through `window.DrawFlow` + Playwright or the CLI; no published package |
+| ✅ | Plugin SDK / docs | `docs/plugins.md`, `examples/plugins/wobble.js` |
+| ✅ | Example projects | `examples/*.drawflow.json` |
+| ✅ | Test projects | Ten Playwright end-to-end tests (`npm test`) |
+| ✅ | Rendering benchmarks | `npx drawflow bench`, `DrawFlow.bench()` |
 
 ## 18. Professional UX
 
 | Status | Feature | Note |
-|---|---|---|
+| --- | --- | --- |
 | ✅ | Autosave indicator | |
 | ✅ | Loading / progress indicators | |
 | ✅ | Render progress | |
-| ✅ | Error messages | Export errors shown in the dialog; confirm dialogs for destructive actions |
-| ✅ | Crash recovery | Checkpoint restore |
+| ✅ | Error messages | Dialogs, confirm dialogs, validator reports |
+| ✅ | Crash recovery | Last project + versions |
 | ✅ | Asset search | |
-| ⬜ | Recent projects | |
-| ⬜ | Project thumbnails | |
-| ⬜ | Dark / light UI | Light only |
-| ⬜ | Customisable panels | |
-| ⬜ | Resizable timeline | |
-| ⬜ | Full-screen preview | |
+| ✅ | Recent projects | Projects dialog |
+| ✅ | Project thumbnails | |
+| ✅ | Dark / light UI | Plus "follow system" |
+| 🟡 | Customisable panels | Resizable library, inspector and timeline; no rearranging |
+| ✅ | Resizable timeline | |
+| ✅ | Full-screen preview | |
 | ⬜ | Before / after preview | |
-| ⬜ | Performance statistics | |
-| ⬜ | Command palette | |
+| ✅ | Performance statistics | fps, frame time, counts, heap |
+| ✅ | Command palette | |
 
 ---
 
@@ -374,17 +382,17 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 ### V1 — Core
 
 | Status | Item |
-|---|---|
+| --- | --- |
 | ✅ | Canvas |
 | ✅ | SVG import |
 | ✅ | PNG / JPG import |
 | ✅ | Text |
-| 🟡 | Layers (stacking = draw order) |
+| ✅ | Layers |
 | ✅ | Basic draw animation |
 | ✅ | Hand animation |
 | ✅ | Basic animations |
 | ✅ | Timeline |
-| ⬜ | Scenes |
+| ✅ | Scenes |
 | ✅ | Camera |
 | ✅ | Audio |
 | ✅ | Project save / load |
@@ -396,55 +404,50 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 ### V1.5 — Make it actually good
 
 | Status | Item |
-|---|---|
-| 🟡 | Advanced timeline |
+| --- | --- |
+| ✅ | Advanced timeline |
 | ✅ | Audio waveform |
 | ⬜ | Keyframes |
-| 🟡 | Easing (camera only) |
+| ✅ | Easing |
 | 🟡 | Camera keyframes (per-element shots) |
 | ✅ | Multiple hands |
 | ✅ | Better SVG path detection |
 | ✅ | Asset library |
-| ⬜ | Templates |
+| ✅ | Templates |
 | ✅ | Project recovery |
-| ✅ | Fast renderer (hardware H.264) |
+| ✅ | Fast renderer |
 
 ### V2 — Open-source differentiators
 
 | Status | Item |
-|---|---|
-| ⬜ | CLI renderer |
-| ⬜ | Project JSON schema |
-| ⬜ | Plugin system |
-| ⬜ | Asset-pack system |
-| ⬜ | Community templates / asset packs |
-| ⬜ | Python / Node API |
-| ⬜ | Batch rendering |
+| --- | --- |
+| ✅ | CLI renderer |
+| ✅ | Project JSON schema |
+| ✅ | Plugin system |
+| ✅ | Asset-pack system |
+| 🟡 | Community templates / asset packs (files can be shared; no hosted hub) |
+| 🟡 | Python / Node API (via CLI / Playwright) |
+| ✅ | Batch rendering |
 | ✅ | GPU acceleration (encoding) |
-| ⬜ | Render queue |
+| ✅ | Render queue |
 
 ### V3 — AI
 
 | Status | Item |
-|---|---|
-| ⬜ | Script → scenes |
-| 🟡 | Script → assets |
-| 🟡 | Script → timeline |
+| --- | --- |
+| ✅ | Script → scenes |
+| ✅ | Script → assets |
+| ✅ | Script → timeline |
 | ✅ | Image → whiteboard drawing |
-| 🟡 | Auto camera |
-| ⬜ | Auto timing |
-| ⬜ | Voice → animation sync |
+| ✅ | Auto camera |
+| ✅ | Auto timing |
+| ✅ | Voice → animation sync |
 | ✅ | AI SVG generation |
 
 ---
 
-## Suggested next steps
+## Not built, and why
 
-Biggest gaps against the roadmap, roughly in order of impact:
-
-1. **Multi-select, copy/paste, arrow-key nudge** — the most-felt editor gaps.
-2. **Emphasis and exit effects** (pulse, shake, fade out, erase) — the animation system only has entrances.
-3. **Timeline zoom + drag-to-resize durations** on the strip.
-4. **Cancel export**, then GIF / PNG-sequence output.
-5. **Scenes** — the one V1 item still missing; also unlocks "render selected scene".
-6. **Templates** and recent projects / thumbnails on a start screen.
+- **Collaboration** (comments, share links, teams, live editing, cloud) needs a server and accounts; the app is deliberately local-first.
+- **Keyframes / curve editor** conflict with the effect-based model that keeps preview and export identical; plugins can add keyframed effects if needed.
+- **Camera rotation, resume render, custom renderers, before/after preview, rigged characters** — small or unclear value against their cost; open for contributions.

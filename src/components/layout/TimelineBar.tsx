@@ -9,23 +9,31 @@ import { TimeRuler } from '../timeline/TimeRuler';
 import { ElementTrack } from '../timeline/ElementTrack';
 import { AudioLanes, LANES } from '../timeline/AudioLane';
 import { FilmStrip } from '../timeline/FilmStrip';
-import { ScenesBar } from '../timeline/ScenesBar';
+import type { AudioLaneKind } from '../../types';
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 40;
+const MIN_HEIGHT = 230;
+/** the workspace above keeps at least this much room */
+const MIN_WORKSPACE = 300;
 
 export function TimelineBar() {
   const currentTime = useStore((s) => s.currentTime);
   const isPlaying = useStore((s) => s.isPlaying);
   const duration = useStore((s) => s.project.duration);
   const fps = useStore((s) => s.project.fps);
+  const clips = useStore((s) => s.audioClips);
   const zoom = useUiStore((s) => s.timelineZoom);
+  const laneFlags = useUiStore((s) => s.lanes);
   const setUi = useUiStore((s) => s.set);
   const timelineHeight = useUiStore((s) => s.timelineHeight);
   const rec = useRecorder();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewWidth, setViewWidth] = useState(0);
   const resizing = useRef<{ startY: number; startH: number } | null>(null);
+
+  // a lane shows when it has clips, is switched on, or is recording
+  const visibleLanes = LANES.filter((l) => laneFlags[l.kind] || clips.some((c) => c.lane === l.kind) || (l.kind === 'voice' && rec.active));
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -50,7 +58,7 @@ export function TimelineBar() {
       }
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const x = e.clientX - rect.left + el.scrollLeft;   // content px under the cursor
+      const x = e.clientX - rect.left + el.scrollLeft;
       const t = pxPerSec > 0 ? x / pxPerSec : 0;
       const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(-e.deltaY * 0.002)));
       setUi({ timelineZoom: next });
@@ -73,7 +81,8 @@ export function TimelineBar() {
 
   const zoomTo = (z: number) => setUi({ timelineZoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)) });
 
-  // drag the top edge to resize the timeline
+  // drag the top edge to resize the timeline; the workspace keeps room
+  const maxHeight = () => Math.max(MIN_HEIGHT, window.innerHeight - 52 - MIN_WORKSPACE);
   const onResizeDown = (e: React.PointerEvent) => {
     resizing.current = { startY: e.clientY, startH: timelineHeight || (e.currentTarget.parentElement?.clientHeight ?? 300) };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -81,9 +90,17 @@ export function TimelineBar() {
   const onResizeMove = (e: React.PointerEvent) => {
     const r = resizing.current;
     if (!r) return;
-    setUi({ timelineHeight: Math.max(220, Math.min(620, r.startH - (e.clientY - r.startY))) });
+    setUi({ timelineHeight: Math.max(MIN_HEIGHT, Math.min(maxHeight(), r.startH - (e.clientY - r.startY))) });
   };
   const onResizeUp = () => { resizing.current = null; };
+  useEffect(() => {
+    const onWin = () => { if (timelineHeight > maxHeight()) setUi({ timelineHeight: maxHeight() }); };
+    window.addEventListener('resize', onWin);
+    onWin();
+    return () => window.removeEventListener('resize', onWin);
+  }, [timelineHeight, setUi]);
+
+  const toggleLane = (kind: AudioLaneKind) => setUi({ lanes: { ...laneFlags, [kind]: !laneFlags[kind] } });
 
   return (
     <div
@@ -98,65 +115,79 @@ export function TimelineBar() {
         onPointerUp={onResizeUp}
         onPointerCancel={onResizeUp}
       />
-      <ScenesBar />
-      <div className="flex min-h-0 items-start gap-4 px-4 pt-2 pb-1">
-        <div className="flex h-11 shrink-0 items-center">
+      <div className="flex min-h-0 flex-1 gap-3 px-4 pt-2 pb-1">
+        {/* left column: transport */}
+        <div className="flex w-[120px] shrink-0 flex-col items-center pt-7">
           <Transport />
         </div>
-        <div className="flex min-w-0 flex-1 gap-3">
-          {/* the time axis: ruler, elements, audio — one scroll container */}
-          <div ref={scrollRef} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-1">
+        {/* middle column: every time-based thing shares this left edge */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div ref={scrollRef} className="min-w-0 overflow-x-auto overflow-y-hidden pb-1">
             {viewWidth > 0 && (
               <div className="flex flex-col gap-1" style={{ width: contentWidth }}>
                 <TimeRuler pxPerSec={pxPerSec} width={contentWidth} />
                 <ElementTrack pxPerSec={pxPerSec} width={contentWidth} />
-                <AudioLanes pxPerSec={pxPerSec} width={contentWidth} />
+                <AudioLanes pxPerSec={pxPerSec} width={contentWidth} lanes={visibleLanes.map((l) => l.kind)} />
               </div>
             )}
           </div>
-          {/* right column: timecode, zoom, lane labels, record */}
-          <div className="flex w-[132px] shrink-0 flex-col items-end gap-1 pt-0.5">
-            <span className="tabular h-6 text-right text-[12.5px] text-t2">
-              <span className="font-medium text-t1">{formatTimecode(currentTime, fps)}</span>
-              <span className="mx-1 text-t3">/</span>
-              {formatTimecode(duration, fps)}
-            </span>
-            <div className="flex h-9 items-center gap-0.5 rounded-full border border-line px-1">
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom / 1.5)} title="Zoom out timeline" aria-label="Zoom out timeline">
-                <Minus size={12} />
-              </button>
-              <button type="button" className="tabular min-w-9 text-center text-[11px] text-t2 hover:text-t1" onClick={() => zoomTo(1)} title="Fit the whole timeline">
-                {zoom <= 1.01 ? 'fit' : `${zoom.toFixed(1)}×`}
-              </button>
-              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom * 1.5)} title="Zoom in timeline (Ctrl+wheel)" aria-label="Zoom in timeline">
-                <Plus size={12} />
-              </button>
-            </div>
-            {LANES.map((l, i) => (
-              <div key={l.kind} className={'flex h-10 items-center ' + (i === 1 ? 'justify-end' : '')}>
-                {l.kind === 'voice' ? (
-                  <button
-                    type="button"
-                    className={
-                      'df-ui-anim flex h-7 items-center gap-1.5 rounded-full px-3 text-[11.5px] font-medium text-white transition-all ' +
-                      (rec.active ? 'bg-[#d9414f] hover:brightness-105' : 'bg-[#e05a6d] hover:brightness-105')
-                    }
-                    title={rec.active ? 'Stop recording' : 'Record a voiceover while the scribe plays from the playhead'}
-                    onClick={() => (rec.active ? stopRecording() : void startRecording())}
-                  >
-                    {rec.active ? <Square size={11} /> : <Mic size={12} />}
-                    {rec.active ? 'Stop' : 'Record'}
-                  </button>
-                ) : (
-                  <span className="text-[10.5px] text-t3">{l.label}</span>
-                )}
-              </div>
-            ))}
+          <div className="min-h-0 flex-1">
+            <FilmStrip />
           </div>
         </div>
-      </div>
-      <div className="min-h-0 flex-1 px-3 pb-1.5">
-        <FilmStrip />
+        {/* right column: timecode, zoom, lane toggles, record */}
+        <div className="flex w-[150px] shrink-0 flex-col items-end gap-1 pt-0.5">
+          <span className="tabular h-6 text-right text-[12.5px] text-t2">
+            <span className="font-medium text-t1">{formatTimecode(currentTime, fps)}</span>
+            <span className="mx-1 text-t3">/</span>
+            {formatTimecode(duration, fps)}
+          </span>
+          <div className="flex h-9 items-center gap-0.5 rounded-full border border-line px-1">
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom / 1.5)} title="Zoom out timeline" aria-label="Zoom out timeline">
+              <Minus size={12} />
+            </button>
+            <button type="button" className="tabular min-w-9 text-center text-[11px] text-t2 hover:text-t1" onClick={() => zoomTo(1)} title="Fit the whole timeline">
+              {zoom <= 1.01 ? 'fit' : `${zoom.toFixed(1)}×`}
+            </button>
+            <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom * 1.5)} title="Zoom in timeline (Ctrl+wheel)" aria-label="Zoom in timeline">
+              <Plus size={12} />
+            </button>
+          </div>
+          {/* one row per visible lane, aligned with it */}
+          {visibleLanes.map((l) => (
+            <div key={l.kind} className="flex h-10 w-full items-center justify-end gap-1.5">
+              {l.kind === 'voice' ? (
+                <button
+                  type="button"
+                  className={
+                    'df-ui-anim flex h-7 items-center gap-1.5 rounded-full px-3 text-[11.5px] font-medium text-white transition-all ' +
+                    (rec.active ? 'bg-[#d9414f] hover:brightness-105' : 'bg-[#e05a6d] hover:brightness-105')
+                  }
+                  title={rec.active ? 'Stop recording' : 'Record a voiceover while the scribe plays from the playhead'}
+                  onClick={() => (rec.active ? stopRecording() : void startRecording())}
+                >
+                  {rec.active ? <Square size={11} /> : <Mic size={12} />}
+                  {rec.active ? 'Stop' : 'Record'}
+                </button>
+              ) : (
+                <span className="text-[10.5px] text-t3">{l.label}</span>
+              )}
+            </div>
+          ))}
+          {/* lane switches */}
+          <div className="mt-1 flex flex-col items-end gap-0.5 text-[10.5px] text-t3">
+            <span className="text-[9.5px] uppercase tracking-wide">Lanes</span>
+            {LANES.map((l) => {
+              const forced = clips.some((c) => c.lane === l.kind);
+              return (
+                <label key={l.kind} className={'flex cursor-pointer items-center gap-1.5 ' + (forced ? 'opacity-70' : '')} title={forced ? 'Has clips — always shown' : `Show the ${l.label} lane`}>
+                  <span className="capitalize">{l.label}</span>
+                  <input type="checkbox" className="h-3 w-3" checked={laneFlags[l.kind] || forced} disabled={forced} onChange={() => toggleLane(l.kind)} />
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

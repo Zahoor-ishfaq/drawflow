@@ -180,6 +180,7 @@ function drawHand(ctx: Ctx2D, pose: HandPose, assets: CanvasAssets): void {
   ctx.translate(pose.x, pose.y);
   ctx.scale(pose.scale, pose.scale);
   ctx.translate(-def.tipX + ox, -def.tipY + oy);
+  if (def.mirror) { ctx.translate(def.width, 0); ctx.scale(-1, 1); }
   const s = def.sleeve;
   if (s) {
     const hw2 = s.hw1 * 1.15;

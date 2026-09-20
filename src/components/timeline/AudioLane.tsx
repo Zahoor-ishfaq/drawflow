@@ -16,7 +16,7 @@ type Drag = { mode: 'move' | 'trimStart' | 'trimEnd'; startX: number; snap: Audi
 
 export const LANES: { kind: AudioLaneKind; label: string; hint: string; Icon: typeof Mic }[] = [
   { kind: 'music', label: 'music', hint: 'Music — drop a file here or use the Music tool', Icon: Music },
-  { kind: 'voice', label: 'voice', hint: 'Voiceover — press Record and narrate while the scribe plays', Icon: Mic },
+  { kind: 'voice', label: 'voice', hint: 'Voiceover — press Record, or add a voice from the Voice tool', Icon: Mic },
   { kind: 'sfx', label: 'sfx', hint: 'Sound effects — drop short clips here', Icon: Volume2 },
 ];
 
@@ -208,11 +208,11 @@ function Lane({ lane, width, pxPerSec }: { lane: AudioLaneKind; width: number; p
   );
 }
 
-/** All audio lanes on the shared time axis. */
-export function AudioLanes({ pxPerSec, width }: { pxPerSec: number; width: number }) {
+/** The requested audio lanes on the shared time axis. */
+export function AudioLanes({ pxPerSec, width, lanes }: { pxPerSec: number; width: number; lanes: AudioLaneKind[] }) {
   return (
     <div className="flex flex-col gap-1">
-      {LANES.map((l) => <Lane key={l.kind} lane={l.kind} width={width} pxPerSec={pxPerSec} />)}
+      {LANES.filter((l) => lanes.includes(l.kind)).map((l) => <Lane key={l.kind} lane={l.kind} width={width} pxPerSec={pxPerSec} />)}
     </div>
   );
 }

@@ -12,7 +12,7 @@ const SECTIONS: { title: string; hint: string; category: string; filter?: (e: Li
 ];
 
 /** Curated view of the library's people: poses, expressions, gestures, roles. */
-export function CharactersPanel({ onAdded }: { onAdded?: () => void }) {
+export function CharactersPanel({ onAdded, embedded = false }: { onAdded?: () => void; embedded?: boolean }) {
   const [index, setIndex] = useState<LibraryEntry[] | null>(null);
   const [query, setQuery] = useState('');
   useEffect(() => { loadLibraryIndex().then(setIndex).catch(() => setIndex([])); }, []);
@@ -33,11 +33,13 @@ export function CharactersPanel({ onAdded }: { onAdded?: () => void }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <div className="relative">
-        <Search size={13} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-t3" />
-        <input type="search" className="df-input" style={{ paddingLeft: 32 }} placeholder="Search characters…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      </div>
+    <div className={'flex flex-col gap-3 ' + (embedded ? '' : 'p-4')}>
+      {!embedded && (
+        <div className="relative">
+          <Search size={13} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-t3" />
+          <input type="search" className="df-input" style={{ paddingLeft: 32 }} placeholder="Search characters…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+      )}
       {!index && <div className="text-[12px] text-t3">Loading…</div>}
       {sections.map((sec) => (
         <div key={sec.title}>

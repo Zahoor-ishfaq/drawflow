@@ -48,12 +48,13 @@ function AiVoice({ at }: { at: number }) {
   if (available.length === 0) {
     return (
       <p className="text-[11.5px] leading-relaxed text-t3">
-        Add an OpenAI, Groq or Gemini key in the AI panel's settings to generate narration from text.
+        AI voice: add an OpenAI, Groq or Gemini key in the AI panel's settings to generate narration from text.
       </p>
     );
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel2 p-2.5">
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-t2">AI voice</div>
       <textarea className="df-input min-h-[60px] resize-y" placeholder="What should the voice say?" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="grid grid-cols-2 gap-2">
         <Field label="Service">
@@ -90,7 +91,7 @@ export function AudioPanel({ onAdded }: { onAdded?: () => void }) {
     if (!file) return;
     setError(null);
     try {
-      await importAudioFile(file, lane, lane === 'sfx' ? currentTime : 0);
+      await importAudioFile(file, lane, lane === 'music' ? 0 : currentTime);
       onAdded?.();
     } catch {
       setError('Could not decode this audio file.');
@@ -145,26 +146,32 @@ export function AudioPanel({ onAdded }: { onAdded?: () => void }) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-line text-[12.5px] text-t3 hover:border-accent hover:text-accent">
-        <Music size={18} />
-        Add music (MP3, WAV, M4A…)
-        <input type="file" accept="audio/*" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0], 'music'); e.target.value = ''; }} />
-      </label>
-      {error && <div className="text-[12px] text-red-500">{error}</div>}
-
+      <SectionHeader>Voiceover</SectionHeader>
       <Button
-        variant="secondary"
-        className="justify-center text-[#c8434f]"
+        variant="primary"
+        className="justify-center"
         disabled={rec.active}
         onClick={() => { onAdded?.(); void startRecording(); }}
+        title="The scribe plays from the playhead while you narrate; the take lands on the Voice lane"
       >
         <Mic size={14} />
-        Record voiceover from {currentTime.toFixed(1)} s
+        Record from {currentTime.toFixed(1)} s
       </Button>
       {rec.error && <div className="text-[12px] text-red-500">{rec.error}</div>}
-
-      <SectionHeader>AI voice</SectionHeader>
+      <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line text-[12px] text-t3 hover:border-accent hover:text-accent">
+        <Mic size={14} />
+        Upload a recording (MP3, WAV, M4A…) at {currentTime.toFixed(1)} s
+        <input type="file" accept="audio/*" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0], 'voice'); e.target.value = ''; }} />
+      </label>
       <AiVoice at={currentTime} />
+      {error && <div className="text-[12px] text-red-500">{error}</div>}
+
+      <SectionHeader>Music</SectionHeader>
+      <label className="flex h-14 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-line text-[12.5px] text-t3 hover:border-accent hover:text-accent">
+        <Music size={16} />
+        Add music (MP3, WAV, M4A…) — starts at 0 s
+        <input type="file" accept="audio/*" className="hidden" onChange={(e) => { void onFile(e.target.files?.[0], 'music'); e.target.value = ''; }} />
+      </label>
 
       <SectionHeader>Sound effects</SectionHeader>
       <div className="grid grid-cols-2 gap-1">

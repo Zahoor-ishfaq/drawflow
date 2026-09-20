@@ -225,7 +225,10 @@ export async function buildTemplate(t: TemplateDef): Promise<{ project: Project;
   const ink = t.paper === 'cream' ? '#2b2418' : t.paper === 'lined' ? '#1f2a44' : '#1a1a1a';
   const elements: DrawElement[] = [];
   let z = 0;
+  // every scene gets its own stretch of paper, side by side, so the edit view reads like slides
+  const sceneGap = width * 1.2;
   for (let si = 0; si < t.scenes.length; si++) {
+    const ox = si * sceneGap;
     for (const item of t.scenes[si].items) {
       const base = {
         id: crypto.randomUUID(), label: '', rotation: 0, startTime: 0, transitionIn: 0.5,
@@ -238,7 +241,7 @@ export async function buildTemplate(t: TemplateDef): Promise<{ project: Project;
         const paths = await textToPaths(item.text, item.font ?? 'caveat', size, { bold: item.bold, align: item.align });
         const b = measurePaths(paths).bbox;
         // anchor: centre for centred text, left edge otherwise
-        const x = item.align === 'center' ? item.x - (b.x + b.width / 2) : item.x - b.x;
+        const x = ox + (item.align === 'center' ? item.x - (b.x + b.width / 2) : item.x - b.x);
         const y = item.y - (b.y + b.height / 2);
         elements.push({
           ...base, kind: 'text', paths, label: item.text.split('\n')[0].slice(0, 24), text: item.text, fontFamily: item.font ?? 'caveat', fontSize: size,
@@ -257,7 +260,7 @@ export async function buildTemplate(t: TemplateDef): Promise<{ project: Project;
           const b = measurePaths(art.paths).bbox;
           elements.push({
             ...base, kind: 'svg', paths: art.paths, label: entry.name, scale,
-            x: item.x - (b.x + b.width / 2) * scale, y: item.y - (b.y + b.height / 2) * scale,
+            x: ox + item.x - (b.x + b.width / 2) * scale, y: item.y - (b.y + b.height / 2) * scale,
             fillRule: art.evenOdd ? 'evenodd' : undefined,
             ...(art.monochrome
               ? { strokeWidth: Math.min(10, Math.max(3, (Math.max(art.width, art.height) / 40) * scale)) }

@@ -114,6 +114,17 @@ export function Workspace() {
   useEffect(() => {
     if (!focusRequest || cameraView || size.w < 50) return;
     const st = useStore.getState();
+    if (focusRequest.id.startsWith('region:')) {
+      // a new scene: glide to empty paper to the right of everything placed so far
+      const u = unionBounds(st.elements);
+      const w = st.project.width, h = st.project.height;
+      const x = u ? u.x + u.width + w * 0.25 : 0;
+      const y = u ? u.y + u.height / 2 - h / 2 : 0;
+      const zoom = clamp(Math.min(boundaryPx.width / w, boundaryPx.height / h), MIN_ZOOM, MAX_ZOOM);
+      userAdjusted.current = true;
+      animateTo({ cx: x + w / 2, cy: y + h / 2, zoom });
+      return;
+    }
     const ordered = sequenceOrder(st.elements);
     const idx = ordered.findIndex((e) => e.id === focusRequest.id);
     if (idx === -1) return;

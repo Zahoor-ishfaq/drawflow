@@ -26,6 +26,10 @@ built-in video encoder; the dev/preview servers and the desktop app send the
 
 ## What it does
 
+**Library** — one search over 1,400 illustrations, shapes, icons, people and
+your uploads (synonyms, plurals and typos understood), with tabs for pictures,
+shapes, people and uploads.
+
 **Canvas** — an infinite sheet of paper. Drag empty paper to pan (hand cursor),
 wheel to zoom, snap to a grid, rulers, smart alignment guides, multi-select
 (shift-click / shift-drag), copy/paste, group/ungroup, lock, hide, opacity, flip,
@@ -36,8 +40,8 @@ revealed with a scribble, a wipe, a radial or a centre-out reveal. Text is
 converted to glyph outlines so it is genuinely hand-written (bold, italic,
 alignment, spacing, right-to-left, your own TTF/OTF fonts). Stroke order can be
 changed (left→right, top→bottom, centre out…). Hands: marker, pen and chalk
-photographs with a sleeve that runs off the board, three flat cartoon hands
-(pencil, brush, eraser), or your own photo with a click-to-set pen tip.
+photographs — each as a right and a left hand — with a sleeve that runs off
+the board, or your own photo with a click-to-set pen tip.
 
 **Animation** — entrances (draw, slide, wipe, fade, scale, pop, bounce,
 typewriter, appear), emphasis after drawing (pulse, shake, bounce, spin, grow,

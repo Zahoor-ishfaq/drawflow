@@ -19,11 +19,11 @@ interface HandPickerProps {
 export function HandPicker({ value, onChange, allowDefault = false, compact = false }: HandPickerProps) {
   const project = useStore((s) => s.project);
   const hands = allHands(project);
-  const options: { id: HandStyle | undefined; label: string; src?: string; sub?: string; custom?: boolean }[] = [
+  const options: { id: HandStyle | undefined; label: string; src?: string; sub?: string; custom?: boolean; mirror?: boolean }[] = [
     ...(allowDefault
       ? [{ id: undefined, label: 'Project default', sub: hands.find((h) => h.id === project.hand)?.label ?? 'No hand' }]
       : []),
-    ...hands.map((h) => ({ id: h.id as HandStyle, label: h.label, src: h.src, sub: h.description, custom: h.id.startsWith(CUSTOM_PREFIX) })),
+    ...hands.map((h) => ({ id: h.id as HandStyle, label: h.label, src: h.src, sub: h.description, custom: h.id.startsWith(CUSTOM_PREFIX), mirror: !!h.mirror })),
     { id: 'none' as HandStyle, label: 'No hand', sub: 'Lines draw themselves' },
   ];
 
@@ -46,7 +46,13 @@ export function HandPicker({ value, onChange, allowDefault = false, compact = fa
               className={`flex w-full items-center justify-center overflow-hidden rounded-lg bg-panel2 ${compact ? 'h-14' : 'h-20'}`}
             >
               {opt.src ? (
-                <img src={opt.src} alt="" className={opt.custom ? 'h-full w-auto max-w-none object-contain' : 'h-[140%] w-auto max-w-none translate-x-[8%] translate-y-[22%] object-contain'} draggable={false} />
+                <img
+                  src={opt.src}
+                  alt=""
+                  className={opt.custom ? 'h-full w-auto max-w-none object-contain' : 'h-[140%] w-auto max-w-none object-contain'}
+                  style={opt.custom ? undefined : { transform: `translate(${opt.mirror ? '-8%' : '8%'}, 22%)${opt.mirror ? ' scaleX(-1)' : ''}` }}
+                  draggable={false}
+                />
               ) : (
                 <span className="text-[11px] text-t3">{opt.id === 'none' ? '—' : 'auto'}</span>
               )}
