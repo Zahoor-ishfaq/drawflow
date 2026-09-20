@@ -4,7 +4,7 @@ import { sequenceOrder, useStore } from '../../store/useStore';
 import { useUiStore } from '../../store/uiStore';
 import { cameraForElement, unionBounds, viewBoxFor } from '../../lib/camera';
 import { clamp } from '../../lib/time';
-import { onShortcut } from '../../hooks/useKeyboardShortcuts';
+import { emitShortcut, onShortcut } from '../../hooks/useKeyboardShortcuts';
 import { Stage } from '../canvas/Stage';
 import { Rulers } from '../canvas/Rulers';
 
@@ -270,6 +270,13 @@ export function Workspace() {
               Everything inside this dashed boundary is what the video captures. Add text,
               shapes or images from the toolbar; drag the paper to move to a new shot.
             </div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 h-8 rounded-full border border-line bg-panel px-3.5 text-[12.5px] font-medium text-t1 hover:bg-hov"
+              onClick={() => emitShortcut('open-templates')}
+            >
+              Start from a template
+            </button>
           </div>
         </div>
       )}

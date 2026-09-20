@@ -17,7 +17,10 @@ export function TopBar() {
   const { canUndo, canRedo } = useCanUndoRedo();
   const [showExport, setShowExport] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  useEffect(() => onShortcut((n) => { if (n === 'shortcuts-help') setShowShortcuts((v) => !v); }), []);
+  useEffect(() => onShortcut((n) => {
+    if (n === 'shortcuts-help') setShowShortcuts((v) => !v);
+    if (n === 'open-export') setShowExport(true);
+  }), []);
 
   const preview = () => {
     const s = useStore.getState();

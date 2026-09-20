@@ -16,7 +16,8 @@ function inTextField(e: KeyboardEvent): boolean {
 /** Custom events the shortcuts fire for parts of the UI that own the behaviour. */
 export type ShortcutEvent =
   | 'zoom-in' | 'zoom-out' | 'zoom-fit' | 'zoom-100' | 'zoom-selection'
-  | 'command-palette' | 'fullscreen-preview' | 'shortcuts-help';
+  | 'command-palette' | 'fullscreen-preview' | 'shortcuts-help'
+  | 'open-projects' | 'open-templates' | 'open-versions' | 'open-export';
 
 export function emitShortcut(name: ShortcutEvent): void {
   window.dispatchEvent(new CustomEvent('drawflow:shortcut', { detail: name }));
@@ -57,6 +58,9 @@ export const SHORTCUTS: { keys: string; action: string; group: string }[] = [
   { group: 'Canvas', keys: 'Ctrl+R', action: 'Toggle rulers' },
   { group: 'Audio', keys: 'S', action: 'Split the selected clip at the playhead' },
   { group: 'App', keys: 'Ctrl+K', action: 'Command palette' },
+  { group: 'App', keys: 'Ctrl+O', action: 'Projects & templates' },
+  { group: 'App', keys: 'Ctrl+E', action: 'Export' },
+  { group: 'App', keys: 'Ctrl+S', action: 'Version history (projects save themselves)' },
   { group: 'App', keys: '?', action: 'Keyboard shortcuts' },
 ];
 
@@ -95,6 +99,9 @@ export function useKeyboardShortcuts(): void {
           case '1': e.preventDefault(); emitShortcut('zoom-100'); return;
           case "'": e.preventDefault(); useUiStore.getState().set({ snapToGrid: !useUiStore.getState().snapToGrid }); return;
           case 'r': e.preventDefault(); useUiStore.getState().set({ showRulers: !useUiStore.getState().showRulers }); return;
+          case 'o': e.preventDefault(); emitShortcut('open-projects'); return;
+          case 'e': e.preventDefault(); emitShortcut('open-export'); return;
+          case 's': e.preventDefault(); emitShortcut('open-versions'); return;
         }
         return;
       }
