@@ -69,6 +69,12 @@ export function customHandDef(h: CustomHand): HandDef {
 }
 
 /** Resolve a hand style; `project` supplies the user's uploaded hands. */
+// the flat cartoon set lives in its own module (SVG, no photos)
+import { CARTOON_HANDS } from './cartoonHands';
+
+/** Photographic and cartoon hands shipped with the app. */
+export const BUILT_IN_HANDS: HandDef[] = [...HANDS, ...CARTOON_HANDS];
+
 export function handDef(style: HandStyle, project?: Pick<Project, 'customHands'>): HandDef | null {
   if (style === 'none') return null;
   if (style.startsWith(CUSTOM_PREFIX)) {
@@ -76,12 +82,12 @@ export function handDef(style: HandStyle, project?: Pick<Project, 'customHands'>
     const custom = project?.customHands?.find((h) => h.id === id);
     return custom ? customHandDef(custom) : HANDS[0];
   }
-  return HANDS.find((h) => h.id === style) ?? HANDS[0];
+  return BUILT_IN_HANDS.find((h) => h.id === style) ?? HANDS[0];
 }
 
 /** Every hand available to a project (built-in + uploaded). */
 export function allHands(project?: Pick<Project, 'customHands'>): HandDef[] {
-  return [...HANDS, ...(project?.customHands ?? []).map(customHandDef)];
+  return [...BUILT_IN_HANDS, ...(project?.customHands ?? []).map(customHandDef)];
 }
 
 // --- SVG markup ---------------------------------------------------------

@@ -14,7 +14,7 @@ import { createEncodeSession } from './mediaEncoder';
 import { canRenderFast, renderAndEncodeParallel } from './parallelRender';
 import { makeRenderContext, svgStringForTime } from './renderFrame';
 import { getFFmpeg, terminateFFmpeg } from './ffmpegClient';
-import { HANDS, loadHandDataUrl } from '../assets/hands';
+import { allHands, loadHandDataUrl } from '../assets/hands';
 
 export type ExportFormat = 'mp4' | 'webm' | 'gif' | 'png-sequence' | 'png';
 export type ExportPhase = 'loading' | 'capturing' | 'encoding' | 'finishing';
@@ -96,7 +96,7 @@ async function makeFrameRenderer(project: Project, elements: DrawElement[], outW
   const handImages: Partial<Record<HandStyle, string>> = {};
   const used = new Set<HandStyle>([project.hand, ...elements.map((e) => e.hand ?? project.hand)]);
   await Promise.all(
-    HANDS.filter((h) => used.has(h.id)).map(async (h) => {
+    allHands(project).filter((h) => used.has(h.id)).map(async (h) => {
       handImages[h.id] = await loadHandDataUrl(h);
     }),
   );

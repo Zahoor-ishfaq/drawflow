@@ -12,6 +12,7 @@ export interface GalleryItem {
   width: number;
   height: number;
   addedAt: number;
+  tags?: string[];
 }
 
 const DB_NAME = 'drawflow';
@@ -95,5 +96,14 @@ export function useGallery() {
     notify();
   }, []);
 
-  return { items, loading, add, remove };
+  const update = useCallback(async (id: string, patch: Partial<GalleryItem>) => {
+    const cur = (cache ?? []).find((i) => i.id === id);
+    if (!cur) return;
+    const next = { ...cur, ...patch };
+    await saveGalleryItem(next);
+    cache = (cache ?? []).map((i) => (i.id === id ? next : i));
+    notify();
+  }, []);
+
+  return { items, loading, add, remove, update };
 }
