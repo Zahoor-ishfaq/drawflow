@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useUiStore } from '../../store/uiStore';
-import { Hand, Image, Layers, Music, Shapes, Sparkles, StickyNote, Type, X } from 'lucide-react';
+import { Hand, Image, Layers, Music, Shapes, Sparkles, StickyNote, Type, Users, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
 import { ShapesPanel } from '../library/ShapesPanel';
 import { ImagesPanel } from '../library/ImagesPanel';
@@ -9,16 +9,18 @@ import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
 import { AiPanel } from '../library/AiPanel';
 import { LayersPanel } from '../library/LayersPanel';
+import { CharactersPanel } from '../library/CharactersPanel';
 import { usePlugins } from '../../lib/plugins';
 import { useEffect, useRef as useRef2 } from 'react';
 import { IconButton } from '../ui/IconButton';
 
-type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
+type Tool = 'images' | 'text' | 'shapes' | 'characters' | 'music' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'images', label: 'Images', Icon: Image },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'shapes', label: 'Shapes', Icon: Shapes },
+  { id: 'characters', label: 'People', Icon: Users },
   { id: 'music', label: 'Music', Icon: Music },
   { id: 'ai', label: 'AI', Icon: Sparkles },
 ];
@@ -46,6 +48,7 @@ const PANEL_TITLES: Record<string, string> = {
   images: 'Images',
   text: 'Add text',
   shapes: 'Shapes & icons',
+  characters: 'Characters',
   music: 'Music',
   ai: 'AI assistant',
   layers: 'Layers',
@@ -119,6 +122,7 @@ export function IconRail() {
             {open === 'images' && <ImagesPanel />}
             {open === 'text' && <TextPanel onAdded={close} />}
             {open === 'shapes' && <ShapesPanel />}
+            {open === 'characters' && <CharactersPanel onAdded={close} />}
             {open === 'music' && <AudioPanel onAdded={close} />}
             {open === 'ai' && <AiPanel />}
             {open === 'layers' && <LayersPanel />}

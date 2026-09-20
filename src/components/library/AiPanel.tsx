@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Settings, Sparkles, Upload, Wand2 } from 'lucide-react';
 import { useAiSettings, imageReady, textReady, PROVIDER_LABELS } from '../../lib/ai/settings';
 import { plan, type Proposal } from '../../lib/ai/planner';
+import { planScript, buildScript, type ScriptPlan } from '../../lib/ai/script';
+import { TTS_MODELS, type SpeechProvider } from '../../lib/ai/speech';
 import { generateImage } from '../../lib/ai/providers';
 import { sketchFromImage, type SketchResult } from '../../lib/sketch';
 import { loadRasterImage, isRasterFile } from '../../lib/images';
@@ -14,7 +16,7 @@ import { Segmented } from '../ui/Segmented';
 import { Slider } from '../ui/Slider';
 import { Field } from '../ui/Field';
 
-type Tab = 'create' | 'photo';
+type Tab = 'create' | 'photo' | 'script';
 type PhotoStyle = 'doodle' | 'cartoon';
 
 function svgDataUrl(svg: string): string {
@@ -295,6 +297,113 @@ function PhotoTab({ onAdded }: { onAdded?: () => void }) {
 
 // ---------------------------------------------------------------------------
 
+/** Script → scribe: scenes, pictures, text, narration and timing from a script or topic. */
+function ScriptTab({ onAdded }: { onAdded?: () => void }) {
+  const s = useAiSettings();
+  const ready = textReady(s);
+  const speech = (['openai', 'groq', 'gemini'] as SpeechProvider[]).filter((p) => s.keys[p]);
+  const [prompt, setPrompt] = useState('');
+  const [narrate, setNarrate] = useState(speech.length > 0);
+  const [provider, setProvider] = useState<SpeechProvider>(speech[0] ?? 'openai');
+  const [voice, setVoice] = useState(TTS_MODELS[speech[0] ?? 'openai'].voices[0].id);
+  const [planned, setPlanned] = useState<ScriptPlan | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const makePlan = async () => {
+    if (!prompt.trim() || busy) return;
+    setBusy('Planning scenes…');
+    setError(null);
+    setPlanned(null);
+    try {
+      setPlanned(await planScript(prompt.trim()));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const build = async () => {
+    if (!planned || busy) return;
+    setBusy('Building…');
+    setError(null);
+    try {
+      await buildScript(planned, { narrate: narrate && speech.length ? { provider, voice } : undefined, onProgress: setBusy });
+      setPlanned(null);
+      onAdded?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label="Your script, or just a topic">
+        <textarea
+          className="df-input min-h-[110px] resize-y"
+          placeholder={'e.g. "Explain how a bill becomes law in 4 scenes" — or paste the narration you already wrote.'}
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+        />
+      </Field>
+      {speech.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-xl border border-line bg-panel2 p-2.5">
+          <label className="flex items-center gap-2 text-[12px] text-t1">
+            <input type="checkbox" checked={narrate} onChange={(e) => setNarrate(e.target.checked)} />
+            Narrate each scene with an AI voice and time the drawing to it
+          </label>
+          {narrate && (
+            <div className="grid grid-cols-2 gap-2">
+              <select className="df-input !h-7 text-[12px]" value={provider} onChange={(e) => { const p = e.target.value as SpeechProvider; setProvider(p); setVoice(TTS_MODELS[p].voices[0].id); }}>
+                {speech.map((p) => <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'groq' ? 'Groq (PlayAI)' : 'Gemini'}</option>)}
+              </select>
+              <select className="df-input !h-7 text-[12px]" value={voice} onChange={(e) => setVoice(e.target.value)}>
+                {TTS_MODELS[provider].voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+      <Button variant="primary" className="justify-center" disabled={!ready || !prompt.trim() || !!busy} onClick={() => void makePlan()}>
+        {busy && !planned ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+        {busy && !planned ? busy : 'Plan the scenes'}
+      </Button>
+      {!ready && <p className="text-[11.5px] text-t3">Add an API key in the settings (gear) to use this.</p>}
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-[12px] text-red-600">{error}</div>}
+      {planned && (
+        <div className="flex flex-col gap-2">
+          <div className="text-[12.5px] font-semibold text-t1">{planned.title}</div>
+          {planned.scenes.map((sc, i) => (
+            <div key={i} className="rounded-xl border border-line p-2.5">
+              <div className="text-[12px] font-medium text-t1">{i + 1}. {sc.name}</div>
+              <div className="mt-0.5 text-[11.5px] text-t2">“{sc.narration}”</div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {sc.items.map((it, k) => (
+                  <span key={k} className="rounded-full bg-panel2 px-2 py-0.5 text-[10.5px] text-t2">
+                    {it.type === 'text' ? `“${it.text}”` : it.type === 'library' ? `🖼 ${it.label}` : `✏ ${it.label}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          <Button variant="primary" className="justify-center" disabled={!!busy} onClick={() => void build()}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+            {busy ?? `Build ${planned.scenes.length} scenes${narrate && speech.length ? ' with narration' : ''}`}
+          </Button>
+          <p className="text-[11px] leading-relaxed text-t3">
+            Scenes are appended to the current project with fade transitions; everything stays editable. Undo removes it all.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 export function AiPanel({ onAdded }: { onAdded?: () => void }) {
   const s = useAiSettings();
   const [tab, setTab] = useState<Tab>('create');
@@ -307,7 +416,7 @@ export function AiPanel({ onAdded }: { onAdded?: () => void }) {
           className="flex-1"
           value={tab}
           onChange={setTab}
-          options={[{ value: 'create', label: 'Create from text' }, { value: 'photo', label: 'From a photo' }]}
+          options={[{ value: 'create', label: 'Create' }, { value: 'script', label: 'Script → scribe' }, { value: 'photo', label: 'From a photo' }]}
         />
         <IconButton label="AI settings (API keys, models)" onClick={() => setShowSettings(true)}>
           <Settings size={15} />
@@ -316,7 +425,7 @@ export function AiPanel({ onAdded }: { onAdded?: () => void }) {
       <div className="text-[10.5px] text-t3">
         {textReady(s) ? `Using ${PROVIDER_LABELS[s.textProvider].split(' ')[0]} · ${s.textModel[s.textProvider]}` : 'No AI key set — photo → doodle still works offline'}
       </div>
-      {tab === 'create' ? <CreateTab onAdded={onAdded} /> : <PhotoTab onAdded={onAdded} />}
+      {tab === 'create' ? <CreateTab onAdded={onAdded} /> : tab === 'script' ? <ScriptTab onAdded={onAdded} /> : <PhotoTab onAdded={onAdded} />}
       {showSettings && <AiSettingsDialog onClose={() => setShowSettings(false)} />}
     </div>
   );
