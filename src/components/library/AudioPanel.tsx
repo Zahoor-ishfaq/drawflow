@@ -40,7 +40,7 @@ function AiVoice({ at }: { at: number }) {
       const src = await decodeToSource(blob, `AI voice — ${text.trim().slice(0, 28)}`);
       addClip(src.id, src.name, 'voice', src.duration, at);
     } catch (e) {
-      setError(reportAiError(e, provider).title);
+      setError(reportAiError(e, provider, 'voice').title);
     } finally {
       setBusy(false);
     }
@@ -139,7 +139,7 @@ export function AudioPanel({ onAdded }: { onAdded?: () => void }) {
       for (const [id, p] of patches) s.updateElement(id, p);
       setFitNote(`Transcribed ${phrases.length} sentences; matched ${patches.size} elements.`);
     } catch (e) {
-      setFitNote(reportAiError(e, provider).title);
+      setFitNote(reportAiError(e, provider, 'transcribe').title);
     } finally {
       setBusy(null);
     }

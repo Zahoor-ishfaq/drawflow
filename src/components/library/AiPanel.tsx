@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Settings, Sparkles, Upload, Wand2 } from 'lucide-react';
-import { useAiSettings, imageReady, textReady, PROVIDER_LABELS } from '../../lib/ai/settings';
+import { useAiSettings, imageReady, textReady, PROVIDER_LABELS, type ImageProvider } from '../../lib/ai/settings';
 import { plan, type Proposal } from '../../lib/ai/planner';
 import { planScript, buildScript, type ScriptPlan } from '../../lib/ai/script';
 import { TTS_MODELS, type SpeechProvider } from '../../lib/ai/speech';
@@ -30,6 +30,8 @@ function splitDataUrl(url: string): { mime: string; base64: string } {
   const m = url.match(/^data:([^;]+);base64,(.*)$/);
   return m ? { mime: m[1], base64: m[2] } : { mime: 'image/png', base64: '' };
 }
+
+const IMAGE_NAMES: Record<ImageProvider, string> = { gemini: 'Gemini', openai: 'OpenAI' };
 
 const CARTOON_PROMPT =
   'Redraw this photo as a clean whiteboard-style cartoon illustration: bold black outlines, simple flat colours, ' +
@@ -64,7 +66,7 @@ function CreateTab({ onAdded }: { onAdded?: () => void }) {
         setProposals(await plan(prompt.trim()));
       }
     } catch (e) {
-      setError(reportAiError(e, asPicture ? s.imageProvider : s.textProvider).title);
+      setError(reportAiError(e, asPicture ? s.imageProvider : s.textProvider, asPicture ? 'image' : 'text').title);
     } finally {
       setBusy(false);
     }
@@ -92,8 +94,13 @@ function CreateTab({ onAdded }: { onAdded?: () => void }) {
       />
       <label className="flex items-center gap-2 text-[12px] text-t2">
         <input type="checkbox" className="accent-[#0d9d97]" checked={asPicture} onChange={(e) => setAsPicture(e.target.checked)} />
-        Generate a picture instead (uses the image provider)
+        Generate a picture instead
       </label>
+      {asPicture && (
+        <p className="-mt-1.5 pl-6 text-[10.5px] text-t3">
+          {imageReady(s) ? `Pictures via ${IMAGE_NAMES[s.imageProvider]} · ${s.imageModel[s.imageProvider]} (set under “Pictures” in AI settings)` : 'Pictures need a Gemini or OpenAI key with an image model — see “Pictures” in AI settings'}
+        </p>
+      )}
       <Button variant="primary" className="justify-center" onClick={() => void run()} disabled={busy || !prompt.trim() || (asPicture ? !canImage : !ready)}>
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
         {busy ? 'Thinking…' : asPicture ? 'Generate picture' : 'Create elements'}
@@ -210,7 +217,7 @@ function PhotoTab({ onAdded }: { onAdded?: () => void }) {
       const img = await generateImage(s.imageProvider, s.keys[s.imageProvider], s.imageModel[s.imageProvider], CARTOON_PROMPT, splitDataUrl(src));
       setCartoon(`data:${img.mime};base64,${img.base64}`);
     } catch (e) {
-      setError(reportAiError(e, s.imageProvider).title);
+      setError(reportAiError(e, s.imageProvider, 'image').title);
     } finally {
       setBusy(false);
     }
@@ -319,7 +326,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
     try {
       setPlanned(await planScript(prompt.trim()));
     } catch (e) {
-      setError(reportAiError(e, s.textProvider).title);
+      setError(reportAiError(e, s.textProvider, 'text').title);
     } finally {
       setBusy(null);
     }
@@ -334,7 +341,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
       setPlanned(null);
       onAdded?.();
     } catch (e) {
-      setError(reportAiError(e, s.textProvider).title);
+      setError(reportAiError(e, s.textProvider, 'text').title);
     } finally {
       setBusy(null);
     }
@@ -424,7 +431,9 @@ export function AiPanel({ onAdded }: { onAdded?: () => void }) {
         </IconButton>
       </div>
       <div className="text-[10.5px] text-t3">
-        {textReady(s) ? `Using ${PROVIDER_LABELS[s.textProvider].split(' ')[0]} · ${s.textModel[s.textProvider]}` : 'No AI key set — photo → doodle still works offline'}
+        {tab === 'photo'
+          ? (imageReady(s) ? `Cartoons via ${IMAGE_NAMES[s.imageProvider]} · ${s.imageModel[s.imageProvider]} — doodles need no key` : 'Doodles work offline — cartoons need a Gemini or OpenAI key')
+          : textReady(s) ? `Text via ${PROVIDER_LABELS[s.textProvider].split(' ')[0]} · ${s.textModel[s.textProvider]}` : 'No AI key set — photo → doodle still works offline'}
       </div>
       {tab === 'create' ? <CreateTab onAdded={onAdded} /> : tab === 'script' ? <ScriptTab onAdded={onAdded} /> : <PhotoTab onAdded={onAdded} />}
       {showSettings && <AiSettingsDialog onClose={() => setShowSettings(false)} />}

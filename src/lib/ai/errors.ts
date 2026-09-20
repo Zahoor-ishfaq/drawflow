@@ -7,6 +7,9 @@ import type { TextProvider } from './settings';
 
 export type ProblemKind = 'key' | 'quota' | 'credit' | 'model' | 'network' | 'busy' | 'content' | 'request' | 'other';
 
+/** What the failed call was for — each job has its own provider setting. */
+export type AiRole = 'text' | 'image' | 'voice' | 'transcribe';
+
 export interface Problem {
   kind: ProblemKind;
   title: string;
@@ -15,6 +18,8 @@ export interface Problem {
   steps: string[];
   /** the raw text, for the "details" disclosure */
   details?: string;
+  /** which setting this call actually used (so people don't change the wrong one) */
+  note?: string;
   /** offer the AI settings button */
   settings?: boolean;
   /** an external page that helps (billing, keys, status) */
@@ -52,7 +57,17 @@ function modelOf(text: string): string | undefined {
   return m?.[1];
 }
 
-export function explainAiError(err: unknown, provider?: TextProvider): Problem {
+function roleNote(role: AiRole | undefined, name: string): string | undefined {
+  switch (role) {
+    case 'image': return `This request went to your picture provider (${name}), chosen under “Pictures” in AI settings. The text provider — used for scripts and suggestions — is not involved, so changing it won't help here.`;
+    case 'voice': return `This request went to ${name}, the provider picked in the voice card — not the text provider.`;
+    case 'transcribe': return `Transcription uses Groq or OpenAI Whisper (${name} here), whichever key you have — not the text provider.`;
+    case 'text': return `This request went to your text provider (${name}), the one with the radio button in AI settings.`;
+    default: return undefined;
+  }
+}
+
+export function explainAiError(err: unknown, provider?: TextProvider, role?: AiRole): Problem {
   const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
   const p = provider ?? guessProvider(raw);
   const name = p ? NAMES[p] : 'the AI provider';
@@ -61,7 +76,10 @@ export function explainAiError(err: unknown, provider?: TextProvider): Problem {
   const low = raw.toLowerCase();
   const model = modelOf(raw);
   const details = raw.replace(/\s+/g, ' ').slice(0, 900);
-  const base = { details, provider: p };
+  const base = { details, provider: p, note: p ? roleNote(role, name) : undefined };
+  const modelStep = role === 'image'
+    ? `Pick a different image model (the “Images” field under ${name} in AI settings), or switch Pictures to the other provider.`
+    : 'Pick a different model in AI settings — the free ones work straight away.';
 
   // couldn't even reach the server
   if (err instanceof TypeError || /failed to fetch|networkerror|load failed|err_(name|internet|connection)/i.test(raw)) {
@@ -79,7 +97,7 @@ export function explainAiError(err: unknown, provider?: TextProvider): Problem {
     return {
       ...base, kind: needsKey ? 'key' : 'other', title: needsKey ? 'AI is not set up yet' : 'That didn\'t work',
       message: raw, steps: needsKey ? ['Open AI settings, choose a provider and paste a key — keys stay in this browser.'] : ['Try again, or rephrase the request.'],
-      settings: needsKey, details: undefined,
+      settings: needsKey, details: undefined, note: undefined,
     };
   }
 
@@ -109,7 +127,7 @@ export function explainAiError(err: unknown, provider?: TextProvider): Problem {
       return {
         ...base, kind: 'quota', title: `${model ?? 'This model'} isn't included in your ${name} plan`,
         message: `The provider reports a quota of zero for this model — your account has no allowance for it (it is usually a paid-only or preview model).`,
-        steps: ['Pick a different model in AI settings — the free ones work straight away.', `Or enable billing on your ${name} account to unlock it.`],
+        steps: [modelStep, `Or enable billing on your ${name} account to unlock it.`],
         settings: true, link: links ? { label: `${name} plans & limits`, url: links.billing } : undefined,
       };
     }
@@ -125,7 +143,7 @@ export function explainAiError(err: unknown, provider?: TextProvider): Problem {
     return {
       ...base, kind: 'model', title: `${name} doesn't know the model ${model ? `“${model}”` : 'you chose'}`,
       message: 'The model id is not available to this key — it may have been renamed, retired, or not enabled for your account.',
-      steps: ['Choose another model in AI settings (the list is fetched live from the provider).', 'If you typed the id by hand, check the spelling.'],
+      steps: [role === 'image' ? modelStep : 'Choose another model in AI settings (the list is fetched live from the provider).', 'If you typed the id by hand, check the spelling.'],
       settings: true,
     };
   }

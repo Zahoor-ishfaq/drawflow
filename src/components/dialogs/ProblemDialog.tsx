@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Ban, CloudOff, Copy, Gauge, KeyRound, ServerCrash, Settings, Wallet, Check, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Ban, CloudOff, Copy, Gauge, Info, KeyRound, ServerCrash, Settings, Wallet, Check, ExternalLink } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useProblemStore } from '../../store/problemStore';
 import { AiSettingsDialog } from '../library/AiSettingsDialog';
@@ -46,6 +46,13 @@ function ProblemDialog({ problem, onClose, onSettings }: { problem: Problem; onC
             <p className="mt-1 text-[12.5px] leading-relaxed text-t2">{problem.message}</p>
           </div>
         </div>
+
+        {problem.note && (
+          <div className="mt-3 flex gap-2 rounded-xl border border-accent/30 bg-accent-weak/40 px-3 py-2 text-[12px] leading-relaxed text-t1">
+            <Info size={14} className="mt-0.5 shrink-0 text-accent" />
+            <span>{problem.note}</span>
+          </div>
+        )}
 
         {problem.steps.length > 0 && (
           <div className="mt-4 rounded-xl bg-panel2 px-4 py-3">

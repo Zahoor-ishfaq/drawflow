@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { explainAiError, type Problem } from '../lib/ai/errors';
+import { explainAiError, type AiRole, type Problem } from '../lib/ai/errors';
 import type { TextProvider } from '../lib/ai/settings';
 
 interface ProblemState {
@@ -18,8 +18,8 @@ export const useProblemStore = create<ProblemState>((set) => ({
 export const showProblem = (problem: Problem) => useProblemStore.getState().show(problem);
 
 /** Explain an AI failure in the dialog; returns the explanation for inline use too. */
-export function reportAiError(err: unknown, provider?: TextProvider): Problem {
-  const problem = explainAiError(err, provider);
+export function reportAiError(err: unknown, provider?: TextProvider, role?: AiRole): Problem {
+  const problem = explainAiError(err, provider, role);
   showProblem(problem);
   return problem;
 }

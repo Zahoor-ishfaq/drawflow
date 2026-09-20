@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { explainAiError } from '../../lib/ai/errors';
 import { Eye, EyeOff, RefreshCw, X } from 'lucide-react';
 import {
-  KEY_HELP, PROVIDER_LABELS, updateAiSettings, useAiSettings,
+  KEY_HELP, PROVIDER_LABELS, imageReady, textReady, updateAiSettings, useAiSettings,
   type ImageProvider, type TextProvider,
 } from '../../lib/ai/settings';
 import { isGeminiImageModel, listModels, type ModelInfo } from '../../lib/ai/providers';
@@ -29,8 +29,8 @@ function ProviderRow({ id }: { id: TextProvider }) {
       setModels(list);
       if (!model && list.length) updateAiSettings({ textModel: { ...s.textModel, [id]: pickDefault(id, list) } });
       if (id === 'gemini') {
-        const img = list.find((m) => isGeminiImageModel(m.id));
-        if (img && !s.imageModel.gemini) updateAiSettings({ imageModel: { ...s.imageModel, gemini: img.id } });
+        const img = pickImageModel(list);
+        if (img && !s.imageModel.gemini) updateAiSettings({ imageModel: { ...s.imageModel, gemini: img } });
       }
     } catch (e) {
       // inside the settings dialog the explanation goes inline (the dialog is already the place to fix it)
@@ -109,6 +109,16 @@ function ProviderRow({ id }: { id: TextProvider }) {
   );
 }
 
+/** Prefer a released image model; preview ones often have no free allowance. */
+function pickImageModel(list: ModelInfo[]): string {
+  const imgs = list.filter((m) => isGeminiImageModel(m.id));
+  for (const re of [/^gemini-2\.5-flash-image$/, /flash-image$/, /image(?!.*preview)/, /image/]) {
+    const hit = imgs.find((m) => re.test(m.id));
+    if (hit) return hit.id;
+  }
+  return '';
+}
+
 function pickDefault(id: TextProvider, list: ModelInfo[]): string {
   const prefer: Record<TextProvider, RegExp[]> = {
     groq: [/llama-3\.3-70b/, /llama-4.*scout/, /gpt-oss-120b/, /llama/],
@@ -121,6 +131,32 @@ function pickDefault(id: TextProvider, list: ModelInfo[]): string {
     if (hit) return hit.id;
   }
   return list[0]?.id ?? '';
+}
+
+const SHORT: Record<TextProvider, string> = { anthropic: 'Anthropic', openai: 'OpenAI', groq: 'Groq', gemini: 'Gemini' };
+
+/** Which provider each job goes to — the thing people most often get wrong. */
+function WhoDoesWhat() {
+  const s = useAiSettings();
+  const voices = (['openai', 'groq', 'gemini'] as TextProvider[]).filter((p) => s.keys[p]).map((p) => SHORT[p]);
+  const rows: [string, string, boolean][] = [
+    ['Text, scripts, suggestions', textReady(s) ? `${SHORT[s.textProvider]} · ${s.textModel[s.textProvider]}` : `${SHORT[s.textProvider]} — add a key and pick a model`, textReady(s)],
+    ['Pictures & cartoons', imageReady(s) ? `${SHORT[s.imageProvider]} · ${s.imageModel[s.imageProvider]}` : `${SHORT[s.imageProvider]} — needs a key and an image model`, imageReady(s)],
+    ['AI voice & transcription', voices.length ? voices.join(', ') : 'add an OpenAI, Groq or Gemini key', voices.length > 0],
+  ];
+  return (
+    <div className="rounded-xl bg-panel2 px-3 py-2.5">
+      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-t3">Who does what</div>
+      <div className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
+        {rows.map(([job, who, ok]) => (
+          <Fragment key={job}>
+            <span className="text-t2">{job}</span>
+            <span className={ok ? 'text-t1' : 'text-amber-600'}>{who}</span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function AiSettingsDialog({ onClose }: { onClose: () => void }) {
@@ -139,9 +175,10 @@ export function AiSettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex flex-col gap-3 overflow-y-auto p-4">
           <p className="text-[12px] leading-relaxed text-t2">
-            Keys are stored only in this browser and sent directly to the provider you pick. Choose which
-            provider understands your requests (radio button); pictures come from Gemini or OpenAI.
+            Keys are stored only in this browser and sent directly to the provider you pick. The radio button
+            chooses who handles text; pictures have their own choice at the bottom.
           </p>
+          <WhoDoesWhat />
           {PROVIDERS.map((id) => <ProviderRow key={id} id={id} />)}
           <div className="rounded-xl border border-line p-3">
             <div className="text-[13px] font-medium">Pictures (cartoons, generated images)</div>
