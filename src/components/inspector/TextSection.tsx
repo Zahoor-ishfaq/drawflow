@@ -1,43 +1,63 @@
 import { useEffect, useState } from 'react';
 import type { DrawElement } from '../../types';
 import { useStore } from '../../store/useStore';
-import { textToPaths, DEFAULT_FONT_ID, DEFAULT_FONT_SIZE, FONTS } from '../../lib/textToPaths';
+import { textToPaths, boldStrokeWidth, DEFAULT_FONT_ID, DEFAULT_FONT_SIZE } from '../../lib/textToPaths';
 import { Field, SectionHeader } from '../ui/Field';
 import { Button } from '../ui/Button';
+import { TextControls, type TextSettings } from '../library/TextControls';
+
+function settingsOf(el: DrawElement): TextSettings {
+  return {
+    fontId: el.fontFamily ?? DEFAULT_FONT_ID,
+    fontSize: el.fontSize ?? DEFAULT_FONT_SIZE,
+    bold: el.fontWeight === 'bold',
+    italic: !!el.italic,
+    align: el.align,
+    lineHeight: el.lineHeight,
+    letterSpacing: el.letterSpacing,
+    rtl: !!el.rtl,
+  };
+}
 
 export function TextSection({ element: el }: { element: DrawElement }) {
   const updateElement = useStore((s) => s.updateElement);
+  const customFonts = useStore((s) => s.project.fonts);
   const [text, setText] = useState(el.text ?? '');
-  const [fontId, setFontId] = useState(el.fontFamily ?? DEFAULT_FONT_ID);
-  const [fontSize, setFontSize] = useState(el.fontSize ?? DEFAULT_FONT_SIZE);
+  const [settings, setSettings] = useState<TextSettings>(settingsOf(el));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // sync when a different text element is selected
   useEffect(() => {
     setText(el.text ?? '');
-    setFontId(el.fontFamily ?? DEFAULT_FONT_ID);
-    setFontSize(el.fontSize ?? DEFAULT_FONT_SIZE);
+    setSettings(settingsOf(el));
     setError(null);
   }, [el.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty =
-    text !== (el.text ?? '') ||
-    fontId !== (el.fontFamily ?? DEFAULT_FONT_ID) ||
-    fontSize !== (el.fontSize ?? DEFAULT_FONT_SIZE);
+  const settingsDirty = JSON.stringify(settings) !== JSON.stringify(settingsOf(el));
+  const textDirty = text !== (el.text ?? '');
 
   const apply = async () => {
     if (!text.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const paths = await textToPaths(text, fontId, fontSize);
+      const paths = await textToPaths(text, settings.fontId, settings.fontSize, { ...settings, customFonts });
       const trimmed = text.trim();
+      const wasBold = el.fontWeight === 'bold';
+      const baseStroke = wasBold ? el.strokeWidth - boldStrokeWidth(el.fontSize ?? DEFAULT_FONT_SIZE) : el.strokeWidth;
       updateElement(el.id, {
         paths,
         text,
-        fontFamily: fontId,
-        fontSize,
+        fontFamily: settings.fontId,
+        fontSize: settings.fontSize,
+        fontWeight: settings.bold ? 'bold' : 'normal',
+        italic: !!settings.italic,
+        align: settings.align,
+        lineHeight: settings.lineHeight,
+        letterSpacing: settings.letterSpacing,
+        rtl: !!settings.rtl,
+        strokeWidth: Math.max(0.5, baseStroke) + (settings.bold ? boldStrokeWidth(settings.fontSize) : 0),
         label: trimmed.length > 24 ? `${trimmed.slice(0, 24)}…` : trimmed,
       });
     } catch (e) {
@@ -47,6 +67,11 @@ export function TextSection({ element: el }: { element: DrawElement }) {
     }
   };
 
+  // style changes apply straight away; text edits wait for the button (or Ctrl+Enter)
+  useEffect(() => {
+    if (!textDirty && settingsDirty) void apply();
+  }, [settings]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex flex-col gap-2.5">
       <SectionHeader>Text</SectionHeader>
@@ -54,30 +79,14 @@ export function TextSection({ element: el }: { element: DrawElement }) {
         <textarea
           className="df-input min-h-[54px] resize-y"
           value={text}
+          dir={settings.rtl ? 'rtl' : undefined}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void apply(); }}
         />
       </Field>
-      <div className="grid grid-cols-[1fr_64px] gap-2">
-        <Field label="Font">
-          <select className="df-input" value={fontId} onChange={(e) => setFontId(e.target.value)}>
-            {FONTS.map((f) => (
-              <option key={f.id} value={f.id}>{f.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Size">
-          <input
-            type="number"
-            className="df-input"
-            min={12}
-            max={600}
-            value={fontSize}
-            onChange={(e) => setFontSize(parseInt(e.target.value, 10) || DEFAULT_FONT_SIZE)}
-          />
-        </Field>
-      </div>
+      <TextControls value={settings} onChange={setSettings} />
       {error && <div className="text-[12px] text-red-500">{error}</div>}
-      {dirty && (
+      {textDirty && (
         <Button variant="secondary" className="justify-center" onClick={() => void apply()} disabled={busy || !text.trim()}>
           {busy ? 'Updating…' : 'Update text'}
         </Button>

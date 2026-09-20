@@ -1,24 +1,48 @@
-import { Copy, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { useState } from 'react';
+import { Copy, Headphones, Scissors, Sparkles, Trash2, Volume2, VolumeX, Wand2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAudioSource } from '../../store/audioSources';
 import { setClipVolume } from '../../lib/audioEngine';
+import { cleanVoice, normalizeGain } from '../../lib/audioTools';
 import { Field, SectionHeader } from '../ui/Field';
 import { Slider } from '../ui/Slider';
 import { NumberInput } from '../ui/NumberInput';
 import { Button } from '../ui/Button';
 import type { AudioClip } from '../../types';
 
+const LANE_TITLES = { voice: 'Voiceover clip', music: 'Music clip', sfx: 'Sound effect' } as const;
+
 export function AudioSection({ clip }: { clip: AudioClip }) {
   const currentTime = useStore((s) => s.currentTime);
   const source = useAudioSource(clip.sourceId);
+  const scenes = useStore((s) => s.project.scenes ?? []);
   const { updateAudioClip, removeAudioClip, duplicateAudioClip, splitAudioClip, select } = useStore.getState();
+  const [busy, setBusy] = useState<string | null>(null);
   const patch = (p: Partial<AudioClip>) => updateAudioClip(clip.id, p);
   const canSplit = currentTime > clip.startTime + 0.05 && currentTime < clip.startTime + clip.duration - 0.05;
   const end = clip.startTime + clip.duration;
 
+  const normalize = () => {
+    if (!source) return;
+    const v = normalizeGain(source.buffer, clip.offset, clip.offset + clip.duration);
+    patch({ volume: v });
+    setClipVolume(clip.id, v);
+  };
+
+  const clean = async () => {
+    if (!source || busy) return;
+    setBusy('clean');
+    try {
+      const cleaned = await cleanVoice(source);
+      patch({ sourceId: cleaned.id, name: clip.name.endsWith('(clean)') ? clip.name : `${clip.name} (clean)` });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <SectionHeader>{clip.lane === 'voice' ? 'Voiceover clip' : 'Music clip'}</SectionHeader>
+      <SectionHeader>{LANE_TITLES[clip.lane] ?? 'Audio clip'}</SectionHeader>
       <Field label="Name">
         <input type="text" className="df-input" value={clip.name} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
@@ -36,9 +60,21 @@ export function AudioSection({ clip }: { clip: AudioClip }) {
         <Button variant="secondary" className="justify-center" onClick={() => patch({ muted: !clip.muted })}>
           {clip.muted ? <VolumeX size={13} /> : <Volume2 size={13} />} {clip.muted ? 'Unmute' : 'Mute'}
         </Button>
+        <Button variant="secondary" className={'justify-center ' + (clip.solo ? '!bg-accent-weak !text-accent' : '')} onClick={() => patch({ solo: !clip.solo })} title="Hear only soloed clips">
+          <Headphones size={13} /> {clip.solo ? 'Solo on' : 'Solo'}
+        </Button>
+        <Button variant="secondary" className="justify-center" onClick={normalize} disabled={!source} title="Set the volume so the loudest moment peaks at 90%">
+          <Wand2 size={13} /> Normalise
+        </Button>
       </div>
       {!canSplit && (
         <p className="text-[10.5px] text-t3">Move the playhead inside the clip to split it.</p>
+      )}
+      {clip.lane === 'voice' && (
+        <Button variant="secondary" className="justify-center" onClick={() => void clean()} disabled={!source || !!busy}
+          title="High-pass filter plus a noise gate: removes room noise between sentences">
+          <Sparkles size={13} /> {busy === 'clean' ? 'Cleaning…' : 'Clean up background noise'}
+        </Button>
       )}
 
       <Field label="Volume">
@@ -80,6 +116,14 @@ export function AudioSection({ clip }: { clip: AudioClip }) {
           />
         </Field>
       </div>
+      {scenes.length > 0 && (
+        <Field label="Belongs to scene (moves with it)">
+          <select className="df-input" value={clip.sceneId ?? ''} onChange={(e) => patch({ sceneId: e.target.value || undefined })}>
+            <option value="">— none —</option>
+            {scenes.map((sc) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+          </select>
+        </Field>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="secondary" className="justify-center" onClick={() => duplicateAudioClip(clip.id)}>

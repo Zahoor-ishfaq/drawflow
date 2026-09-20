@@ -218,7 +218,8 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   }
 
   // ---- MP4 / WebM ---------------------------------------------------------
-  const wantAudio = audioClips.some((c) => !c.muted && c.duration > 0);
+  const anySolo = audioClips.some((c) => c.solo);
+  const wantAudio = audioClips.some((c) => !c.muted && (!anySolo || c.solo) && c.duration > 0);
   const session = await createEncodeSession({
     format, width: outW, height: outH, fps,
     audio: wantAudio ? { sampleRate: MIX_SAMPLE_RATE, channels: 2 } : undefined,

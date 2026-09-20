@@ -14,9 +14,10 @@ export function startAudio(clips: AudioClip[], t: number): void {
   const ac = audioContext();
   void ac.resume();
   const now = ac.currentTime;
+  const anySolo = clips.some((c) => c.solo);
 
   for (const clip of clips) {
-    if (clip.muted || clip.duration <= 0) continue;
+    if (clip.muted || clip.duration <= 0 || (anySolo && !clip.solo)) continue;
     const source = getSource(clip.sourceId);
     if (!source) continue;
     const rel = t - clip.startTime; // position within the clip

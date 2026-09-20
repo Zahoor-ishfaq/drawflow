@@ -6,7 +6,7 @@ import { sequenceOrder, useStore } from '../store/useStore';
 import type { DrawElement, ImageRef } from '../types';
 import { measurePaths } from './drawing';
 import { elementBounds, cameraForElement, viewBoxFor, viewFromRect, type Bounds } from './camera';
-import { textToPaths } from './textToPaths';
+import { textToPaths, boldStrokeWidth, type TextOptions } from './textToPaths';
 import { normalizeSvg, type NormalizedSvg } from './svgImport';
 import { SHAPES } from '../assets/shapes';
 import type { LibraryAsset } from '../assets/library';
@@ -126,10 +126,10 @@ function placeNew(paths: string[], scale: number, attempt = 0): Placement {
   return at(best.left, best.top);
 }
 
-export async function addTextElement(text: string, fontFamily: string, fontSize: number): Promise<void> {
+export async function addTextElement(text: string, fontFamily: string, fontSize: number, opts: TextOptions = {}): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) return;
-  const paths = await textToPaths(text, fontFamily, fontSize);
+  const paths = await textToPaths(text, fontFamily, fontSize, { ...opts, customFonts: useStore.getState().project.fonts });
   if (paths.length === 0) return;
   const color = ink();
   useStore.getState().addElement({
@@ -139,10 +139,16 @@ export async function addTextElement(text: string, fontFamily: string, fontSize:
     text,
     fontFamily,
     fontSize,
+    fontWeight: opts.bold ? 'bold' : 'normal',
+    italic: !!opts.italic,
+    align: opts.align,
+    lineHeight: opts.lineHeight,
+    letterSpacing: opts.letterSpacing,
+    rtl: !!opts.rtl,
     strokeColor: color,
     fillColor: color,
     fillAfterDraw: true,
-    strokeWidth: 2,
+    strokeWidth: 2 + (opts.bold ? boldStrokeWidth(fontSize) : 0),
     drawDuration: clamp(trimmed.length * 0.2, 1.2, 10),
     ...placeNew(paths, 1),
   });

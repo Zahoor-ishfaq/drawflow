@@ -125,6 +125,7 @@ export interface DrawElement {
   align?: 'left' | 'center' | 'right';
   lineHeight?: number;        // multiple of the font size, default 1.25
   letterSpacing?: number;     // em, default 0
+  rtl?: boolean;              // right-to-left text (Hebrew etc.)
 }
 
 export type AudioLaneKind = 'music' | 'voice' | 'sfx';

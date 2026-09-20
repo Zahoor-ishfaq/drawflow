@@ -11,7 +11,8 @@ export const MIX_SAMPLE_RATE = 48000;
 
 /** All audible clips rendered into one stereo buffer, or null when there is nothing to hear. */
 export async function mixdownBuffer(clips: AudioClip[], duration: number): Promise<AudioBuffer | null> {
-  const live = clips.filter((c) => !c.muted && c.duration > 0 && getSource(c.sourceId));
+  const anySolo = clips.some((c) => c.solo);
+  const live = clips.filter((c) => !c.muted && (!anySolo || c.solo) && c.duration > 0 && getSource(c.sourceId));
   if (live.length === 0) return null;
   const frames = Math.max(1, Math.ceil(duration * MIX_SAMPLE_RATE));
   const ctx = new OfflineAudioContext(2, frames, MIX_SAMPLE_RATE);
