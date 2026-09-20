@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, PenTool, Play, Redo2, Undo2 } from 'lucide-react';
 import { redo, undo, useCanUndoRedo, useStore } from '../../store/useStore';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { ExportDialog } from '../export/ExportDialog';
 import { ProjectMenu } from './ProjectMenu';
+import { ViewMenu } from './ViewMenu';
+import { ShortcutsDialog } from './ShortcutsDialog';
+import { onShortcut } from '../../hooks/useKeyboardShortcuts';
 
 export function TopBar() {
   const name = useStore((s) => s.project.name);
@@ -13,6 +16,8 @@ export function TopBar() {
   const elementCount = useStore((s) => s.elements.length);
   const { canUndo, canRedo } = useCanUndoRedo();
   const [showExport, setShowExport] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  useEffect(() => onShortcut((n) => { if (n === 'shortcuts-help') setShowShortcuts((v) => !v); }), []);
 
   const preview = () => {
     const s = useStore.getState();
@@ -38,6 +43,7 @@ export function TopBar() {
       />
 
       <ProjectMenu />
+      <ViewMenu />
 
       <div className="flex-1" />
 
@@ -60,6 +66,7 @@ export function TopBar() {
       </Button>
 
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
+      {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
     </header>
   );
 }

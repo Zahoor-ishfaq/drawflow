@@ -4,7 +4,7 @@
 // frame edge, a long sleeve is drawn from the wrist outward so the arm always
 // continues off-screen — a person reaching in from outside the board.
 
-import type { HandStyle } from '../types';
+import type { CustomHand, HandStyle, Project } from '../types';
 // Inlined as data: URLs so the hands are part of the bundle — never a
 // separate request that can fail — and export can embed them directly.
 import markerSrc from './hands/marker.webp?inline';
@@ -30,7 +30,8 @@ export interface HandDef {
   tipY: number;
   /** image height as a fraction of the camera frame height (constant on screen) */
   frameFraction: number;
-  sleeve: SleeveDef;
+  /** built-in hands get a drawn sleeve; uploaded hands are used as-is */
+  sleeve?: SleeveDef;
 }
 
 export const HANDS: HandDef[] = [
@@ -51,9 +52,36 @@ export const HANDS: HandDef[] = [
   },
 ];
 
-export function handDef(style: HandStyle): HandDef | null {
+export const CUSTOM_PREFIX = 'custom:';
+
+export function customHandDef(h: CustomHand): HandDef {
+  return {
+    id: `${CUSTOM_PREFIX}${h.id}`,
+    label: h.name,
+    description: 'Your own hand',
+    src: h.src,
+    width: h.width,
+    height: h.height,
+    tipX: h.tipX,
+    tipY: h.tipY,
+    frameFraction: h.frameFraction ?? 0.7,
+  };
+}
+
+/** Resolve a hand style; `project` supplies the user's uploaded hands. */
+export function handDef(style: HandStyle, project?: Pick<Project, 'customHands'>): HandDef | null {
   if (style === 'none') return null;
+  if (style.startsWith(CUSTOM_PREFIX)) {
+    const id = style.slice(CUSTOM_PREFIX.length);
+    const custom = project?.customHands?.find((h) => h.id === id);
+    return custom ? customHandDef(custom) : HANDS[0];
+  }
   return HANDS.find((h) => h.id === style) ?? HANDS[0];
+}
+
+/** Every hand available to a project (built-in + uploaded). */
+export function allHands(project?: Pick<Project, 'customHands'>): HandDef[] {
+  return [...HANDS, ...(project?.customHands ?? []).map(customHandDef)];
 }
 
 // --- SVG markup ---------------------------------------------------------
@@ -87,6 +115,7 @@ function cuffPath(s: SleeveDef): string {
  */
 export function handInnerSvg(def: HandDef, href: string): string {
   const s = def.sleeve;
+  if (!s) return `<image href="${href}" width="${def.width}" height="${def.height}"/>`;
   const gid = `sleeve-${def.id}`;
   const hw2 = s.hw1 * 1.15;
   return (

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { sequenceOrder, useStore } from '../../store/useStore';
+import { useUiStore } from '../../store/uiStore';
 import { cameraForElement, unionBounds, viewBoxFor } from '../../lib/camera';
 import { clamp } from '../../lib/time';
+import { onShortcut } from '../../hooks/useKeyboardShortcuts';
 import { Stage } from '../canvas/Stage';
+import { Rulers } from '../canvas/Rulers';
 
 // Edit view is an infinite sheet of paper (VideoScribe-style): drag empty
 // paper to pan, wheel to zoom, place elements anywhere. Camera view shows the
@@ -23,6 +26,9 @@ export function Workspace() {
   const setCameraView = useStore((s) => s.setCameraView);
   const setCameraBoundary = useStore((s) => s.setCameraBoundary);
   const focusRequest = useStore((s) => s.focusRequest);
+  const showRulers = useUiStore((s) => s.showRulers);
+  const snapToGrid = useUiStore((s) => s.snapToGrid);
+  const gridSize = useUiStore((s) => s.gridSize);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -159,6 +165,26 @@ export function Workspace() {
     setView((v) => ({ ...v, cx: v.cx - dxCanvas, cy: v.cy - dyCanvas }));
   }, []);
 
+  // keyboard zoom shortcuts (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+1 / F)
+  useEffect(() => onShortcut((name) => {
+    if (cameraView) return;
+    if (name === 'zoom-in') zoomAt(1.25, 0, 0);
+    else if (name === 'zoom-out') zoomAt(1 / 1.25, 0, 0);
+    else if (name === 'zoom-fit') fit();
+    else if (name === 'zoom-100') { userAdjusted.current = true; setView((v) => ({ ...v, zoom: 1 })); }
+    else if (name === 'zoom-selection') {
+      const st = useStore.getState();
+      const sel = st.elements.filter((e) => st.selectedIds.includes(e.id));
+      const u = unionBounds(sel);
+      if (!u) return fit();
+      const pad = Math.max(u.width, u.height) * 0.25 + 40;
+      userAdjusted.current = true;
+      const b = { x: u.x - pad, y: u.y - pad, width: u.width + pad * 2, height: u.height + pad * 2 };
+      const zoom = clamp(Math.min(boundaryPx.width / b.width, boundaryPx.height / b.height), MIN_ZOOM, MAX_ZOOM);
+      animateTo({ cx: b.x + b.width / 2, cy: b.y + b.height / 2, zoom });
+    }
+  }), [cameraView, zoomAt, fit, animateTo, boundaryPx.width, boundaryPx.height]);
+
   // native wheel listener so preventDefault works (React wheel is passive)
   useEffect(() => {
     const el = containerRef.current;
@@ -217,6 +243,18 @@ export function Workspace() {
         size.w > 0 && (
           <div className="absolute inset-0">
             <Stage mode="edit" cssWidth={size.w} cssHeight={size.h} editView={editVb} boundary={boundaryCanvas} onPan={panBy} />
+            {snapToGrid && (
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  backgroundImage: 'linear-gradient(to right, rgba(13,157,151,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(13,157,151,0.12) 1px, transparent 1px)',
+                  backgroundSize: `${gridSize * view.zoom}px ${gridSize * view.zoom}px`,
+                  backgroundPosition: `${(-editVb.x * view.zoom) % (gridSize * view.zoom)}px ${(-editVb.y * view.zoom) % (gridSize * view.zoom)}px`,
+                  opacity: gridSize * view.zoom < 8 ? 0 : 1,
+                }}
+              />
+            )}
+            {showRulers && <Rulers view={editVb} width={size.w} height={size.h} />}
           </div>
         )
       )}

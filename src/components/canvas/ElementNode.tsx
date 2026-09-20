@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import type { DrawElement } from '../../types';
-import { elementInnerSvg, elementTransform, pathColors, type ElementFrame } from '../../lib/renderFrame';
-import { measurePaths } from '../../lib/drawing';
+import { elementInnerSvg, elementTransform, type ElementFrame } from '../../lib/renderFrame';
+import { localBounds } from '../../lib/camera';
 
 interface ElementNodeProps {
   element: DrawElement;
@@ -10,24 +10,28 @@ interface ElementNodeProps {
   onPointerDown: (e: React.PointerEvent, el: DrawElement) => void;
 }
 
+/**
+ * One element on the live canvas. The artwork is the same markup the export
+ * serializer produces, so what you see is exactly what renders.
+ */
 export const ElementNode = memo(function ElementNode({
   element: el,
   frame,
   interactive,
   onPointerDown,
 }: ElementNodeProps) {
-  const bbox = measurePaths(el.paths).bbox;
-  const isImage = el.kind === 'image' && !!el.image;
+  const bbox = localBounds(el);
+  const clickable = interactive && !el.locked;
 
   return (
     <g
       transform={elementTransform(el, frame)}
       opacity={frame.groupOpacity}
-      onPointerDown={interactive ? (e) => onPointerDown(e, el) : undefined}
-      style={{ cursor: interactive ? 'move' : 'default' }}
+      onPointerDown={clickable ? (e) => onPointerDown(e, el) : undefined}
+      style={{ cursor: clickable ? 'move' : 'default', pointerEvents: el.locked ? 'none' : undefined }}
     >
       {/* transparent bbox hit area so the whole element is clickable/draggable */}
-      {interactive && (
+      {clickable && (
         <rect
           x={bbox.x}
           y={bbox.y}
@@ -37,29 +41,7 @@ export const ElementNode = memo(function ElementNode({
           stroke="none"
         />
       )}
-      {isImage ? (
-        <g dangerouslySetInnerHTML={{ __html: elementInnerSvg(el, frame) }} />
-      ) : (
-        el.paths.map((d, i) => {
-          const dash = frame.dashes?.[i];
-          const { fill, stroke } = pathColors(el, i);
-          return (
-            <path
-              key={i}
-              d={d}
-              fill={fill}
-              fillOpacity={frame.fillOpacity}
-              fillRule={el.fillRule ?? 'nonzero'}
-              stroke={stroke}
-              strokeWidth={el.strokeWidth / el.scale}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={dash?.strokeDasharray}
-              strokeDashoffset={dash?.strokeDashoffset}
-            />
-          );
-        })
-      )}
+      <g dangerouslySetInnerHTML={{ __html: elementInnerSvg(el, frame) }} />
     </g>
   );
 });

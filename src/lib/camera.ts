@@ -5,6 +5,7 @@
 
 import type { CameraEasing, CameraView, DrawElement, Project } from '../types';
 import { applyTransform, measurePaths } from './drawing';
+import { elementEnd } from './timing';
 
 export const END_ZOOM_SECONDS = 1.2;
 /** an auto-framed element fills roughly this fraction of the frame */
@@ -49,7 +50,7 @@ export interface Bounds { x: number; y: number; width: number; height: number }
 
 /** Element bounding box in canvas coordinates (transform applied). */
 export function elementBounds(el: DrawElement): Bounds {
-  const b = measurePaths(el.paths).bbox;
+  const b = localBounds(el);
   const corners = [
     [b.x, b.y], [b.x + b.width, b.y], [b.x + b.width, b.y + b.height], [b.x, b.y + b.height],
   ].map(([px, py]) => applyTransform(px, py, el.x, el.y, el.rotation, el.scale));
@@ -57,6 +58,23 @@ export function elementBounds(el: DrawElement): Bounds {
   const ys = corners.map((c) => c.y);
   const x = Math.min(...xs), y = Math.min(...ys);
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+/** Bounds in the element's own coordinates: the artwork, or the cropped image. */
+export function localBounds(el: DrawElement): Bounds {
+  if (el.kind === 'image' && el.image) {
+    const c = el.crop;
+    const w = el.image.width, h = el.image.height;
+    if (!c) return { x: 0, y: 0, width: w, height: h };
+    return { x: w * c.left, y: h * c.top, width: w * (1 - c.left - c.right), height: h * (1 - c.top - c.bottom) };
+  }
+  return measurePaths(el.paths).bbox;
+}
+
+/** Camera showing every element of one scene. */
+export function sceneView(sceneId: string | undefined, ordered: DrawElement[], project: Project): CameraView {
+  const members = sceneId ? ordered.filter((e) => e.sceneId === sceneId) : ordered;
+  return overviewView(members.length ? members : ordered, project);
 }
 
 export function autoCamera(el: DrawElement, project: Project): CameraView {
@@ -77,6 +95,7 @@ export function cameraForElement(index: number, ordered: DrawElement[], project:
   const el = ordered[index];
   switch (el.camera) {
     case 'whole': return overviewView(ordered, project);
+    case 'scene': return sceneView(el.sceneId, ordered, project);
     case 'custom': return el.customCamera ?? autoCamera(el, project);
     case 'previous':
       return index > 0 ? cameraForElement(index - 1, ordered, project) : autoCamera(el, project);
@@ -100,11 +119,13 @@ export function buildCameraTimeline(ordered: DrawElement[], project: Project): C
   const keys: CameraKey[] = [];
   let contentEnd = 0;
   ordered.forEach((el, i) => {
+    contentEnd = Math.max(contentEnd, elementEnd(el));
+    // an element drawn together with the previous one shares its shot
+    if (el.withPrevious && i > 0 && el.camera !== 'custom') return;
     const view = cameraForElement(i, ordered, project);
     const moveEnd = el.startTime;
     const moveStart = i === 0 ? 0 : Math.max(0, el.startTime - el.transitionIn);
     keys.push({ view, moveStart, moveEnd });
-    contentEnd = Math.max(contentEnd, el.startTime + el.drawDuration + el.pauseAfter);
   });
   if (project.zoomAtEnd && ordered.length > 0) {
     keys.push({

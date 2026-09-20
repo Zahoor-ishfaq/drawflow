@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Hand, Image, Music, Shapes, Sparkles, StickyNote, Type, X } from 'lucide-react';
+import { Hand, Image, Layers, Music, Shapes, Sparkles, StickyNote, Type, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
 import { ShapesPanel } from '../library/ShapesPanel';
 import { ImagesPanel } from '../library/ImagesPanel';
@@ -7,9 +7,10 @@ import { AudioPanel } from '../library/AudioPanel';
 import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
 import { AiPanel } from '../library/AiPanel';
+import { LayersPanel } from '../library/LayersPanel';
 import { IconButton } from '../ui/IconButton';
 
-type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'hand' | 'paper';
+type Tool = 'images' | 'text' | 'shapes' | 'music' | 'ai' | 'layers' | 'hand' | 'paper';
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'images', label: 'Images', Icon: Image },
@@ -20,6 +21,7 @@ const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
 ];
 
 const SETUP_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
+  { id: 'layers', label: 'Layers', Icon: Layers },
   { id: 'hand', label: 'Hand', Icon: Hand },
   { id: 'paper', label: 'Paper', Icon: StickyNote },
 ];
@@ -30,6 +32,7 @@ const PANEL_TITLES: Record<Tool, string> = {
   shapes: 'Shapes & icons',
   music: 'Music',
   ai: 'AI assistant',
+  layers: 'Layers',
   hand: 'Set hand',
   paper: 'Set paper',
 };
@@ -86,6 +89,7 @@ export function IconRail() {
             {open === 'shapes' && <ShapesPanel />}
             {open === 'music' && <AudioPanel onAdded={close} />}
             {open === 'ai' && <AiPanel />}
+            {open === 'layers' && <LayersPanel />}
             {open === 'hand' && <HandPanel />}
             {open === 'paper' && <PaperPanel />}
           </div>
