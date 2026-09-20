@@ -738,12 +738,18 @@ export const useStore = create<AppState>()(
 
       assignScene(ids, sceneId) {
         const want = new Set(ids);
-        const { elements } = get();
-        const members = sequenceOrder(elements).filter((e) => e.sceneId === sceneId);
-        const last = members[members.length - 1];
-        // moved elements go to the end of the target scene, keeping their order
-        const moving = sequenceOrder(elements).filter((e) => want.has(e.id));
-        const base = last ? last.zIndex : -1;
+        const { elements, project } = get();
+        const scenes = project.scenes ?? [];
+        const ordered = sequenceOrder(elements);
+        // moved elements go to the end of the target scene, keeping their
+        // order; an empty scene sits after the last element of the scene before it
+        let base = -1;
+        const idx = scenes.findIndex((s) => s.id === sceneId);
+        for (let i = idx; i >= 0; i--) {
+          const members = ordered.filter((e) => e.sceneId === scenes[i].id && !want.has(e.id));
+          if (members.length) { base = members[members.length - 1].zIndex; break; }
+        }
+        const moving = ordered.filter((e) => want.has(e.id));
         const next = elements.map((e) => {
           const i = moving.findIndex((m) => m.id === e.id);
           return i === -1 ? e : { ...e, sceneId, zIndex: base + (i + 1) / (moving.length + 1) };

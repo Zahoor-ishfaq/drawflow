@@ -1,34 +1,161 @@
+import { useEffect, useRef, useState } from 'react';
+import { Mic, Minus, Plus, Square } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { useUiStore } from '../../store/uiStore';
 import { formatTimecode } from '../../lib/time';
+import { startRecording, stopRecording, useRecorder } from '../../lib/recorder';
 import { Transport } from '../timeline/Transport';
-import { ScrubBar } from '../timeline/ScrubBar';
+import { TimeRuler } from '../timeline/TimeRuler';
+import { ElementTrack } from '../timeline/ElementTrack';
+import { AudioLanes, LANES } from '../timeline/AudioLane';
 import { FilmStrip } from '../timeline/FilmStrip';
-import { AudioLanes } from '../timeline/AudioLane';
+import { ScenesBar } from '../timeline/ScenesBar';
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 40;
 
 export function TimelineBar() {
   const currentTime = useStore((s) => s.currentTime);
+  const isPlaying = useStore((s) => s.isPlaying);
   const duration = useStore((s) => s.project.duration);
   const fps = useStore((s) => s.project.fps);
+  const zoom = useUiStore((s) => s.timelineZoom);
+  const setUi = useUiStore((s) => s.set);
+  const timelineHeight = useUiStore((s) => s.timelineHeight);
+  const rec = useRecorder();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewWidth, setViewWidth] = useState(0);
+  const resizing = useRef<{ startY: number; startH: number } | null>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setViewWidth(el.clientWidth));
+    ro.observe(el);
+    setViewWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const contentWidth = Math.max(0, viewWidth * zoom);
+  const pxPerSec = duration > 0 ? contentWidth / duration : 0;
+
+  // Ctrl+wheel zooms around the cursor; plain wheel scrolls sideways
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && zoom > 1) { e.preventDefault(); el.scrollLeft += e.deltaY; }
+        return;
+      }
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left + el.scrollLeft;   // content px under the cursor
+      const t = pxPerSec > 0 ? x / pxPerSec : 0;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.exp(-e.deltaY * 0.002)));
+      setUi({ timelineZoom: next });
+      requestAnimationFrame(() => {
+        const nextPx = (viewWidth * next) / Math.max(duration, 1e-6);
+        el.scrollLeft = t * nextPx - (e.clientX - rect.left);
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, pxPerSec, viewWidth, duration, setUi]);
+
+  // keep the playhead in view while playing
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !isPlaying || zoom <= 1) return;
+    const x = currentTime * pxPerSec;
+    if (x < el.scrollLeft + 20 || x > el.scrollLeft + el.clientWidth - 40) el.scrollLeft = Math.max(0, x - el.clientWidth * 0.2);
+  }, [currentTime, isPlaying, pxPerSec, zoom]);
+
+  const zoomTo = (z: number) => setUi({ timelineZoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)) });
+
+  // drag the top edge to resize the timeline
+  const onResizeDown = (e: React.PointerEvent) => {
+    resizing.current = { startY: e.clientY, startH: timelineHeight || (e.currentTarget.parentElement?.clientHeight ?? 300) };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: React.PointerEvent) => {
+    const r = resizing.current;
+    if (!r) return;
+    setUi({ timelineHeight: Math.max(220, Math.min(620, r.startH - (e.clientY - r.startY))) });
+  };
+  const onResizeUp = () => { resizing.current = null; };
 
   return (
-    <div className="shrink-0 border-t border-line bg-panel">
-      <div className="flex items-start gap-4 px-4 pt-2 pb-1">
+    <div
+      className="relative flex shrink-0 flex-col border-t border-line bg-panel"
+      style={timelineHeight ? { height: timelineHeight } : undefined}
+    >
+      <div
+        className="absolute -top-1 right-0 left-0 z-20 h-2 cursor-ns-resize"
+        title="Drag to resize the timeline"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+      />
+      <ScenesBar />
+      <div className="flex min-h-0 items-start gap-4 px-4 pt-2 pb-1">
         <div className="flex h-11 shrink-0 items-center">
           <Transport />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex items-center gap-3">
-            <ScrubBar />
-            <span className="tabular w-[132px] shrink-0 text-right text-[12.5px] text-t2">
+        <div className="flex min-w-0 flex-1 gap-3">
+          {/* the time axis: ruler, elements, audio — one scroll container */}
+          <div ref={scrollRef} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-1">
+            {viewWidth > 0 && (
+              <div className="flex flex-col gap-1" style={{ width: contentWidth }}>
+                <TimeRuler pxPerSec={pxPerSec} width={contentWidth} />
+                <ElementTrack pxPerSec={pxPerSec} width={contentWidth} />
+                <AudioLanes pxPerSec={pxPerSec} width={contentWidth} />
+              </div>
+            )}
+          </div>
+          {/* right column: timecode, zoom, lane labels, record */}
+          <div className="flex w-[132px] shrink-0 flex-col items-end gap-1 pt-0.5">
+            <span className="tabular h-6 text-right text-[12.5px] text-t2">
               <span className="font-medium text-t1">{formatTimecode(currentTime, fps)}</span>
               <span className="mx-1 text-t3">/</span>
               {formatTimecode(duration, fps)}
             </span>
+            <div className="flex h-9 items-center gap-0.5 rounded-full border border-line px-1">
+              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom / 1.5)} title="Zoom out timeline" aria-label="Zoom out timeline">
+                <Minus size={12} />
+              </button>
+              <button type="button" className="tabular min-w-9 text-center text-[11px] text-t2 hover:text-t1" onClick={() => zoomTo(1)} title="Fit the whole timeline">
+                {zoom <= 1.01 ? 'fit' : `${zoom.toFixed(1)}×`}
+              </button>
+              <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom * 1.5)} title="Zoom in timeline (Ctrl+wheel)" aria-label="Zoom in timeline">
+                <Plus size={12} />
+              </button>
+            </div>
+            {LANES.map((l, i) => (
+              <div key={l.kind} className={'flex h-10 items-center ' + (i === 1 ? 'justify-end' : '')}>
+                {l.kind === 'voice' ? (
+                  <button
+                    type="button"
+                    className={
+                      'df-ui-anim flex h-7 items-center gap-1.5 rounded-full px-3 text-[11.5px] font-medium text-white transition-all ' +
+                      (rec.active ? 'bg-[#d9414f] hover:brightness-105' : 'bg-[#e05a6d] hover:brightness-105')
+                    }
+                    title={rec.active ? 'Stop recording' : 'Record a voiceover while the scribe plays from the playhead'}
+                    onClick={() => (rec.active ? stopRecording() : void startRecording())}
+                  >
+                    {rec.active ? <Square size={11} /> : <Mic size={12} />}
+                    {rec.active ? 'Stop' : 'Record'}
+                  </button>
+                ) : (
+                  <span className="text-[10.5px] text-t3">{l.label}</span>
+                )}
+              </div>
+            ))}
           </div>
-          <AudioLanes />
         </div>
       </div>
-      <div className="px-3 pb-1.5">
+      <div className="min-h-0 flex-1 px-3 pb-1.5">
         <FilmStrip />
       </div>
     </div>

@@ -12,6 +12,7 @@ export interface UiState {
   showGuides: boolean;       // smart alignment guides while dragging
   theme: Theme;
   timelineHeight: number;    // px
+  timelineZoom: number;      // 1 = whole project fits
   libraryWidth: number;      // px
   inspectorWidth: number;    // px
   showStats: boolean;        // fps / render timing overlay
@@ -38,6 +39,7 @@ export const useUiStore = create<UiState>()((set, get) => ({
   showGuides: true,
   theme: 'system',
   timelineHeight: 0, // 0 = default layout
+  timelineZoom: 1,
   libraryWidth: 340,
   inspectorWidth: 290,
   showStats: false,

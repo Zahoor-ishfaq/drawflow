@@ -10,6 +10,8 @@ import { IconButton } from '../ui/IconButton';
 import { Field } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
 import { NumberInput } from '../ui/NumberInput';
+import { sequenceOrder } from '../../store/useStore';
+import { slotEnd } from '../../lib/timing';
 
 type DialogState =
   | { step: 'options' }
@@ -38,8 +40,18 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [size, setSize] = useState<Size>('1080');
   const [customHeight, setCustomHeight] = useState(1080);
   const [state, setState] = useState<DialogState>({ step: 'options' });
+  const [rangeId, setRangeId] = useState<string>('all');
   const exportProgress = useStore((s) => s.exportProgress);
   const project = useStore((s) => s.project);
+  const elements = useStore((s) => s.elements);
+  // one export range per scene (the whole project by default)
+  const scenes = (project.scenes ?? []).map((sc) => {
+    const members = sequenceOrder(elements).filter((e) => e.sceneId === sc.id && !e.hidden);
+    if (!members.length) return null;
+    const start = Math.max(0, members[0].startTime - members[0].transitionIn);
+    return { id: sc.id, name: sc.name, start, end: Math.max(...members.map(slotEnd)) + 0.5 };
+  }).filter((x): x is { id: string; name: string; start: number; end: number } => !!x);
+  const range = scenes.find((sc) => sc.id === rangeId);
   const abortRef = useRef<AbortController | null>(null);
 
   const native = hasNativeEncoder();
@@ -70,6 +82,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         elements: s.elements,
         audioClips: s.audioClips,
         time: s.currentTime,
+        range: range ? { start: range.start, end: Math.min(range.end, s.project.duration) } : undefined,
         signal: abort.signal,
         onPhase: (phase) => {
           setState({ step: 'working', phase });
@@ -125,6 +138,16 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               <Field label="Size">
                 <Segmented<Size> value={size} onChange={setSize} options={SIZES} />
               </Field>
+              {scenes.length > 0 && format !== 'png' && (
+                <Field label="Render">
+                  <select className="df-input" value={rangeId} onChange={(e) => setRangeId(e.target.value)}>
+                    <option value="all">Whole project</option>
+                    {scenes.map((sc) => (
+                      <option key={sc.id} value={sc.id}>{sc.name} only ({sc.start.toFixed(1)}s – {sc.end.toFixed(1)}s)</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <div className="flex items-center gap-3 text-[12px] text-t3">
                 {size === 'custom' ? (
                   <NumberInput
@@ -188,7 +211,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           {state.step === 'done' && (
             <div className="flex flex-col gap-3 py-1">
               <div className="text-[13px] text-t2">
-                Done — {(state.result.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                Done — {(state.result.sizeBytes / (1024 * 1024)).toFixed(1)} MB in {(state.result.elapsedMs / 1000).toFixed(state.result.elapsedMs < 10000 ? 1 : 0)}s
+                {state.result.parallelFrames ? '' : state.result.engine === 'ffmpeg' ? ' (software encoder)' : ''}
               </div>
               <a
                 href={state.result.url}
