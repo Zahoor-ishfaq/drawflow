@@ -374,8 +374,12 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const speech = (['openai', 'groq', 'gemini'] as SpeechProvider[]).filter((p) => s.keys[p]);
   const [prompt, setPrompt] = useState('');
   const [narrate, setNarrate] = useState(speech.length > 0);
-  const [provider, setProvider] = useState<SpeechProvider>(speech[0] ?? 'openai');
-  const [voice, setVoice] = useState(TTS_MODELS[speech[0] ?? 'openai'].voices[0].id);
+  // the chosen provider only counts while it has a key — otherwise the first provider that does
+  // (keys can be added after this panel mounted, so this is derived, not frozen in state)
+  const [chosenProvider, setProvider] = useState<SpeechProvider | null>(null);
+  const provider: SpeechProvider = chosenProvider && speech.includes(chosenProvider) ? chosenProvider : (speech[0] ?? 'openai');
+  const [chosenVoice, setVoice] = useState<string | null>(null);
+  const voice = chosenVoice && TTS_MODELS[provider].voices.some((v) => v.id === chosenVoice) ? chosenVoice : TTS_MODELS[provider].voices[0].id;
   const [stage, setStage] = useState<ScriptStage>('idle');
   const [detail, setDetail] = useState<string | undefined>();
   const [fraction, setFraction] = useState<number | undefined>();

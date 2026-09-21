@@ -25,8 +25,12 @@ function addClip(sourceId: string, name: string, lane: AudioClip['lane'], durati
 function AiVoice({ at }: { at: number }) {
   const ai = useAiSettings();
   const available = (['openai', 'groq', 'gemini'] as SpeechProvider[]).filter((p) => ai.keys[p]);
-  const [provider, setProvider] = useState<SpeechProvider>(available[0] ?? 'openai');
-  const [voice, setVoice] = useState(TTS_MODELS[available[0] ?? 'openai'].voices[0].id);
+  // the chosen provider only counts while it has a key — otherwise the first provider that does
+  // (keys can be added after this panel mounted, so this is derived, not frozen in state)
+  const [chosenProvider, setProvider] = useState<SpeechProvider | null>(null);
+  const provider: SpeechProvider = chosenProvider && available.includes(chosenProvider) ? chosenProvider : (available[0] ?? 'openai');
+  const [chosenVoice, setVoice] = useState<string | null>(null);
+  const voice = chosenVoice && TTS_MODELS[provider].voices.some((v) => v.id === chosenVoice) ? chosenVoice : TTS_MODELS[provider].voices[0].id;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
