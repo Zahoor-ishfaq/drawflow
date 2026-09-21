@@ -12,6 +12,10 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    // the picture library is 5,000 static files and the installer is built
+    // into release/ — neither needs watching (and watching release/ makes
+    // electron-builder fail with EPERM while the dev server runs)
+    watch: { ignored: ['**/release/**', '**/.cache/**', '**/public/library/**', '**/dist/**'] },
   },
   preview: {
     headers: {

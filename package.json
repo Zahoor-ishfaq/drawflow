@@ -1,7 +1,7 @@
 {
   "name": "drawflow",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -60,14 +60,36 @@
       "!node_modules/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}-${target}.${ext}"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "shortcutName": "DrawFlow"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     }
   },
-  "description": "Whiteboard animation studio",
+  "description": "Whiteboard animation studio \u2014 a hand draws pictures and handwriting while a narrator speaks. Local-first, open source.",
   "author": "Zahoor Ishfaq",
   "bin": {
     "drawflow": "./cli/drawflow.mjs"

@@ -31,6 +31,23 @@ MP4, WebM or GIF without anything leaving your computer.
 
 ![The DrawFlow editor](docs/screenshots/editor.png)
 
+## Download for Windows
+
+[![Latest release](https://img.shields.io/github/v/release/Zahoor-ishfaq/drawflow?style=for-the-badge&label=Download&color=0d9d97)](https://github.com/Zahoor-ishfaq/drawflow/releases/latest)
+
+Grab the latest release from the
+[Releases page](https://github.com/Zahoor-ishfaq/drawflow/releases/latest):
+
+- **`DrawFlow-Setup-x.y.z.exe`** — installer: choose a folder, get Start-menu
+  and desktop shortcuts, uninstall from Windows settings.
+- **`DrawFlow-x.y.z-portable.exe`** — no installation: one file you can run
+  from anywhere, including a USB stick.
+
+Both are the full app (nothing else to install) and work offline. The build is
+not code-signed yet, so Windows SmartScreen may show *"Windows protected your
+PC"* the first time — click *More info → Run anyway*. To build the exe
+yourself: `npm run desktop:pack` (output in `release/`).
+
 ## Highlights
 
 - **Real whiteboard drawing** — SVG artwork is drawn stroke by stroke by a

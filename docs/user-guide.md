@@ -41,14 +41,15 @@ npm install
 npm run dev          # open http://localhost:5173
 ```
 
-**As a Windows app**
+**As a Windows app (no build needed)**
 
-```bash
-npm run desktop:pack # builds an installer into release/
-```
-
-Run the installer from `release/`; the app is the same editor inside an
-Electron window and needs no browser.
+Download `DrawFlow-Setup-x.y.z.exe` (installer) or `DrawFlow-x.y.z-portable.exe`
+(single file, no installation) from the
+[Releases page](https://github.com/Zahoor-ishfaq/drawflow/releases/latest).
+The app is the same editor inside its own window, works offline and needs no
+browser. Windows SmartScreen may warn about an unsigned app the first time —
+*More info → Run anyway*. To build it yourself: `npm run desktop:pack`
+(installer and portable exe land in `release/`).
 
 **Requirements.** A recent Chrome or Edge (the editor uses the browser's own
 video encoders — WebCodecs — for fast export; other browsers fall back to a
