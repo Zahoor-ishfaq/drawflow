@@ -8,6 +8,7 @@ import { chat } from './providers';
 import { getAiSettings } from './settings';
 import { synthesizeSpeech, type SpeechProvider } from './speech';
 import { drawSvg, extractSvg } from './planner';
+import { ModelJsonError, parseModelJson } from './json';
 import { loadLibraryIndex, loadLibrarySvg, type LibraryEntry } from '../../assets/illustrations';
 import { buildIndex, searchAll } from '../librarySearch';
 import { normalizeSvg } from '../svgImport';
@@ -32,33 +33,37 @@ Turn the user's script or topic into a plan for a short whiteboard video. Reply 
 {"title":"...","scenes":[{"name":"...","narration":"what the narrator says during this scene","items":[
   {"type":"text","text":"1-4 words","size":"title|normal|small"},
   {"type":"library","label":"what the picture shows","keywords":["noun","noun"]},
-  {"type":"svg","label":"...","svg":"<svg viewBox=\\"0 0 200 200\\">...</svg>"}
+  {"type":"svg","label":"...","svg":"<svg viewBox='0 0 200 200'>...</svg>"}
 ]}]}
 How to make it good:
 - One story, told in order: each scene is the next step and follows from the previous one (setup → problem → how it works → result). 3 to 6 scenes.
 - The narration of a scene (12-35 words, spoken language, addressed to "you") must mention every item of that scene, in the same order as the items. The pictures are literally what the narration talks about — no decoration.
 - 2 to 4 items per scene. At most one "text" item per scene: a key phrase, number or label that is actually said in the narration ("3 steps", "save 20%", "the seed") — never a sentence.
 - "library" items are looked up in a library of about 5,000 pictures: everyday objects, tools, devices, buildings, vehicles, food, animals, plants, weather, people (standing, sitting, pointing, walking, working at a laptop, thinking), faces and emotions, business (chart, growth, money, coins, wallet, briefcase, handshake, calendar, clock, target), science and school (book, atom, flask, microscope, graduation cap, light bulb, brain), health (doctor, heart, pill, hospital), symbols (arrow, check, question mark, star, shield, key, lock). "keywords" are 2-4 concrete singular nouns naming what should be seen ("light bulb", "idea"), most specific first.
-- Use "svg" only when no common picture fits (a diagram, a specific arrangement): viewBox="0 0 200 200", stroke="#111" fill="none" stroke-width="5", simple shapes only (path, circle, rect, line, ellipse, polyline), at most 40 elements, no text.
+- Use "svg" only when no common picture fits (a diagram, a specific arrangement): viewBox='0 0 200 200', stroke='#111' fill='none' stroke-width='5', simple shapes only (path, circle, rect, line, ellipse, polyline), at most 40 elements, no text. Use single quotes for every SVG attribute so the JSON string stays valid.
+- The whole reply must be one valid JSON object: double-quoted keys and strings, quotes inside strings escaped as \\", no trailing commas, no comments.
 - If the user gave a full script, keep their wording as the narration and split it into scenes at natural pauses.`;
 
-function extractJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fenced ? fenced[1] : text;
-  const start = body.indexOf('{');
-  const end = body.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('The model did not return a plan.');
-  return JSON.parse(body.slice(start, end + 1));
-}
-
-/** Ask the model for the plan. */
+/** Ask the model for the plan; a broken reply is repaired locally, then once more by the model itself. */
 export async function planScript(request: string): Promise<ScriptPlan> {
   const s = getAiSettings();
-  const raw = await chat(s.textProvider, s.keys[s.textProvider], s.textModel[s.textProvider], { system: SYSTEM, user: request });
-  const parsed = extractJson(raw) as Partial<ScriptPlan>;
-  const scenes = (Array.isArray(parsed.scenes) ? parsed.scenes : []).filter((sc) => sc && Array.isArray((sc as ScriptScene).items)) as ScriptScene[];
-  if (scenes.length === 0) throw new Error('The model returned no scenes — try rephrasing.');
-  return { title: typeof parsed.title === 'string' && parsed.title ? parsed.title : 'AI scribe', scenes: scenes.slice(0, 8) };
+  const ask = (user: string) => chat(s.textProvider, s.keys[s.textProvider], s.textModel[s.textProvider], { system: SYSTEM, user, json: true });
+  const raw = await ask(request);
+  // a reply counts as usable only when it parses AND has scenes with items
+  const read = (text: string): ScriptPlan => {
+    const parsed = parseModelJson(text) as Partial<ScriptPlan>;
+    const scenes = (Array.isArray(parsed.scenes) ? parsed.scenes : []).filter((sc) => sc && Array.isArray((sc as ScriptScene).items)) as ScriptScene[];
+    if (scenes.length === 0) throw new ModelJsonError('no scenes with items in the reply');
+    return { title: typeof parsed.title === 'string' && parsed.title ? parsed.title : 'AI scribe', scenes: scenes.slice(0, 8) };
+  };
+  try {
+    return read(raw);
+  } catch (e) {
+    if (!(e instanceof ModelJsonError)) throw e;
+    // second chance: the model fixes its own output (cheaper than a fresh plan and keeps the content)
+    const fixed = await ask(`The JSON below is broken (${e.message}). Return the same plan as ONE valid JSON object with "title" and "scenes" — escape quotes inside strings, no trailing commas, no prose:\n\n${raw.slice(0, 12000)}`);
+    return read(fixed);
+  }
 }
 
 /** One scene's narration, spoken and decoded, ready to preview or import. */

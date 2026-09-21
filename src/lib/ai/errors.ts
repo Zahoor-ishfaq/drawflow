@@ -91,6 +91,15 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
     };
   }
 
+  if (/was not valid json/i.test(raw)) {
+    return {
+      ...base, kind: 'other', title: 'The model sent a broken answer',
+      message: 'It replied with text that is not valid JSON even after a repair attempt. This is random — the same request usually works on the next try — but some models do it more than others.',
+      steps: ['Press Generate again.', 'Use a stronger model in AI settings: Gemini 2.5 Flash, Llama 3.3 70B or GPT-OSS 120B are reliable; small or "instant" models are not.', 'Ask for fewer scenes or a shorter script.'],
+      settings: true,
+    };
+  }
+
   if (status === undefined && !/quota|rate limit|overloaded|safety|blocked|content_filter|api key not valid|invalid.?api.?key/i.test(low)) {
     // one of our own messages ("Enter an API key first.", "The model did not return a plan.")
     const needsKey = /api key|pick a model|ai settings/i.test(raw);

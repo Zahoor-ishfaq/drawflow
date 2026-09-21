@@ -3,6 +3,7 @@
 // locally against our bundled index; the model only supplies keywords.
 
 import { chat } from './providers';
+import { ModelJsonError, parseModelJson } from './json';
 import { getAiSettings } from './settings';
 import { loadLibraryIndex, searchLibrary, type LibraryEntry } from '../../assets/illustrations';
 import { normalizeSvg } from '../svgImport';
@@ -28,14 +29,6 @@ Rules:
 const SVG_ONLY_SYSTEM = `You draw simple black line-art illustrations as SVG for a whiteboard animation. Reply with ONLY the SVG markup, nothing else.
 Rules: viewBox="0 0 200 200"; stroke="#111" fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" on every shape; simple recognizable shapes from path, circle, rect, line, ellipse, polyline; at most 40 elements; no text, gradients, images, CSS or transforms.`;
 
-function extractJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fenced ? fenced[1] : text;
-  const start = body.indexOf('{');
-  const end = body.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error('The model did not return a plan.');
-  return JSON.parse(body.slice(start, end + 1));
-}
 
 export function extractSvg(text: string): string | null {
   const m = text.match(/<svg[\s\S]*?<\/svg>/i);
@@ -61,11 +54,16 @@ export async function drawSvg(label: string): Promise<string> {
 /** Plan a request into proposals the user can add. */
 export async function plan(request: string): Promise<Proposal[]> {
   const s = getAiSettings();
-  const raw = await chat(s.textProvider, s.keys[s.textProvider], s.textModel[s.textProvider], {
-    system: SYSTEM,
-    user: request,
-  });
-  const parsed = extractJson(raw) as { items?: unknown[] };
+  const ask = (user: string) => chat(s.textProvider, s.keys[s.textProvider], s.textModel[s.textProvider], { system: SYSTEM, user, json: true });
+  const raw = await ask(request);
+  let parsed: { items?: unknown[] };
+  try {
+    parsed = parseModelJson(raw) as { items?: unknown[] };
+  } catch (e) {
+    if (!(e instanceof ModelJsonError)) throw e;
+    const fixed = await ask(`The JSON below is broken (${e.message}). Return the same items as ONE valid JSON object — escape quotes inside strings, no trailing commas, no prose:\n\n${raw.slice(0, 12000)}`);
+    parsed = parseModelJson(fixed) as { items?: unknown[] };
+  }
   const items = Array.isArray(parsed.items) ? parsed.items : [];
   const index = await loadLibraryIndex().catch(() => [] as LibraryEntry[]);
   const out: Proposal[] = [];

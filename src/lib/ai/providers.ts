@@ -12,6 +12,8 @@ export interface ChatInput {
   image?: { mime: string; base64: string };
   /** cap on the reply length (tokens); the default is generous */
   maxTokens?: number;
+  /** the reply must be a JSON object — providers that have a JSON mode enforce it */
+  json?: boolean;
 }
 
 const ANTHROPIC = 'https://api.anthropic.com/v1';
@@ -144,7 +146,7 @@ export async function chat(provider: TextProvider, key: string, model: string, i
           'x-api-key': key, 'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true', 'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model, max_tokens: maxTokens, system: input.system, messages: [{ role: 'user', content }] }),
+        body: JSON.stringify({ model, max_tokens: maxTokens, system: input.json ? `${input.system}\nReply with one JSON object only — no prose, no code fence.` : input.system, messages: [{ role: 'user', content }] }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const j = await res.json();
@@ -164,6 +166,7 @@ export async function chat(provider: TextProvider, key: string, model: string, i
             { role: 'user', content: input.image ? userContent : input.user },
           ],
           ...(input.maxTokens ? { max_tokens: input.maxTokens } : {}),
+          ...(input.json ? { response_format: { type: 'json_object' } } : {}),
         }),
       });
       if (!res.ok) throw new Error(await readError(res));
@@ -179,7 +182,9 @@ export async function chat(provider: TextProvider, key: string, model: string, i
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: input.system }] },
           contents: [{ role: 'user', parts }],
-          ...(input.maxTokens ? { generationConfig: { maxOutputTokens: input.maxTokens } } : {}),
+          ...(input.maxTokens || input.json
+            ? { generationConfig: { ...(input.maxTokens ? { maxOutputTokens: input.maxTokens } : {}), ...(input.json ? { responseMimeType: 'application/json' } : {}) } }
+            : {}),
         }),
       });
       if (!res.ok) throw new Error(await readError(res));
