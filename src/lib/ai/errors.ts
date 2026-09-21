@@ -190,13 +190,18 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
     };
   }
 
-  // Groq's PlayAI voices need a one-time terms acceptance on the Groq console
+  // Groq serves a voice model only after the account owner accepts its terms;
+  // the error names the exact page, so link to that (the model changes over time)
   if (/terms/i.test(low) && /accept|acceptance|agree/i.test(low)) {
+    const urlInMessage = /https?:\/\/[^\s"'<>)]+/.exec(raw)?.[0]?.replace(/[.,;]$/, '');
+    const modelInMessage = /`([^`]+)`/.exec(raw)?.[1] ?? model;
+    const fallback = p === 'groq' ? 'https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english' : links?.keys;
     return {
-      ...base, kind: 'model', title: `${name} needs you to accept the voice model's terms once`,
-      message: 'The key works, but this provider only serves its text-to-speech model after the account owner has accepted the model terms in the console. It takes a minute and is only needed once.',
-      steps: [p === 'groq' ? 'Open the Groq playground link below, choose the playai-tts model and accept the terms.' : 'Open the provider console and accept the model terms.', 'Come back and press Generate again.', 'Or pick another voice provider in the narration card (Gemini also works with a free key).'],
-      link: p === 'groq' ? { label: 'Groq playground — playai-tts', url: 'https://console.groq.com/playground?model=playai-tts' } : links ? { label: `${name} console`, url: links.keys } : undefined,
+      ...base, kind: 'model', title: `${name} needs you to accept the terms for ${modelInMessage ?? 'this model'} once`,
+      message: `${name}'s reply says the model is only served after the account owner accepts its terms in the ${name} console. It takes a minute and is only needed once — the provider's own message is shown below.`,
+      steps: ['Open the link below (it is the page named in the provider message), select the model, and accept the terms shown.', 'Come back and press Generate again.', 'Or pick another voice provider in the narration card (Gemini also works with a free key).'],
+      link: urlInMessage || fallback ? { label: `Accept the terms on ${name}`, url: urlInMessage || fallback! } : undefined,
+      showDetails: true,
     };
   }
 
@@ -214,7 +219,8 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
       ...base, kind: 'request', title: `${name} could not make the voice`,
       message: 'The text-to-speech request was refused. Common causes: the voice model needs a one-time terms acceptance in the provider console, the text is too long for one take, or the voice name is not available on this plan.',
       steps: ['Read the provider message below — it names the exact reason.', 'Try another voice, or another voice provider in the narration card (Gemini also has a free tier).', 'Split a very long narration into shorter scenes.'],
-      link: p === 'groq' ? { label: 'Groq playground — playai-tts', url: 'https://console.groq.com/playground?model=playai-tts' } : undefined,
+      link: p === 'groq' ? { label: 'Groq playground — voice model', url: 'https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english' } : undefined,
+      showDetails: true,
     };
   }
 
