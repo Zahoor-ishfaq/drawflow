@@ -9,7 +9,7 @@
 // CommonJS (.cjs) on purpose: this package is "type": "module", and in an ESM
 // main process the bare specifier 'electron' resolves to the npm package
 // (a path string) rather than the built-in module.
-const { app, BrowserWindow, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 
@@ -134,8 +134,81 @@ function createWindow() {
   return win;
 }
 
+/** Tell the page to run one of its project actions (see ProjectMenu.tsx). */
+function sendMenu(action, payload) {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  if (win) win.webContents.send('drawflow:menu', { action, ...payload });
+}
+
+/** File → Open file…: the native dialog reads the .drawflow.json, the page opens it as a new project. */
+async function openProjectFile() {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'Open a DrawFlow project',
+    filters: [{ name: 'DrawFlow project', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths[0]) return;
+  const text = await fs.readFile(filePaths[0], 'utf8');
+  sendMenu('open-file', { name: path.basename(filePaths[0]), text });
+}
+
+/** File → Save to file…: the page hands over the JSON, we write where the user says. */
+ipcMain.handle('drawflow:save-file', async (event, { filename, text }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Save the project as a file',
+    defaultPath: filename,
+    filters: [{ name: 'DrawFlow project', extensions: ['json'] }],
+  });
+  if (canceled || !filePath) return false;
+  await fs.writeFile(filePath, text, 'utf8');
+  return true;
+});
+
+// The application menu: the default Edit / View / Window menus, plus a File
+// menu with the project actions the web app keeps under "Saved…".
+function buildMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New project', accelerator: 'CmdOrCtrl+N', click: () => sendMenu('new-project') },
+        { label: 'New from template…', click: () => sendMenu('templates') },
+        { type: 'separator' },
+        { label: 'Open file…', accelerator: 'CmdOrCtrl+Shift+O', click: () => void openProjectFile() },
+        { label: 'Projects, templates & history…', accelerator: 'CmdOrCtrl+O', click: () => sendMenu('projects') },
+        { type: 'separator' },
+        { label: 'Save checkpoint now', click: () => sendMenu('save-now') },
+        { label: 'Save version…', accelerator: 'CmdOrCtrl+S', click: () => sendMenu('save-version') },
+        { label: 'Save project as template…', click: () => sendMenu('save-template') },
+        { label: 'Save to file…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenu('save-file') },
+        { type: 'separator' },
+        { label: 'Download video…', accelerator: 'CmdOrCtrl+E', click: () => sendMenu('export') },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit', label: 'Exit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        { label: 'User guide', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow/blob/main/docs/user-guide.md') },
+        { label: 'Report a problem', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow/issues') },
+        { label: 'DrawFlow on GitHub', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow') },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
   if (!DEV_SERVER_URL) serveBuiltApp();
+  buildMenu();
   createWindow();
 
   // macOS keeps the process alive with no windows; reopen on dock click.

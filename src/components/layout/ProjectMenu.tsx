@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 import { exportProjectFile, importProjectFile, newProject, saveNow, saveTemplate, saveVersion, useSaveStatus } from '../../lib/persistence';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ProjectsDialog } from './ProjectsDialog';
-import { onShortcut } from '../../hooks/useKeyboardShortcuts';
+import { emitShortcut, onShortcut } from '../../hooks/useKeyboardShortcuts';
 
 function ago(at: number): string {
   const s = Math.max(0, Math.round((Date.now() - at) / 1000));
@@ -73,6 +73,12 @@ export function ProjectMenu() {
 
   const saveToFile = async () => {
     const { blob, filename } = await exportProjectFile();
+    if (window.drawflow?.saveFile) {
+      // desktop: a real save dialog instead of a browser download
+      await window.drawflow.saveFile(filename, await blob.text());
+      setOpen(false);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -99,6 +105,23 @@ export function ProjectMenu() {
     if (s.elements.length > 0 || s.audioClips.length > 0) { setConfirmNew(true); return; }
     void newProject();
   };
+
+  // the desktop app's native File menu runs the same actions as this dropdown
+  useEffect(() => window.drawflow?.onMenu?.((msg) => {
+    switch (msg.action) {
+      case 'new-project': fresh(); break;
+      case 'templates': setProjects('templates'); break;
+      case 'projects': setProjects('projects'); break;
+      case 'save-now': void saveNow(); break;
+      case 'save-version': setPrompt('version'); break;
+      case 'save-template': setPrompt('template'); break;
+      case 'save-file': void saveToFile(); break;
+      case 'export': emitShortcut('open-export'); break;
+      case 'open-file':
+        if (msg.text) void openFile(new File([msg.text], msg.name ?? 'project.drawflow.json', { type: 'application/json' }));
+        break;
+    }
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitPrompt = async (name: string) => {
     const s = useStore.getState();
