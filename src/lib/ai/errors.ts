@@ -20,6 +20,8 @@ export interface Problem {
   details?: string;
   /** which setting this call actually used (so people don't change the wrong one) */
   note?: string;
+  /** open the provider's message straight away */
+  showDetails?: boolean;
   /** offer the AI settings button */
   settings?: boolean;
   /** an external page that helps (billing, keys, status) */
@@ -180,9 +182,11 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
   if ((status !== undefined && status >= 500) || /overloaded|server error|bad gateway|service unavailable|try again later|internal error/i.test(low)) {
     return {
       ...base, kind: 'busy', title: `${name} is having trouble right now`,
-      message: 'The provider\'s servers answered with an error of their own. It is not caused by your project or key.',
-      steps: ['Wait a moment and try again.', 'If it keeps failing, check the provider\'s status page or switch provider in AI settings.'],
-      settings: true, link: links ? { label: `${name} status`, url: links.status } : undefined,
+      message: /overloaded/i.test(low)
+        ? 'The model is overloaded on the provider\'s side — a busy moment on the free tier, not anything in your project or key. The request was already retried and tried on a sibling model.'
+        : 'The provider\'s servers answered with an error of their own (retried three times, and on a sibling model). It is not caused by your project or key.',
+      steps: ['Wait a minute and press Generate again — free-tier models free up quickly.', p === 'gemini' ? 'Or switch Plan to Paid in AI settings if you have billing (paid keys are not throttled the same way), or use Groq for the text.' : 'If it keeps failing, check the provider\'s status page or switch provider in AI settings.'],
+      settings: true, link: links ? { label: `${name} status`, url: links.status } : undefined, showDetails: true,
     };
   }
 

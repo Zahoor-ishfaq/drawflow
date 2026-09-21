@@ -474,6 +474,7 @@ fit the view, open a template, switch the theme, start a tour.
 | **No sound in the preview** | Browsers need a click before they play audio — press Play again. Check the clip is not muted and no other clip is soloed. |
 | **Recording does nothing** | Allow the microphone for `localhost` (or the app) in the browser's site settings. |
 | **AI request fails** | Read the dialog: it names the cause and the setting involved. Pictures use the *picture* provider, not the text provider. A Gemini model with "limit: 0" is not on the free tier — choose another image model. |
+| **"… is having trouble right now"** | The provider's server answered 5xx — on Gemini's free tier usually *"The model is overloaded"*. DrawFlow retries three times and then tries a sibling model (2.5 Flash → 2.5 Flash-Lite → 2.0 Flash) before showing this, so wait a minute and try again, or use Groq for the text. |
 | **"The model sent a broken answer"** | The model replied with text that is not valid JSON; DrawFlow repairs the usual slips and asks the model once to fix its reply, so this now appears only when both fail. Press Generate again, or pick a stronger model (Gemini 2.5 Flash, Llama 3.3 70B, GPT-OSS 120B). |
 | **Library search finds nothing** | The index loads on first use; wait a moment. Spelling is forgiving, but try a simpler noun. |
 | **Something disappeared** | `Ctrl+Z`. The Layers panel shows hidden elements; version history restores older snapshots. |

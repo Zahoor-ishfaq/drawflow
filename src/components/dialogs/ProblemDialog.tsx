@@ -10,7 +10,7 @@ const ICONS: Record<ProblemKind, typeof AlertTriangle> = {
 };
 
 function ProblemDialog({ problem, onClose, onSettings }: { problem: Problem; onClose: () => void; onSettings: () => void }) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(!!problem.showDetails);
   const [copied, setCopied] = useState(false);
   const Icon = ICONS[problem.kind];
 

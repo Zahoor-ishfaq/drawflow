@@ -85,7 +85,7 @@ export function rankForPlan(provider: TextProvider, ids: string[], plan: 'free' 
 
 /** A one-token request to prove a model answers with this key (used by AI settings). */
 export async function probeModel(provider: TextProvider, key: string, model: string): Promise<void> {
-  await chat(provider, key, model, { system: 'Reply with the single word OK.', user: 'ping', maxTokens: 8 });
+  await chatOnce(provider, key, model, { system: 'Reply with the single word OK.', user: 'ping', maxTokens: 8 }); // no fallback: this must be THIS model answering
 }
 
 export async function listModels(provider: TextProvider, key: string): Promise<ModelInfo[]> {
@@ -130,7 +130,7 @@ export function isGeminiImageModel(id: string): boolean {
 
 // --- chat -----------------------------------------------------------------
 
-export async function chat(provider: TextProvider, key: string, model: string, input: ChatInput): Promise<string> {
+async function chatOnce(provider: TextProvider, key: string, model: string, input: ChatInput): Promise<string> {
   if (!key) throw new Error('No API key for this provider — add one in AI settings.');
   if (!model) throw new Error('Pick a model in AI settings.');
   model = bareModel(model);
@@ -193,6 +193,38 @@ export async function chat(provider: TextProvider, key: string, model: string, i
       return (p as { text?: string }[]).map((x) => x.text ?? '').join('\n');
     }
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isServerTrouble = (e: unknown) => e instanceof Error && /^(5\d\d):|overloaded|service unavailable|internal error|try again later/i.test(e.message);
+
+/** Models to fall back to when a provider's server refuses a model with a 5xx (overloaded, internal error). */
+const FALLBACK_MODELS: Partial<Record<TextProvider, string[]>> = {
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'],
+  groq: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant'],
+};
+
+/**
+ * A chat request that survives a bad moment on the provider's side: a 5xx
+ * is retried twice with a pause, then (Gemini, Groq) the same request is
+ * tried on a sibling model — free-tier Flash is often "overloaded" while
+ * Flash-Lite answers at once. Other errors are thrown straight away.
+ */
+export async function chat(provider: TextProvider, key: string, model: string, input: ChatInput): Promise<string> {
+  const chain = [bareModel(model), ...(FALLBACK_MODELS[provider] ?? []).filter((m) => m !== bareModel(model))];
+  let last: unknown;
+  for (let m = 0; m < chain.length; m++) {
+    for (let attempt = 0; attempt < (m === 0 ? 3 : 1); attempt++) {
+      try {
+        return await chatOnce(provider, key, chain[m], input);
+      } catch (e) {
+        last = e;
+        if (!isServerTrouble(e)) throw e;
+        if (m === 0 && attempt < 2) await sleep(attempt === 0 ? 1500 : 4000);
+      }
+    }
+  }
+  throw last;
 }
 
 // --- images ---------------------------------------------------------------
