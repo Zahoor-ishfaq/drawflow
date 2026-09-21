@@ -5,8 +5,8 @@ import {
 import { useGallery } from '../../lib/gallery';
 import { addGalleryItem, addImportedSvg, addImageElement, addLibraryElement, addLibraryIllustration, addShapeElement } from '../../lib/addElements';
 import { loadRasterImage } from '../../lib/images';
-import { noteUsed, useAssetPrefs } from '../../lib/assetPrefs';
-import { LIBRARY_CATEGORIES, loadLibraryIndex, searchLibrary, type LibraryEntry } from '../../assets/illustrations';
+import { noteUsed, setColorPictures, useAssetPrefs } from '../../lib/assetPrefs';
+import { LIBRARY_CATEGORIES, loadLibraryIndex, pictureSrc, searchLibrary, type LibraryEntry } from '../../assets/illustrations';
 import { ICONS, ICON_GROUPS } from '../../assets/library';
 import { buildIndex, searchAll, type SearchHit } from '../../lib/librarySearch';
 import { usePlugins } from '../../lib/plugins';
@@ -101,6 +101,10 @@ function PicturesTab({ index, onAdded }: { index: LibraryEntry[] | null; onAdded
           </button>
         ))}
       </div>
+      <label className="flex items-center gap-2 text-[11.5px] text-t2" title="Glyphs that exist in colour are shown and added in colour">
+        <input type="checkbox" className="accent-[#0d9d97]" checked={prefs.color} onChange={(e) => setColorPictures(e.target.checked)} />
+        Colour versions where available
+      </label>
       {uploads.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {uploads.map((item) => <UploadTile key={item.id} item={item} onUse={() => { void addGalleryItem(item).then(onAdded); noteUsed(item.id); }} />)}
@@ -112,8 +116,8 @@ function PicturesTab({ index, onAdded }: { index: LibraryEntry[] | null; onAdded
             <div key={entry.id} className="group relative">
               <button type="button" title={entry.name} aria-label={`Add ${entry.name}`}
                 className="df-ui-anim flex h-14 w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-panel2 transition-colors hover:border-accent hover:bg-accent-weak"
-                onClick={() => { void addLibraryIllustration(entry).then(onAdded); noteUsed(entry.id); }}>
-                <img src={entry.src} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />
+                onClick={() => { void addLibraryIllustration(entry, { color: prefs.color }).then(onAdded); noteUsed(entry.id); }}>
+                <img src={pictureSrc(entry, prefs.color)} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />
               </button>
               <StarButton id={entry.id} className="!h-4 !w-4" />
             </div>
@@ -126,15 +130,16 @@ function PicturesTab({ index, onAdded }: { index: LibraryEntry[] | null; onAdded
         </div>
       )}
       {!index && <div className="text-[12px] text-t3">Loading library…</div>}
-      <p className="text-[10.5px] leading-relaxed text-t3">Library artwork: OpenMoji (CC BY-SA 4.0) and Open Doodles (CC0).</p>
+      <p className="text-[10.5px] leading-relaxed text-t3">Artwork: OpenMoji &amp; Mega Doodles (CC BY-SA 4.0), Open Doodles &amp; Open Peeps (CC0), Tabler Icons, Health Icons, Flowbite &amp; illlustrations.co (MIT) — see CREDITS.</p>
     </div>
   );
 }
 
 /** Unified search results across every source. */
 function SearchResults({ hits, onAdded }: { hits: SearchHit[]; onAdded?: () => void }) {
+  const prefs = useAssetPrefs();
   const use = async (h: SearchHit) => {
-    if (h.kind === 'illustration') { await addLibraryIllustration(h.entry); noteUsed(h.entry.id); }
+    if (h.kind === 'illustration') { await addLibraryIllustration(h.entry, { color: prefs.color }); noteUsed(h.entry.id); }
     else if (h.kind === 'shape') addShapeElement(h.shapeId);
     else if (h.kind === 'icon') addLibraryElement(h.asset);
     else { await addGalleryItem(h.item); noteUsed(h.item.id); }
@@ -157,7 +162,7 @@ function SearchResults({ hits, onAdded }: { hits: SearchHit[]; onAdded?: () => v
                 <button type="button" title={h.name} aria-label={`Add ${h.name}`}
                   className="df-ui-anim flex h-14 w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-panel2 text-t2 transition-colors hover:border-accent hover:bg-accent-weak"
                   onClick={() => void use(h)}>
-                  {h.kind === 'illustration' && <img src={h.entry.src} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />}
+                  {h.kind === 'illustration' && <img src={pictureSrc(h.entry, prefs.color)} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />}
                   {h.kind === 'upload' && <img src={h.item.kind === 'svg' ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(h.item.data)}` : h.item.data} alt="" className="max-h-[82%] max-w-[82%] object-contain" draggable={false} />}
                   {h.kind === 'icon' && <IconGlyph paths={h.asset.paths} />}
                   {h.kind === 'shape' && <span className="text-[10.5px] font-medium">{h.name}</span>}

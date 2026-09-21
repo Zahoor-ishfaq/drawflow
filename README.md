@@ -26,9 +26,12 @@ built-in video encoder; the dev/preview servers and the desktop app send the
 
 ## What it does
 
-**Library** — one search over 1,400 illustrations, shapes, icons, people and
-your uploads (synonyms, plurals and typos understood), with tabs for pictures,
-shapes, people and uploads.
+**Library** — one search over 5,000+ pictures: line icons (Tabler, Health
+Icons), flat scenes (Flowbite, illlustrations.co), hand-drawn cartoons (Mega
+Doodles), sketchy people (Open Doodles, Open Peeps), OpenMoji glyphs in black or
+colour, shapes and your uploads — synonyms, plurals and typos understood — with
+tabs for pictures, shapes, people and uploads. All open-licensed; see
+[CREDITS.md](./CREDITS.md). Rebuild with `npm run library:build`.
 
 **Canvas** — an infinite sheet of paper. Drag empty paper to pan (hand cursor),
 wheel to zoom, snap to a grid, rulers, smart alignment guides, multi-select

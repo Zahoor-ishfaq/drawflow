@@ -5,3 +5,5 @@ dist/
 release/
 test-results/
 playwright-report/
+
+.cache/

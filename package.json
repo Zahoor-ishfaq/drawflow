@@ -14,7 +14,8 @@
     "render": "node cli/drawflow.mjs render",
     "bench": "node cli/drawflow.mjs bench",
     "test": "playwright test",
-    "test:headed": "playwright test --headed"
+    "test:headed": "playwright test --headed",
+    "library:build": "node scripts/library/build.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "0.12.10",

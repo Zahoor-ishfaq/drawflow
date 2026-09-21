@@ -13,11 +13,25 @@ extends each arm off-screen is drawn by the app.
 
 ## Illustration library (`public/library/`)
 
-- `openmoji/` — [OpenMoji](https://openmoji.org) black line-art glyphs,
-  © OpenMoji contributors, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+Built by `node scripts/library/build.mjs` (sources in `scripts/library/sources.mjs`),
+which downloads each pack, converts every picture to plain SVG shapes and writes
+`index.json`.
+
+- `openmoji/`, `openmoji-color/` — [OpenMoji](https://openmoji.org) glyphs (black and
+  colour), © OpenMoji contributors, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - `doodles/` — [Open Doodles](https://www.opendoodles.com) by Pablo Stanley, CC0;
   SVG sources recovered from [lunahq/react-open-doodles](https://github.com/lunahq/react-open-doodles) (MIT).
-- `index.json` — built by a script that selects and categorises the above.
+- `openpeeps/` — [Open Peeps](https://www.openpeeps.com) by Pablo Stanley, CC0; people
+  assembled from the parts in [jenshor/open-peeps](https://github.com/jenshor/open-peeps) (MIT).
+- `tabler/` — [Tabler Icons](https://tabler.io/icons) by Paweł Kuna, MIT.
+- `healthicons/` — [Health Icons](https://healthicons.org), MIT (icons released under CC0).
+- `flowbite/` — [Flowbite Illustrations](https://flowbite.com/illustrations/) by Themesberg, MIT.
+- `illlustrations/` — [illlustrations.co](https://illlustrations.co) by Vijay Verma, MIT.
+- `megadoodles/` — [Mega Doodles Pack](https://github.com/MariaLetta/mega-doodles-pack) by
+  Maria Letta, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+CC BY-SA artwork (OpenMoji, Mega Doodles) keeps its licence when it appears in a
+video; the others need no attribution.
 
 ## Fonts (`src/assets/fonts/`, Inter also in `public/fonts/` for the UI)
 

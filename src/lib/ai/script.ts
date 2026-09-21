@@ -15,7 +15,7 @@ import { textToPaths } from '../textToPaths';
 import { measurePaths } from '../drawing';
 import { useStore } from '../../store/useStore';
 import { audioContext, decodeToSource } from '../../store/audioSources';
-import { fitToPhrases } from '../narration';
+import { fitToPhrases, matchPhrases } from '../narration';
 import { speechSegments } from '../audioTools';
 import { paperDef } from '../../assets/paper';
 import type { DrawElement, Scene } from '../../types';
@@ -27,19 +27,20 @@ export interface ScriptScene {
 }
 export interface ScriptPlan { title: string; scenes: ScriptScene[] }
 
-const SYSTEM = `You are the assistant inside DrawFlow, a whiteboard-animation editor where a hand draws each element while a narrator speaks.
-Turn the user's script or topic into a short whiteboard video plan. Reply with ONLY a JSON object, no prose, no markdown fences:
-{"title":"...","scenes":[{"name":"...","narration":"one or two spoken sentences","items":[
-  {"type":"text","text":"a few words on the board","size":"title|normal|small"},
-  {"type":"library","label":"...","keywords":["...","..."]},
+const SYSTEM = `You are the assistant inside DrawFlow, a whiteboard-animation editor: a hand draws pictures and words on a board while a narrator speaks, one scene after another.
+Turn the user's script or topic into a plan for a short whiteboard video. Reply with ONLY a JSON object, no prose, no markdown fences:
+{"title":"...","scenes":[{"name":"...","narration":"what the narrator says during this scene","items":[
+  {"type":"text","text":"1-4 words","size":"title|normal|small"},
+  {"type":"library","label":"what the picture shows","keywords":["noun","noun"]},
   {"type":"svg","label":"...","svg":"<svg viewBox=\\"0 0 200 200\\">...</svg>"}
 ]}]}
-Rules:
-- 3 to 6 scenes. Each scene: 2 to 4 items, in the order they are drawn, and narration of 8-30 words that the items illustrate.
-- Prefer "library" items (about 1400 simple black line-art pictures: objects, technology, business, food, animals, nature, travel, symbols, arrows, faces, and sketchy people reading, sitting, running, dancing, meditating, drinking coffee…). Give 2-4 short lowercase keywords.
-- Use "svg" only for something the library surely lacks: viewBox="0 0 200 200", stroke="#111" fill="none" stroke-width="5", simple shapes (path, circle, rect, line, ellipse, polyline), at most 40 elements, no text.
-- "text" items are the few words written on the board — never the whole narration.
-- If the user gave a full script, keep their wording for the narration and split it into scenes.`;
+How to make it good:
+- One story, told in order: each scene is the next step and follows from the previous one (setup → problem → how it works → result). 3 to 6 scenes.
+- The narration of a scene (12-35 words, spoken language, addressed to "you") must mention every item of that scene, in the same order as the items. The pictures are literally what the narration talks about — no decoration.
+- 2 to 4 items per scene. At most one "text" item per scene: a key phrase, number or label that is actually said in the narration ("3 steps", "save 20%", "the seed") — never a sentence.
+- "library" items are looked up in a library of about 5,000 pictures: everyday objects, tools, devices, buildings, vehicles, food, animals, plants, weather, people (standing, sitting, pointing, walking, working at a laptop, thinking), faces and emotions, business (chart, growth, money, coins, wallet, briefcase, handshake, calendar, clock, target), science and school (book, atom, flask, microscope, graduation cap, light bulb, brain), health (doctor, heart, pill, hospital), symbols (arrow, check, question mark, star, shield, key, lock). "keywords" are 2-4 concrete singular nouns naming what should be seen ("light bulb", "idea"), most specific first.
+- Use "svg" only when no common picture fits (a diagram, a specific arrangement): viewBox="0 0 200 200", stroke="#111" fill="none" stroke-width="5", simple shapes only (path, circle, rect, line, ellipse, polyline), at most 40 elements, no text.
+- If the user gave a full script, keep their wording as the narration and split it into scenes at natural pauses.`;
 
 function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -123,10 +124,23 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
   const index = await loadLibraryIndex().catch(() => [] as LibraryEntry[]);
   // the same ranked search as the Library panel (synonyms, plurals, typos), pictures only
   const searchIndex = buildIndex({ illustrations: index, icons: [], uploads: [] });
-  const findPicture = (q: string): LibraryEntry | null => {
+  // a hit is "confident" when a query word is in the picture's name (10+),
+  // not merely one of its tags; weak hits are kept as a last resort
+  const lookup = (q: string): { entry: LibraryEntry; score: number } | null => {
     const hit = searchAll(searchIndex, q, 8).find((h) => h.kind === 'illustration');
-    return hit && hit.kind === 'illustration' ? hit.entry : null;
+    return hit && hit.kind === 'illustration' ? { entry: hit.entry, score: hit.score } : null;
   };
+  const findPicture = (queries: string[]): { entry: LibraryEntry; confident: boolean } | null => {
+    let best: { entry: LibraryEntry; score: number } | null = null;
+    for (const q of queries) {
+      if (!q) continue;
+      const h = lookup(q);
+      if (h && (!best || h.score > best.score)) best = h;
+      if (best && best.score >= 10) break;
+    }
+    return best ? { entry: best.entry, confident: best.score >= 10 } : null;
+  };
+  let drawBudget = 4; // AI-drawn stand-ins are slow and cost a call each
   const elements: DrawElement[] = [];
   const scenes: Scene[] = [];
   let z = st.elements.reduce((m, e) => Math.max(m, e.zIndex), -1) + 1;
@@ -173,12 +187,14 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
           let svg: string | null = null;
           let label = it.label || 'Drawing';
           if (it.type === 'library') {
-            const q = (it.keywords ?? []).join(' ');
-            let hit = q ? findPicture(q) : null;
-            for (const k of it.keywords ?? []) { if (hit) break; hit = findPicture(k); }
-            if (!hit && it.label) hit = findPicture(it.label);
-            if (hit) { svg = await loadLibrarySvg(hit.src); label = hit.name; }
-            else { try { svg = await drawSvg(it.label || q); } catch { svg = null; } }
+            const kws = (it.keywords ?? []).map((k) => String(k).trim()).filter(Boolean);
+            const hit = findPicture([kws.join(' '), ...kws, it.label ?? '']);
+            if (hit?.confident) { svg = await loadLibrarySvg(hit.entry.src); label = hit.entry.name; }
+            else {
+              // nothing in the library is clearly it: let the model draw it, then fall back to the best weak match
+              if (drawBudget > 0) { drawBudget--; try { svg = await drawSvg(it.label || kws.join(' ')); } catch { svg = null; } }
+              if (!svg && hit) { svg = await loadLibrarySvg(hit.entry.src); label = hit.entry.name; }
+            }
           } else {
             svg = extractSvg(it.svg) ?? it.svg;
           }
@@ -224,16 +240,11 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
       opts.onProgress?.(`Placing narration for scene ${si + 1} of ${plan.scenes.length}`);
       const src = await decodeToSource(take.blob, take.name);
       useStore.getState().addAudioClip({ id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration, volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scenes[si].id });
+      // one phrase per item in the scene, cut at the narrator's real pauses
       const segs = speechSegments(src.buffer, 0, src.duration, 0.3);
-      // one phrase per item in the scene: split or merge the detected segments
-      const wanted = elements.filter((e) => e.sceneId === scenes[si].id).length;
+      const wanted = elements.filter((e) => e.sceneId === scenes[si].id && !e.hidden && !e.withPrevious).length;
       const local = segs.length ? segs : [{ start: 0, end: src.duration }];
-      const span = { start: local[0].start, end: local[local.length - 1].end };
-      for (let k = 0; k < wanted; k++) {
-        const a = span.start + ((span.end - span.start) * k) / wanted;
-        const b = span.start + ((span.end - span.start) * (k + 1)) / wanted;
-        phrases.push({ start: at + a, end: at + b });
-      }
+      for (const ph of matchPhrases(local, wanted)) phrases.push({ start: at + ph.start, end: at + ph.end });
       at += src.duration + 0.6;
     }
     if (phrases.length) {

@@ -170,9 +170,9 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 | 🟡 | Import GIF | First frame only (still) |
 | ✅ | PDF → assets | Each page becomes a picture (pdf.js) |
 | ✅ | Drag / drop files | Images panel drop zone; audio onto lanes |
-| ✅ | Asset library | OpenMoji line-art + Open Doodles people, 1,400 pieces |
+| ✅ | Asset library | 5,000+ open-licensed pictures: Tabler & Health line icons, Flowbite & illlustrations.co scenes, Mega Doodles cartoons, Open Doodles & Open Peeps people, OpenMoji in black or colour |
 | ✅ | Categories | 11 categories plus Favourites and Recent |
-| ✅ | Search | One search over illustrations, shapes, icons, people and uploads — ranked, with synonyms, plurals and typo tolerance |
+| ✅ | Search | One search over 5,000+ pictures (icons, scenes, cartoons, people, glyphs), shapes and uploads — ranked, with synonyms, plurals and typo tolerance |
 | ✅ | Tags | Editable on uploads; used by search |
 | ✅ | Favorites | Star any library picture or upload |
 | ✅ | Recently used | |

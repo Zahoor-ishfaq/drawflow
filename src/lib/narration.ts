@@ -67,9 +67,11 @@ export function fitToPhrases(ordered: DrawElement[], phrases: SpeechSegment[]): 
     // the transition into this element fills the gap after the previous slot
     const transition = i === 0 ? 0 : Math.max(0.2, Math.min(5, ph.start - prevEnd));
     const start = i === 0 ? 0 : prevEnd + transition;
-    // drawing finishes as the phrase ends (it may have to begin early: the
-    // chain cannot wait, so the first element draws from 0)
-    const draw = Math.max(0.4, ph.end - start);
+    // draw at the element's own pace but never past the end of its phrase, so
+    // the picture is complete while the narrator is still on it (the first
+    // element cannot wait for its phrase: the chain starts at 0)
+    const room = Math.max(0.4, ph.end - start);
+    const draw = Math.max(0.4, Math.min(el.drawDuration || room, room));
     const slotEnd = Math.max(start + draw + emphasisSpan(el), nextStart - 0.15);
     const pause = Math.max(0, slotEnd - (start + draw + emphasisSpan(el)));
     patches.set(el.id, { transitionIn: transition, drawDuration: +draw.toFixed(2), pauseAfter: +pause.toFixed(2) });

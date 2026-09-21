@@ -11,7 +11,7 @@ import { normalizeSvg, type NormalizedSvg } from './svgImport';
 import { SHAPES } from '../assets/shapes';
 import type { LibraryAsset } from '../assets/library';
 import { paperDef, isDarkPaper } from '../assets/paper';
-import { loadLibrarySvg, type LibraryEntry } from '../assets/illustrations';
+import { loadLibrarySvg, pictureSrc, type LibraryEntry } from '../assets/illustrations';
 import { loadRasterImage } from './images';
 import { scribblePath } from './scribble';
 import type { GalleryItem } from './gallery';
@@ -223,10 +223,10 @@ export function addImportedSvg(svgText: string, filename: string): void {
   useStore.getState().addElement(svgElementProps(art, filename.replace(/\.svg$/i, ''), 420));
 }
 
-export async function addLibraryIllustration(entry: LibraryEntry): Promise<void> {
-  const svg = await loadLibrarySvg(entry.src);
+export async function addLibraryIllustration(entry: LibraryEntry, opts: { color?: boolean } = {}): Promise<void> {
+  const svg = await loadLibrarySvg(pictureSrc(entry, opts.color ?? false));
   const art = normalizeSvg(svg);
-  const size = entry.category === 'Sketch people' ? 620 : 300;
+  const size = entry.category === 'Sketch people' ? 620 : entry.category === 'Illustrations' ? 560 : entry.category === 'Cartoons' ? 380 : 300;
   useStore.getState().addElement(svgElementProps(art, entry.name, size));
 }
 

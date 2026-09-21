@@ -6,17 +6,17 @@ import { useSyncExternalStore } from 'react';
 const KEY = 'drawflow.assets';
 const MAX_RECENT = 24;
 
-interface Prefs { favorites: string[]; recent: string[] }
+interface Prefs { favorites: string[]; recent: string[]; /** prefer coloured library pictures */ color: boolean }
 
 function load(): Prefs {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Prefs>;
-      return { favorites: p.favorites ?? [], recent: p.recent ?? [] };
+      return { favorites: p.favorites ?? [], recent: p.recent ?? [], color: p.color ?? false };
     }
   } catch { /* ignore */ }
-  return { favorites: [], recent: [] };
+  return { favorites: [], recent: [], color: false };
 }
 
 let prefs: Prefs = load();
@@ -42,10 +42,14 @@ export function toggleFavorite(id: string): void {
   });
 }
 
+export function setColorPictures(color: boolean): void {
+  commit({ ...prefs, color });
+}
+
 export function noteUsed(id: string): void {
   commit({ ...prefs, recent: [id, ...prefs.recent.filter((x) => x !== id)].slice(0, MAX_RECENT) });
 }
 
 export function forgetAsset(id: string): void {
-  commit({ favorites: prefs.favorites.filter((x) => x !== id), recent: prefs.recent.filter((x) => x !== id) });
+  commit({ ...prefs, favorites: prefs.favorites.filter((x) => x !== id), recent: prefs.recent.filter((x) => x !== id) });
 }
