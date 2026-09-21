@@ -92,7 +92,7 @@ function PicturesTab({ index, onAdded }: { index: LibraryEntry[] | null; onAdded
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="-mx-1 flex flex-wrap gap-1 px-1">
+      <div className="-mx-1 flex flex-wrap gap-1 px-1" data-tour="library-categories">
         {[FAVES, RECENT, ...LIBRARY_CATEGORIES.filter((c) => c !== 'Sketch people' && c !== 'People' && c !== 'Faces')].map((c) => (
           <button key={c} type="button"
             className={'df-ui-anim h-6.5 shrink-0 rounded-full border px-2.5 text-[11px] font-medium transition-colors ' + (category === c ? 'border-accent bg-accent text-white' : 'border-line bg-panel2 text-t2 hover:text-t1')}
@@ -101,7 +101,7 @@ function PicturesTab({ index, onAdded }: { index: LibraryEntry[] | null; onAdded
           </button>
         ))}
       </div>
-      <label className="flex items-center gap-2 text-[11.5px] text-t2" title="Glyphs that exist in colour are shown and added in colour">
+      <label className="flex items-center gap-2 text-[11.5px] text-t2" title="Glyphs that exist in colour are shown and added in colour" data-tour="library-colour">
         <input type="checkbox" className="accent-[#0d9d97]" checked={prefs.color} onChange={(e) => setColorPictures(e.target.checked)} />
         Colour versions where available
       </label>
@@ -219,7 +219,7 @@ export function LibraryPanel({ onAdded, initialTab = 'pictures' }: { onAdded?: (
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="relative">
+      <div className="relative" data-tour="library-search">
         <Search size={13} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-t3" />
         <input
           type="search"
@@ -262,6 +262,7 @@ export function LibraryPanel({ onAdded, initialTab = 'pictures' }: { onAdded?: (
       ) : (
         <>
           <Segmented<Tab>
+            data-tour="library-tabs"
             value={tab}
             onChange={setTab}
             options={[

@@ -78,5 +78,9 @@
     "cli/**/*",
     "package.json",
     "!node_modules/**/*"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zahoor-ishfaq/drawflow.git"
+  }
 }

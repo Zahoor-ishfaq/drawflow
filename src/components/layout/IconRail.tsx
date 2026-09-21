@@ -11,6 +11,7 @@ import { LayersPanel } from '../library/LayersPanel';
 import { usePlugins } from '../../lib/plugins';
 import { useEffect, useRef as useRef2 } from 'react';
 import { IconButton } from '../ui/IconButton';
+import { onOpenTool } from '../../lib/tours';
 
 type Tool = 'library' | 'text' | 'voice' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
 
@@ -59,6 +60,7 @@ function RailButton({
       type="button"
       title={label}
       aria-label={label}
+      data-tour={`rail-${tool.id}`}
       className={
         'df-ui-anim flex h-[52px] w-[52px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl transition-colors ' +
         (open ? 'bg-accent-weak text-accent' : 'text-t2 hover:bg-hov hover:text-t1')
@@ -79,6 +81,8 @@ export function IconRail() {
   const resize = useRef<{ x: number; w: number } | null>(null);
   const toggle = (id: Tool) => setOpen((cur) => (cur === id ? null : id));
   const close = () => setOpen(null);
+  // guided tours (and anything else) can open a panel by name
+  useEffect(() => onOpenTool((t) => setOpen(t)), []);
 
   return (
     <div className="relative z-30 flex shrink-0">
@@ -97,7 +101,7 @@ export function IconRail() {
       </div>
 
       {open && (
-        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]" style={{ width }}>
+        <div className="absolute top-3 left-[72px] flex max-h-[calc(100%-24px)] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-[0_12px_40px_rgba(25,35,55,0.18)]" style={{ width }} data-tour="panel">
           <div
             className="absolute top-0 -right-0.5 bottom-0 z-10 w-2 cursor-ew-resize hover:bg-accent/30"
             title="Drag to resize"

@@ -117,7 +117,7 @@ export function TimelineBar() {
       />
       <div className="flex min-h-0 flex-1 gap-3 px-4 pt-2 pb-1">
         {/* left column: transport */}
-        <div className="flex w-[120px] shrink-0 flex-col items-center pt-7">
+        <div className="flex w-[120px] shrink-0 flex-col items-center pt-7" data-tour="transport">
           <Transport />
         </div>
         {/* middle column: every time-based thing shares this left edge */}
@@ -125,13 +125,13 @@ export function TimelineBar() {
           <div ref={scrollRef} className="min-w-0 overflow-x-auto overflow-y-hidden pb-1">
             {viewWidth > 0 && (
               <div className="flex flex-col gap-1" style={{ width: contentWidth }}>
-                <TimeRuler pxPerSec={pxPerSec} width={contentWidth} />
-                <ElementTrack pxPerSec={pxPerSec} width={contentWidth} />
-                <AudioLanes pxPerSec={pxPerSec} width={contentWidth} lanes={visibleLanes.map((l) => l.kind)} />
+                <div data-tour="ruler"><TimeRuler pxPerSec={pxPerSec} width={contentWidth} /></div>
+                <div data-tour="element-track"><ElementTrack pxPerSec={pxPerSec} width={contentWidth} /></div>
+                <div data-tour="lanes"><AudioLanes pxPerSec={pxPerSec} width={contentWidth} lanes={visibleLanes.map((l) => l.kind)} /></div>
               </div>
             )}
           </div>
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1" data-tour="filmstrip">
             <FilmStrip />
           </div>
         </div>
@@ -142,7 +142,7 @@ export function TimelineBar() {
             <span className="mx-1 text-t3">/</span>
             {formatTimecode(duration, fps)}
           </span>
-          <div className="flex h-9 items-center gap-0.5 rounded-full border border-line px-1">
+          <div className="flex h-9 items-center gap-0.5 rounded-full border border-line px-1" data-tour="timeline-zoom">
             <button type="button" className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1" onClick={() => zoomTo(zoom / 1.5)} title="Zoom out timeline" aria-label="Zoom out timeline">
               <Minus size={12} />
             </button>
@@ -164,6 +164,7 @@ export function TimelineBar() {
                     (rec.active ? 'bg-[#d9414f] hover:brightness-105' : 'bg-[#e05a6d] hover:brightness-105')
                   }
                   title={rec.active ? 'Stop recording' : 'Record a voiceover while the scribe plays from the playhead'}
+                  data-tour="record"
                   onClick={() => (rec.active ? stopRecording() : void startRecording())}
                 >
                   {rec.active ? <Square size={11} /> : <Mic size={12} />}
@@ -175,7 +176,7 @@ export function TimelineBar() {
             </div>
           ))}
           {/* lane switches */}
-          <div className="mt-1 flex flex-col items-end gap-0.5 text-[10.5px] text-t3">
+          <div className="mt-1 flex flex-col items-end gap-0.5 text-[10.5px] text-t3" data-tour="lane-switches">
             <span className="text-[9.5px] uppercase tracking-wide">Lanes</span>
             {LANES.map((l) => {
               const forced = clips.some((c) => c.lane === l.kind);

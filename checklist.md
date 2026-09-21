@@ -29,8 +29,8 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 | 15. AI | 14 | 0 | 0 |
 | 16. Keyboard shortcuts | 12 | 0 | 0 |
 | 17. Developer / open-source | 14 | 1 | 1 |
-| 18. Professional UX | 13 | 1 | 1 |
-| **Total** | **225** | **15** | **9** |
+| 18. Professional UX | 15 | 1 | 1 |
+| **Total** | **227** | **15** | **9** |
 
 **Every roadmap phase (V1–V3) is complete** apart from keyframes (a deliberate design choice) and things that need a server (collaboration). What remains is listed at the end under *Not built, and why*.
 
@@ -374,6 +374,8 @@ Status as of 20 Sep 2026, checked against the code in this repo.
 | ⬜ | Before / after preview | |
 | ✅ | Performance statistics | fps, frame time, counts, heap |
 | ✅ | Command palette | |
+| ✅ | Guided help | Help button: a tour per feature with tips anchored to the UI (cancel any time), shortcuts shown where they apply, contact links |
+| ✅ | Error messages for AI | Provider failures explained with what to do and which setting was involved |
 
 ---
 

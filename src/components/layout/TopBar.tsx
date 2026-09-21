@@ -8,6 +8,7 @@ import { ProjectMenu } from './ProjectMenu';
 import { ViewMenu } from './ViewMenu';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { PluginsDialog } from './PluginsDialog';
+import { HelpMenu, OpenSourceButton } from '../help/HelpMenu';
 import { onShortcut } from '../../hooks/useKeyboardShortcuts';
 
 export function TopBar() {
@@ -62,14 +63,17 @@ export function TopBar() {
         </IconButton>
       </div>
       <span className="mx-0.5 h-5 w-px bg-line" />
-      <Button variant="secondary" onClick={preview} disabled={elementCount === 0}>
+      <Button variant="secondary" onClick={preview} disabled={elementCount === 0} data-tour="preview">
         <Play size={14} />
         Preview
       </Button>
-      <Button variant="primary" onClick={() => setShowExport(true)} disabled={isExporting || elementCount === 0}>
+      <Button variant="primary" onClick={() => setShowExport(true)} disabled={isExporting || elementCount === 0} data-tour="download">
         <Download size={15} />
         Download video
       </Button>
+      <span className="mx-0.5 h-5 w-px bg-line" />
+      <HelpMenu />
+      <OpenSourceButton />
 
       {showExport && <ExportDialog onClose={() => setShowExport(false)} />}
       {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}

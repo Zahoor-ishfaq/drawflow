@@ -566,11 +566,12 @@ export function AiPanel({ onAdded }: { onAdded?: () => void }) {
       <div className="flex items-center gap-2">
         <Segmented<Tab>
           className="flex-1"
+          data-tour="ai-tabs"
           value={tab}
           onChange={setTab}
           options={[{ value: 'create', label: 'Create' }, { value: 'script', label: 'Script' }, { value: 'photo', label: 'Photo' }]}
         />
-        <IconButton label="AI settings (API keys, models)" onClick={() => setShowSettings(true)}>
+        <IconButton label="AI settings (API keys, models)" onClick={() => setShowSettings(true)} data-tour="ai-settings">
           <Settings size={15} />
         </IconButton>
       </div>

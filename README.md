@@ -88,6 +88,12 @@ browser. Describe a scene and get library pictures, text and hand-drawn SVG;
 turn a photo into a doodle offline or into a cartoon with an image model; write a
 script and get a whole multi-scene scribe with optional narration.
 
+**Help** — the top-right *Help* button offers a guided tour per feature
+(getting started, library, timeline, scenes, camera, voice, AI, hands & paper,
+layers, export, every keyboard shortcut where it applies) with tips anchored
+to the interface, cancel any time; plus the shortcut sheet, documentation and
+contact (GitHub issues, email). *Open Source* links to the repository.
+
 **Desktop** — the same app inside Electron with a Windows installer.
 
 ## Command line

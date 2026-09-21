@@ -89,7 +89,7 @@ export function Inspector() {
   const index = selected ? sequence.findIndex((e) => e.id === selected.id) : -1;
 
   return (
-    <aside className="relative flex shrink-0 flex-col border-l border-line bg-panel" style={{ width }}>
+    <aside className="relative flex shrink-0 flex-col border-l border-line bg-panel" style={{ width }} data-tour="inspector">
       <div
         className="absolute top-0 bottom-0 -left-1 z-10 w-2 cursor-ew-resize hover:bg-accent/30"
         title="Drag to resize"

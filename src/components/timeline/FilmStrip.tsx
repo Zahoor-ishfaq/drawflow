@@ -333,6 +333,7 @@ export function FilmStrip() {
         type="button"
         className="mt-6 ml-3 flex h-[62px] w-[62px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-line text-[10px] text-t3 hover:border-accent hover:text-accent"
         title="Add a scene (a new stretch of paper for the next part of the story)"
+        data-tour="add-scene"
         onClick={() => addSceneAfter((useStore.getState().project.scenes ?? []).length - 1)}
       >
         <Plus size={14} /> Scene

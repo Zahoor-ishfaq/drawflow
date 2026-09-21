@@ -3,13 +3,15 @@ interface SegmentedProps<T extends string> {
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
   className?: string;
+  'data-tour'?: string;
 }
 
-export function Segmented<T extends string>({ value, options, onChange, className = '' }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ value, options, onChange, className = '', ...rest }: SegmentedProps<T>) {
   return (
     <div
       className={`flex rounded-full border border-line bg-panel2 p-0.5 ${className}`}
       role="tablist"
+      data-tour={rest['data-tour']}
     >
       {options.map((opt) => (
         <button

@@ -239,6 +239,7 @@ export function Workspace() {
   return (
     <div
       ref={containerRef}
+      data-tour="stage"
       className="dotted-ground relative min-w-0 flex-1 overflow-hidden"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -297,7 +298,7 @@ export function Workspace() {
       {showStats && <StatsOverlay />}
 
       {/* edit / camera view toggle */}
-      <div className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-line bg-panel p-0.5 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
+      <div className="absolute top-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-line bg-panel p-0.5 shadow-[0_4px_16px_rgba(25,35,55,0.12)]" data-tour="view-toggle">
         {(['edit', 'camera'] as const).map((mode) => {
           const active = mode === 'camera' ? cameraView : !cameraView;
           return (
@@ -319,7 +320,7 @@ export function Workspace() {
       </div>
 
       {!cameraView && (
-        <div className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-full border border-line bg-panel px-1.5 py-1 shadow-[0_4px_16px_rgba(25,35,55,0.12)]">
+        <div className="absolute right-4 bottom-4 flex items-center gap-0.5 rounded-full border border-line bg-panel px-1.5 py-1 shadow-[0_4px_16px_rgba(25,35,55,0.12)]" data-tour="zoom-controls">
           <button
             type="button"
             className="flex h-6 w-6 items-center justify-center rounded-full text-t2 hover:bg-hov hover:text-t1"

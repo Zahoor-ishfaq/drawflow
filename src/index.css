@@ -1,4 +1,9 @@
 @import 'tailwindcss';
+/* class names live in src/ only — keep Tailwind from scanning the 5,000-file picture library */
+@source not "../public";
+@source not "../dist";
+@source not "../release";
+@source not "../.cache";
 
 @theme {
   /* Light, friendly chrome — VideoScribe-inspired */
