@@ -186,6 +186,34 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
     };
   }
 
+  // Groq's PlayAI voices need a one-time terms acceptance on the Groq console
+  if (/terms/i.test(low) && /accept|acceptance|agree/i.test(low)) {
+    return {
+      ...base, kind: 'model', title: `${name} needs you to accept the voice model's terms once`,
+      message: 'The key works, but this provider only serves its text-to-speech model after the account owner has accepted that model's terms in the console. It takes a minute and is only needed once.',
+      steps: [p === 'groq' ? 'Open the Groq playground link below, choose the playai-tts model and accept the terms.' : 'Open the provider console and accept the model's terms.', 'Come back and press Generate again.', 'Or pick another voice provider in the narration card (Gemini also works with a free key).'],
+      link: p === 'groq' ? { label: 'Groq playground — playai-tts', url: 'https://console.groq.com/playground?model=playai-tts' } : links ? { label: `${name} console`, url: links.keys } : undefined,
+    };
+  }
+
+  if (/decommission|deprecated|no longer (supported|available)|has been retired|discontinued/i.test(low)) {
+    return {
+      ...base, kind: 'model', title: `${name} has retired this model`,
+      message: 'The provider reports that the model is no longer served, so nothing can come back from it.',
+      steps: [role === 'voice' ? 'Pick another voice provider in the narration card.' : 'Press Models in AI settings to pick a current model.'],
+      settings: role !== 'voice',
+    };
+  }
+
+  if ((status === 400 || status === 422) && role === 'voice') {
+    return {
+      ...base, kind: 'request', title: `${name} could not make the voice`,
+      message: 'The text-to-speech request was refused. Common causes: the voice model needs a one-time terms acceptance in the provider console, the text is too long for one take, or the voice name is not available on this plan.',
+      steps: ['Read the provider's message below — it names the exact reason.', 'Try another voice, or another voice provider in the narration card (Gemini also has a free tier).', 'Split a very long narration into shorter scenes.'],
+      link: p === 'groq' ? { label: 'Groq playground — playai-tts', url: 'https://console.groq.com/playground?model=playai-tts' } : undefined,
+    };
+  }
+
   if (status === 400 || status === 422) {
     return {
       ...base, kind: 'request', title: `${name} rejected the request`,
