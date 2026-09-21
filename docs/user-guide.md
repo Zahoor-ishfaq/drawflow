@@ -308,8 +308,9 @@ The **Voice** tool has four parts:
 1. **Voiceover** — *Record from X s* plays the scribe from the playhead and
    records your microphone onto the Voice lane (anything already there is
    trimmed or split, as in a video editor). Or *upload* a recording, or type
-   text for an **AI voice** (OpenAI, Groq or Gemini key). Each take becomes a
-   clip at the playhead.
+   text for an **AI voice** — OpenAI (`gpt-4o-mini-tts`), Groq (Orpheus:
+   Troy, Austin, Daniel, Hannah, Autumn, Diana) or Gemini. Long text is spoken
+   in pieces and joined. Each take becomes a clip at the playhead.
 2. **Music** — import MP3 / WAV / M4A / OGG; it starts at 0.
 3. **Sound effects** — twelve built-in synthesised effects (pop, click,
    whoosh, ding, chime…) with preview; they land at the playhead.
