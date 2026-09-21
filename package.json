@@ -81,6 +81,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/zahoor-ishfaq/drawflow.git"
-  }
+    "url": "https://github.com/Zahoor-ishfaq/drawflow.git"
+  },
+  "homepage": "https://github.com/Zahoor-ishfaq/drawflow#readme",
+  "bugs": {
+    "url": "https://github.com/Zahoor-ishfaq/drawflow/issues"
+  },
+  "license": "MIT"
 }

@@ -1,6 +1,6 @@
 // Where to find the project and its author — the one place to edit when the
 // repository moves. (package.json "repository" should say the same.)
-const REPO = 'https://github.com/zahoor-ishfaq/drawflow';
+const REPO = 'https://github.com/Zahoor-ishfaq/drawflow';
 
 export const ABOUT = {
   name: 'DrawFlow',
