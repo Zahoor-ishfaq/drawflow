@@ -2,43 +2,87 @@ import { Fragment, useState } from 'react';
 import { explainAiError } from '../../lib/ai/errors';
 import { Eye, EyeOff, RefreshCw, X } from 'lucide-react';
 import {
-  KEY_HELP, PROVIDER_LABELS, imageReady, textReady, updateAiSettings, useAiSettings,
-  type ImageProvider, type TextProvider,
+  HAS_FREE_TIER, KEY_HELP, PROVIDER_LABELS, getAiSettings, imageReady, textReady, updateAiSettings, useAiSettings,
+  type ImageProvider, type Plan, type TextProvider,
 } from '../../lib/ai/settings';
-import { isGeminiImageModel, listModels, type ModelInfo } from '../../lib/ai/providers';
+import { bareModel, isFreeTierModel, isGeminiImageModel, listModels, probeModel, rankForPlan, type ModelInfo } from '../../lib/ai/providers';
+import { Segmented } from '../ui/Segmented';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 
 const PROVIDERS: TextProvider[] = ['groq', 'gemini', 'anthropic', 'openai'];
+const useAiSettingsSnapshot = () => getAiSettings();
 
 function ProviderRow({ id }: { id: TextProvider }) {
   const s = useAiSettings();
   const [show, setShow] = useState(false);
   const [models, setModels] = useState<ModelInfo[] | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<false | 'list' | 'check'>(false);
   const [error, setError] = useState<string | null>(null);
+  const [verified, setVerified] = useState<string | null>(null); // model id that answered
   const key = s.keys[id];
   const model = s.textModel[id];
   const active = s.textProvider === id;
+  const plan = s.plan[id];
+  const setPlan = (p: Plan) => updateAiSettings({ plan: { ...s.plan, [id]: p } });
+  // on a free key only free-tier models are offered
+  const visible = models ? (plan === 'free' ? models.filter((m) => isFreeTierModel(id, m.id)) : models) : null;
+
+  /** Ask the model to answer once; on failure walk down the ranked list until one does. */
+  const verify = async (list: ModelInfo[], first: string) => {
+    setBusy('check');
+    setError(null);
+    const ranked = rankForPlan(id, list.map((m) => m.id), plan);
+    const candidates = [first, ...ranked.filter((m) => m !== first)].slice(0, 5);
+    let lastErr: unknown = null;
+    for (const cand of candidates) {
+      try {
+        await probeModel(id, key, cand);
+        updateAiSettings({ textModel: { ...useAiSettingsSnapshot().textModel, [id]: cand } });
+        setVerified(cand);
+        setBusy(false);
+        if (cand !== first) setError(null);
+        return;
+      } catch (e) {
+        lastErr = e;
+        const why = explainAiError(e, id, 'text');
+        // a bad key or no credit won't get better with another model
+        if (why.kind === 'key' || why.kind === 'credit' || why.kind === 'network') break;
+      }
+    }
+    setVerified(null);
+    const why = explainAiError(lastErr, id, 'text');
+    setError(`${why.title}. ${why.steps[0] ?? ''}`);
+    setBusy(false);
+  };
 
   const fetchModels = async () => {
-    setBusy(true);
+    setBusy('list');
     setError(null);
+    setVerified(null);
     try {
       const list = await listModels(id, key);
       setModels(list);
-      if (!model && list.length) updateAiSettings({ textModel: { ...s.textModel, [id]: pickDefault(id, list) } });
+      const ranked = rankForPlan(id, list.map((m) => m.id), plan);
+      const keep = model && ranked.includes(bareModel(model)) ? bareModel(model) : ranked[0] ?? '';
+      if (!keep) { setError(plan === 'free' ? 'None of the listed models is on the free tier — switch Plan to Paid.' : 'The provider listed no chat models for this key.'); setBusy(false); return; }
       if (id === 'gemini') {
         const img = pickImageModel(list);
         if (img && !s.imageModel.gemini) updateAiSettings({ imageModel: { ...s.imageModel, gemini: img } });
       }
+      await verify(list, keep);
     } catch (e) {
       // inside the settings dialog the explanation goes inline (the dialog is already the place to fix it)
       const why = explainAiError(e, id);
       setError(`${why.title}. ${why.steps[0] ?? ''}`);
-    } finally {
       setBusy(false);
     }
+  };
+
+  const choose = (next: string) => {
+    updateAiSettings({ textModel: { ...s.textModel, [id]: next } });
+    setVerified(null);
+    if (models && next) void verify(models, next);
   };
 
   return (
@@ -50,6 +94,13 @@ function ProviderRow({ id }: { id: TextProvider }) {
         </label>
         <span className="text-[10.5px] text-t3">{KEY_HELP[id]}</span>
       </div>
+      {HAS_FREE_TIER[id] && (
+        <div className="mt-2 flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[11.5px] text-t2">Plan</span>
+          <Segmented<Plan> className="w-[200px]" value={plan} onChange={(p) => { setPlan(p); setVerified(null); }} options={[{ value: 'free', label: 'Free tier' }, { value: 'paid', label: 'Paid' }]} />
+          <span className="text-[10.5px] text-t3">{plan === 'free' ? 'only models with free quota are offered' : 'every model the key can reach'}</span>
+        </div>
+      )}
       <div className="mt-2 flex gap-1.5">
         <input
           type={show ? 'text' : 'password'}
@@ -62,27 +113,31 @@ function ProviderRow({ id }: { id: TextProvider }) {
         <IconButton label={show ? 'Hide key' : 'Show key'} onClick={() => setShow((v) => !v)}>
           {show ? <EyeOff size={14} /> : <Eye size={14} />}
         </IconButton>
-        <Button variant="secondary" onClick={() => void fetchModels()} disabled={!key || busy} title="Ask the provider for its current model list">
-          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Models
+        <Button variant="secondary" onClick={() => void fetchModels()} disabled={!key || !!busy} title="Fetch the model list, pick the best one for your plan and check that it answers">
+          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> {busy === 'check' ? 'Checking…' : 'Models'}
         </Button>
       </div>
       <div className="mt-2 flex items-center gap-2">
         <span className="w-14 shrink-0 text-[11.5px] text-t2">Model</span>
-        {models ? (
-          <select className="df-input" value={model} onChange={(e) => updateAiSettings({ textModel: { ...s.textModel, [id]: e.target.value } })}>
+        {visible ? (
+          <select className="df-input" value={bareModel(model)} onChange={(e) => choose(e.target.value)}>
             <option value="">— choose —</option>
-            {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            {visible.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            {model && !visible.some((m) => m.id === bareModel(model)) && <option value={bareModel(model)}>{bareModel(model)} (not on this plan)</option>}
           </select>
         ) : (
           <input
             type="text"
             className="df-input"
-            placeholder="load the list, or type a model id"
+            placeholder="press Models, or type a model id"
             value={model}
-            onChange={(e) => updateAiSettings({ textModel: { ...s.textModel, [id]: e.target.value.trim() } })}
+            onChange={(e) => updateAiSettings({ textModel: { ...s.textModel, [id]: bareModel(e.target.value) } })}
           />
         )}
       </div>
+      {verified && verified === bareModel(model) && !error && (
+        <div className="mt-1.5 text-[11.5px] text-accent">✓ {verified} answers with this key{visible && models && visible.length < models.length ? ` · ${models.length - visible.length} paid-only model${models.length - visible.length === 1 ? '' : 's'} hidden` : ''}</div>
+      )}
       {id === 'gemini' && (
         <div className="mt-2 flex items-center gap-2">
           <span className="w-14 shrink-0 text-[11.5px] text-t2">Images</span>
@@ -117,20 +172,6 @@ function pickImageModel(list: ModelInfo[]): string {
     if (hit) return hit.id;
   }
   return '';
-}
-
-function pickDefault(id: TextProvider, list: ModelInfo[]): string {
-  const prefer: Record<TextProvider, RegExp[]> = {
-    groq: [/llama-3\.3-70b/, /llama-4.*scout/, /gpt-oss-120b/, /llama/],
-    gemini: [/gemini-2\.5-flash$/, /gemini-2\.5-flash-lite/, /gemini-2\.0-flash$/, /flash/],
-    anthropic: [/sonnet/, /haiku/, /opus/],
-    openai: [/^gpt-4\.1$/, /^gpt-4o$/, /^gpt-5/, /^gpt-4/],
-  };
-  for (const re of prefer[id]) {
-    const hit = list.find((m) => re.test(m.id));
-    if (hit) return hit.id;
-  }
-  return list[0]?.id ?? '';
 }
 
 const SHORT: Record<TextProvider, string> = { anthropic: 'Anthropic', openai: 'OpenAI', groq: 'Groq', gemini: 'Gemini' };
@@ -176,7 +217,8 @@ export function AiSettingsDialog({ onClose }: { onClose: () => void }) {
         <div className="flex flex-col gap-3 overflow-y-auto p-4">
           <p className="text-[12px] leading-relaxed text-t2">
             Keys are stored only in this browser and sent directly to the provider you pick. The radio button
-            chooses who handles text; pictures have their own choice at the bottom.
+            chooses who handles text; pictures have their own choice at the bottom. Press <b>Models</b> after
+            pasting a key: the best model for your plan is chosen and checked with a one-word request.
           </p>
           <WhoDoesWhat />
           {PROVIDERS.map((id) => <ProviderRow key={id} id={id} />)}

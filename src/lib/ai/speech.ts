@@ -65,7 +65,7 @@ export async function synthesizeSpeech(provider: SpeechProvider, key: string, te
     return res.blob();
   }
   // Gemini returns base64 PCM (24 kHz, mono, 16-bit)
-  const res = await fetch(`${GEMINI}/models/${encodeURIComponent(def.model)}:generateContent?key=${encodeURIComponent(key)}`, {
+  const res = await fetch(`${GEMINI}/models/${encodeURIComponent(def.model.replace(/^models\//, ''))}:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

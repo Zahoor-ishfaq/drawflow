@@ -6,12 +6,16 @@ import { useSyncExternalStore } from 'react';
 export type TextProvider = 'anthropic' | 'openai' | 'groq' | 'gemini';
 export type ImageProvider = 'gemini' | 'openai';
 
+/** Whether a key is on the provider's free tier (limits which models work) or a paid plan. */
+export type Plan = 'free' | 'paid';
+
 export interface AiSettings {
   keys: Record<TextProvider, string>;
   textProvider: TextProvider;
   textModel: Record<TextProvider, string>;
   imageProvider: ImageProvider;
   imageModel: Record<ImageProvider, string>;
+  plan: Record<TextProvider, Plan>;
 }
 
 const KEY = 'drawflow.ai';
@@ -22,6 +26,8 @@ const DEFAULTS: AiSettings = {
   textModel: { anthropic: '', openai: '', groq: '', gemini: '' },
   imageProvider: 'gemini',
   imageModel: { gemini: '', openai: 'gpt-image-1' },
+  // Groq and Gemini keys start on a free tier; Anthropic and OpenAI are paid
+  plan: { anthropic: 'paid', openai: 'paid', groq: 'free', gemini: 'free' },
 };
 
 function load(): AiSettings {
@@ -35,6 +41,7 @@ function load(): AiSettings {
       keys: { ...DEFAULTS.keys, ...(parsed.keys ?? {}) },
       textModel: { ...DEFAULTS.textModel, ...(parsed.textModel ?? {}) },
       imageModel: { ...DEFAULTS.imageModel, ...(parsed.imageModel ?? {}) },
+      plan: { ...DEFAULTS.plan, ...(parsed.plan ?? {}) },
     };
   } catch {
     return DEFAULTS;
@@ -64,15 +71,18 @@ export function useAiSettings(): AiSettings {
 export const PROVIDER_LABELS: Record<TextProvider, string> = {
   anthropic: 'Anthropic (Claude)',
   openai: 'OpenAI (GPT)',
-  groq: 'Groq — free tier (Llama, GPT-OSS)',
-  gemini: 'Google Gemini — free tier',
+  groq: 'Groq (Llama, GPT-OSS)',
+  gemini: 'Google Gemini',
 };
+
+/** Providers that offer a free tier, where the plan switch matters. */
+export const HAS_FREE_TIER: Record<TextProvider, boolean> = { anthropic: false, openai: false, groq: true, gemini: true };
 
 export const KEY_HELP: Record<TextProvider, string> = {
   anthropic: 'console.anthropic.com → API keys',
   openai: 'platform.openai.com → API keys',
-  groq: 'console.groq.com → API keys (free)',
-  gemini: 'aistudio.google.com → Get API key (free)',
+  groq: 'console.groq.com → API keys',
+  gemini: 'aistudio.google.com → Get API key',
 };
 
 /** true when the active text provider has a key and a model */

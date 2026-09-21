@@ -143,7 +143,10 @@ export function explainAiError(err: unknown, provider?: TextProvider, role?: AiR
     return {
       ...base, kind: 'model', title: `${name} doesn't know the model ${model ? `“${model}”` : 'you chose'}`,
       message: 'The model id is not available to this key — it may have been renamed, retired, or not enabled for your account.',
-      steps: [role === 'image' ? modelStep : 'Choose another model in AI settings (the list is fetched live from the provider).', 'If you typed the id by hand, check the spelling.'],
+      steps: [
+        role === 'image' ? modelStep : 'Open AI settings and press Models: the working model is picked and checked for you.',
+        p === 'gemini' || p === 'groq' ? 'On a free key only the free-tier models answer — keep Plan on "Free" so only those are offered, or switch it to "Paid" if you have billing.' : 'If you typed the id by hand, check the spelling.',
+      ],
       settings: true,
     };
   }

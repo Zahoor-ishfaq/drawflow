@@ -334,6 +334,13 @@ Groq and Google Gemini offer free tiers; Anthropic and OpenAI are paid. The
 settings dialog starts with **Who does what**: which provider handles text,
 which handles pictures, which can speak.
 
+For Groq and Gemini choose the **Plan** your key is on — *Free tier* offers
+only the models that have free quota, *Paid* offers everything the key can
+reach. Press **Models** after pasting a key: the list is fetched, the best
+model for your plan is picked and checked with a one-word request, and if the
+provider refuses it the next candidate is tried until one answers ("✓ …
+answers with this key").
+
 - **Create** — describe what should be on the board ("a lightbulb with a plant
   growing out of it", "a 3-part scene about saving money"). You get proposals:
   library pictures, text and AI-drawn SVGs, each with an *Add* button. Tick

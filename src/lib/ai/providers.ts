@@ -10,6 +10,8 @@ export interface ChatInput {
   user: string;
   /** optional picture for vision-capable models */
   image?: { mime: string; base64: string };
+  /** cap on the reply length (tokens); the default is generous */
+  maxTokens?: number;
 }
 
 const ANTHROPIC = 'https://api.anthropic.com/v1';
@@ -35,6 +37,54 @@ function bearer(key: string) {
 }
 
 // --- models -----------------------------------------------------------------
+
+/** Gemini ids are used bare ("gemini-2.5-flash"); the API's "models/" prefix is stripped wherever it sneaks in. */
+export const bareModel = (id: string): string => id.trim().replace(/^models\//, '');
+
+/**
+ * Does this model work on the provider's free tier? Gemini's free quota
+ * covers the released Flash / Flash-Lite generations and Gemma; previews,
+ * experiments, Pro, image and audio models need billing. Groq serves every
+ * listed model on its free tier (with rate limits).
+ */
+export function isFreeTierModel(provider: TextProvider, id: string): boolean {
+  const m = bareModel(id).toLowerCase();
+  if (provider === 'gemini') {
+    if (/preview|exp|image|tts|audio|live|thinking|pro|ultra|native|robotics|computer/.test(m)) return false;
+    return /^gemini-\d+(\.\d+)?-flash(-lite)?(-\d{3})?$/.test(m) || /^gemma-/.test(m);
+  }
+  if (provider === 'groq') return !/whisper|tts|guard|embedding/.test(m);
+  return true;
+}
+
+/** Best default first: newest Flash, then Flash-Lite, then Gemma (Gemini); big Llama, then GPT-OSS (Groq). */
+export function rankForPlan(provider: TextProvider, ids: string[], plan: 'free' | 'paid'): string[] {
+  const pool = plan === 'free' ? ids.filter((id) => isFreeTierModel(provider, id)) : ids.slice();
+  const prefs: Record<TextProvider, RegExp[]> = {
+    gemini: [/^gemini-\d+(\.\d+)?-flash$/, /^gemini-\d+(\.\d+)?-flash-\d{3}$/, /flash-lite/, /^gemma-3/, /flash/, /pro/],
+    groq: [/llama-3\.3-70b/, /llama-4.*maverick/, /llama-4.*scout/, /gpt-oss-120b/, /gpt-oss-20b/, /llama-3\.1-8b/, /llama/],
+    anthropic: [/sonnet/, /haiku/, /opus/],
+    openai: [/^gpt-4\.1$/, /^gpt-4o$/, /^gpt-5/, /^gpt-4/],
+  };
+  const version = (id: string) => parseFloat(/(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? '0');
+  const score = (id: string) => {
+    if (provider === 'gemini') {
+      // Gemini Flash / Flash-Lite, newest generation first (2.5 Flash-Lite beats 2.0 Flash); then Gemma; then Pro and the rest
+      const m = id.toLowerCase();
+      const tier = /^gemini-.*flash/.test(m) ? 0 : /^gemma-/.test(m) ? 1 : /pro/.test(m) ? 2 : 3;
+      const sub = /flash-lite/.test(m) ? 1 : /-\d{3}$/.test(m) ? 2 : 0;
+      return tier * 1000 - version(id) * 10 + sub;
+    }
+    const i = prefs[provider].findIndex((re) => re.test(id));
+    return (i === -1 ? 99 : i) * 100 - version(id); // preference class first, newer version inside it
+  };
+  return pool.sort((a, b) => score(a) - score(b) || a.localeCompare(b));
+}
+
+/** A one-token request to prove a model answers with this key (used by AI settings). */
+export async function probeModel(provider: TextProvider, key: string, model: string): Promise<void> {
+  await chat(provider, key, model, { system: 'Reply with the single word OK.', user: 'ping', maxTokens: 8 });
+}
 
 export async function listModels(provider: TextProvider, key: string): Promise<ModelInfo[]> {
   if (!key) throw new Error('Enter an API key first.');
@@ -81,6 +131,8 @@ export function isGeminiImageModel(id: string): boolean {
 export async function chat(provider: TextProvider, key: string, model: string, input: ChatInput): Promise<string> {
   if (!key) throw new Error('No API key for this provider — add one in AI settings.');
   if (!model) throw new Error('Pick a model in AI settings.');
+  model = bareModel(model);
+  const maxTokens = input.maxTokens ?? 4096;
   switch (provider) {
     case 'anthropic': {
       const content: unknown[] = [];
@@ -92,7 +144,7 @@ export async function chat(provider: TextProvider, key: string, model: string, i
           'x-api-key': key, 'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true', 'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model, max_tokens: 4096, system: input.system, messages: [{ role: 'user', content }] }),
+        body: JSON.stringify({ model, max_tokens: maxTokens, system: input.system, messages: [{ role: 'user', content }] }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const j = await res.json();
@@ -111,6 +163,7 @@ export async function chat(provider: TextProvider, key: string, model: string, i
             { role: 'system', content: input.system },
             { role: 'user', content: input.image ? userContent : input.user },
           ],
+          ...(input.maxTokens ? { max_tokens: input.maxTokens } : {}),
         }),
       });
       if (!res.ok) throw new Error(await readError(res));
@@ -126,6 +179,7 @@ export async function chat(provider: TextProvider, key: string, model: string, i
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: input.system }] },
           contents: [{ role: 'user', parts }],
+          ...(input.maxTokens ? { generationConfig: { maxOutputTokens: input.maxTokens } } : {}),
         }),
       });
       if (!res.ok) throw new Error(await readError(res));
@@ -147,6 +201,7 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
   if (!key) throw new Error('No API key for the image provider — add one in AI settings.');
   if (!model) throw new Error('Pick an image model in AI settings.');
+  model = bareModel(model);
   if (provider === 'gemini') {
     const parts: unknown[] = [{ text: prompt }];
     if (input) parts.push({ inlineData: { mimeType: input.mime, data: input.base64 } });
