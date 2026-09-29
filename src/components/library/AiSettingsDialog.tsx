@@ -3,9 +3,11 @@ import { explainAiError } from '../../lib/ai/errors';
 import { Eye, EyeOff, RefreshCw, X } from 'lucide-react';
 import {
   HAS_FREE_TIER, KEY_HELP, PROVIDER_LABELS, getAiSettings, imageReady, textReady, updateAiSettings, useAiSettings,
-  type ImageProvider, type Plan, type TextProvider,
+  type ImageProvider, type LocalVoiceSettings, type Plan, type TextProvider,
 } from '../../lib/ai/settings';
 import { bareModel, isFreeTierModel, isGeminiImageModel, listModels, probeModel, rankForPlan, type ModelInfo } from '../../lib/ai/providers';
+import { useLocalVoice } from '../../store/localVoiceStore';
+import { LOCAL_APPS } from '../dialogs/LocalVoiceGuide';
 import { Segmented } from '../ui/Segmented';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
@@ -174,12 +176,91 @@ function pickImageModel(list: ModelInfo[]): string {
   return '';
 }
 
+const LOCAL_PRESETS = LOCAL_APPS.map((a) => ({ label: a.name, url: a.url }));
+
+/** A voice app on this computer (VoiceStudio, qwentts.cpp…): offline narration, cloned voices, no key. */
+function LocalVoiceRow() {
+  const s = useAiSettings();
+  const lv = s.localVoice;
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const set = (patch: Partial<LocalVoiceSettings>) => updateAiSettings({ localVoice: { ...getAiSettings().localVoice, ...patch } });
+
+  /** Reach the app and fetch its voice list (which also proves it is there). */
+  const test = async () => {
+    setBusy(true);
+    setNote(null);
+    const ok = await useLocalVoice.getState().check();
+    const { status, message } = useLocalVoice.getState();
+    const count = getAiSettings().localVoice.voices.length;
+    if (ok) {
+      setNote(count
+        ? { ok: true, text: `✓ Connected — ${count} voice${count === 1 ? '' : 's'} loaded. Pick one in the voice card.` }
+        : { ok: true, text: '✓ Connected. This app doesn\'t list its voices — type the voice names below.' });
+    } else {
+      setNote({ ok: false, text: status === 'error' && message ? `${message}.` : 'No voice app answered at this address — is it installed and running? See “Download & setup help”.' });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className={'rounded-xl border p-3 ' + (lv.enabled ? 'border-accent bg-accent-weak/40' : 'border-line')}>
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-[13px] font-medium">
+          <input type="checkbox" className="accent-[#0d9d97]" checked={lv.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
+          Local voice app (offline, free)
+        </label>
+        <span className="text-[10.5px] text-t3">for narration only</span>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-t3">
+        Realistic and cloned voices generated on your own computer by a free app such as VoiceStudio or
+        qwentts.cpp — nothing goes to the internet. Install and start the app, then press Test.{' '}
+        <button type="button" className="text-accent hover:underline" onClick={() => useLocalVoice.getState().openGuide()}>Download &amp; setup help</button>
+      </p>
+      {lv.enabled && (
+        <>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[11.5px] text-t2">Address</span>
+            <input type="text" className="df-input" placeholder="http://127.0.0.1:3900/v1" value={lv.url} onChange={(e) => set({ url: e.target.value.trim() })} />
+            <Button variant="secondary" onClick={() => void test()} disabled={!lv.url || busy} title="Connect to the app and load its voices">
+              <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> {busy ? 'Testing…' : 'Test'}
+            </Button>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-16">
+            {LOCAL_PRESETS.map((p) => (
+              <button key={p.label} type="button" className="rounded-full border border-line px-2 py-0.5 text-[10.5px] text-t2 hover:border-accent hover:text-accent"
+                onClick={() => { set({ url: p.url, voices: [] }); setNote(null); }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[11.5px] text-t2">Voices</span>
+            <input type="text" className="df-input" placeholder={lv.voices.length ? `${lv.voices.length} from the app · add more names, comma-separated` : 'press Test, or type voice names, comma-separated'}
+              value={lv.extraVoices} onChange={(e) => set({ extraVoices: e.target.value })} />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[11.5px] text-t2">Model</span>
+            <input type="text" className="df-input" placeholder="optional — the app's active engine" value={lv.model} onChange={(e) => set({ model: e.target.value.trim() })} />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="w-14 shrink-0 text-[11.5px] text-t2">Key</span>
+            <input type="password" className="df-input" placeholder="optional — only if the app asks for one" autoComplete="off" value={lv.key} onChange={(e) => set({ key: e.target.value.trim() })} />
+          </div>
+          {note && <div className={'mt-1.5 text-[11.5px] ' + (note.ok ? 'text-accent' : 'text-red-500')}>{note.text}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 const SHORT: Record<TextProvider, string> = { anthropic: 'Anthropic', openai: 'OpenAI', groq: 'Groq', gemini: 'Gemini' };
 
 /** Which provider each job goes to — the thing people most often get wrong. */
 function WhoDoesWhat() {
   const s = useAiSettings();
   const voices = (['openai', 'groq', 'gemini'] as TextProvider[]).filter((p) => s.keys[p]).map((p) => SHORT[p]);
+  if (s.localVoice.enabled && s.localVoice.url) voices.push('Local app (voice)');
   const rows: [string, string, boolean][] = [
     ['Text, scripts, suggestions', textReady(s) ? `${SHORT[s.textProvider]} · ${s.textModel[s.textProvider]}` : `${SHORT[s.textProvider]} — add a key and pick a model`, textReady(s)],
     ['Pictures & cartoons', imageReady(s) ? `${SHORT[s.imageProvider]} · ${s.imageModel[s.imageProvider]}` : `${SHORT[s.imageProvider]} — needs a key and an image model`, imageReady(s)],
@@ -234,6 +315,7 @@ export function AiSettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <p className="mt-2 text-[11px] text-t3">Photo → doodle needs no key at all — it runs inside the app.</p>
           </div>
+          <LocalVoiceRow />
         </div>
       </div>
     </div>

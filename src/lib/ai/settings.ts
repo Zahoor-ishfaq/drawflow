@@ -9,6 +9,24 @@ export type ImageProvider = 'gemini' | 'openai';
 /** Whether a key is on the provider's free tier (limits which models work) or a paid plan. */
 export type Plan = 'free' | 'paid';
 
+/**
+ * A text-to-speech app running on this computer (VoiceStudio, qwentts.cpp…)
+ * that speaks the OpenAI /audio/speech protocol — offline, no per-character cost.
+ */
+export interface LocalVoiceSettings {
+  enabled: boolean;
+  /** base address up to and including /v1 */
+  url: string;
+  /** most local apps need none */
+  key: string;
+  /** '' = the app's active engine */
+  model: string;
+  /** voices the app listed when asked (its own and cloned ones) */
+  voices: { id: string; label: string }[];
+  /** voice names typed by hand, comma-separated (for apps that don't list them) */
+  extraVoices: string;
+}
+
 export interface AiSettings {
   keys: Record<TextProvider, string>;
   textProvider: TextProvider;
@@ -16,6 +34,9 @@ export interface AiSettings {
   imageProvider: ImageProvider;
   imageModel: Record<ImageProvider, string>;
   plan: Record<TextProvider, Plan>;
+  localVoice: LocalVoiceSettings;
+  /** which offline voice the Voice panel uses: the built-in one or a voice app on this computer */
+  offlineEngine: 'builtin' | 'app';
 }
 
 const KEY = 'drawflow.ai';
@@ -28,6 +49,8 @@ const DEFAULTS: AiSettings = {
   imageModel: { gemini: '', openai: 'gpt-image-1' },
   // Groq and Gemini keys start on a free tier; Anthropic and OpenAI are paid
   plan: { anthropic: 'paid', openai: 'paid', groq: 'free', gemini: 'free' },
+  localVoice: { enabled: false, url: 'http://127.0.0.1:3900/v1', key: '', model: '', voices: [], extraVoices: '' },
+  offlineEngine: 'builtin',
 };
 
 function load(): AiSettings {
@@ -42,6 +65,7 @@ function load(): AiSettings {
       textModel: { ...DEFAULTS.textModel, ...(parsed.textModel ?? {}) },
       imageModel: { ...DEFAULTS.imageModel, ...(parsed.imageModel ?? {}) },
       plan: { ...DEFAULTS.plan, ...(parsed.plan ?? {}) },
+      localVoice: { ...DEFAULTS.localVoice, ...(parsed.localVoice ?? {}) },
     };
   } catch {
     return DEFAULTS;

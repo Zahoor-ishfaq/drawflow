@@ -309,8 +309,9 @@ The **Voice** tool has four parts:
    records your microphone onto the Voice lane (anything already there is
    trimmed or split, as in a video editor). Or *upload* a recording, or type
    text for an **AI voice** — OpenAI (`gpt-4o-mini-tts`), Groq (Orpheus:
-   Troy, Austin, Daniel, Hannah, Autumn, Diana) or Gemini. Long text is spoken
-   in pieces and joined. Each take becomes a clip at the playhead.
+   Troy, Austin, Daniel, Hannah, Autumn, Diana), Gemini, or a **local voice
+   app** (below). Long text is spoken in pieces and joined. Each take becomes
+   a clip at the playhead.
 2. **Music** — import MP3 / WAV / M4A / OGG; it starts at 0.
 3. **Sound effects** — twelve built-in synthesised effects (pop, click,
    whoosh, ding, chime…) with preview; they land at the playhead.
@@ -322,6 +323,56 @@ The **Voice** tool has four parts:
 Select a clip for its settings in the Inspector: name, volume (up to 150 %),
 fade in / out, mute, solo, normalise (loudest moment to 90 %), *Clean up
 background noise* for recordings, split.
+
+### Offline AI voice (free, no key)
+
+The AI voice card has two tabs: **Online** (OpenAI, Groq, Gemini — needs a
+key) and **Offline (free)**. Offline voice is made on your own computer:
+nothing is sent to the internet and there is no cost per word. It offers two
+choices.
+
+#### Built-in voice (desktop app)
+
+Ready to use, nothing to install. The first time you press **Generate
+offline voice**, DrawFlow downloads the voice model once (about 92 MB,
+progress shown on the button); after that it works without internet.
+Choose one of 15 natural English voices (US and UK, female and male). It
+runs on the processor, so no graphics card is needed: on a small laptop a
+10-second sentence takes about 15 seconds, faster computers are quicker. The
+built-in voice is also offered in *Script → Add narration*. It is powered by
+the open [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) model and is not
+available in the web version.
+
+#### Voice app (for cloned voices)
+
+For your own cloned voice, DrawFlow can narrate through a free voice app
+running on your computer — any app with an OpenAI-style speech server, such
+as [VoiceStudio](https://github.com/debpalash/VoiceStudio) or
+[qwentts.cpp](https://github.com/Panda-Panta/qwentts.cpp) (`tts-server`).
+
+1. In the **Offline (free)** tab choose **Voice app (cloning)**. If no voice
+   app is running yet, a setup window explains what to download,
+   what each app needs and the steps. You can open it again any time with
+   *Set up* or *Download & setup help*.
+2. Install the voice app, start it and let it load its model. Clone or design
+   voices there if you like.
+3. Press **Check again**. DrawFlow finds the app (VoiceStudio at
+   `http://127.0.0.1:3900/v1`, qwentts.cpp at `http://127.0.0.1:8080/v1`, or
+   another address you enter) and loads its voices, including your cloned
+   ones. Pick a voice and press **Generate offline voice**.
+4. Once connected, **Local voice app** is also offered in *Script → Add
+   narration*. The same settings (address, optional model and key, voice
+   names for apps that don't list them) are under **AI → gear → Local voice
+   app**.
+
+If the app is closed while you work, DrawFlow shows the setup window again
+instead of an error.
+
+Speed and the graphics memory needed depend on the app and the model you
+choose in it. Small models run on a CPU or a 2–4 GB card, larger ones need
+more. Transcription (*Fit to sentences*) still uses Groq or OpenAI. The
+desktop app connects to the voice app directly; in a web browser the voice
+app must allow DrawFlow's page in its CORS settings.
 
 ---
 

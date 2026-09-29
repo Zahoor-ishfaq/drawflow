@@ -6,7 +6,7 @@
 
 import { chat } from './providers';
 import { getAiSettings } from './settings';
-import { synthesizeSpeech, type SpeechProvider } from './speech';
+import { speechKey, synthesizeSpeech, type SpeechProvider } from './speech';
 import { drawSvg, extractSvg } from './planner';
 import { ModelJsonError, parseModelJson } from './json';
 import { loadLibraryIndex, loadLibrarySvg, type LibraryEntry } from '../../assets/illustrations';
@@ -89,7 +89,7 @@ export interface NarrateOptions {
  * aborting the rest, unless nothing at all could be spoken.
  */
 export async function narratePlan(plan: ScriptPlan, opts: NarrateOptions): Promise<{ takes: NarrationTake[]; failed: { scene: number; error: unknown }[] }> {
-  const keys = getAiSettings().keys;
+  const key = speechKey(opts.provider, getAiSettings());
   const todo = plan.scenes.map((sc, i) => ({ i, text: sc.narration?.trim() ?? '' })).filter((x) => x.text);
   const takes: NarrationTake[] = [];
   const failed: { scene: number; error: unknown }[] = [];
@@ -97,7 +97,7 @@ export async function narratePlan(plan: ScriptPlan, opts: NarrateOptions): Promi
     const { i, text } = todo[k];
     opts.onProgress?.(`Scene ${i + 1} of ${plan.scenes.length}: “${text.slice(0, 48)}${text.length > 48 ? '…' : ''}”`, k, todo.length);
     try {
-      const blob = await synthesizeSpeech(opts.provider, keys[opts.provider], text, opts.voice);
+      const blob = await synthesizeSpeech(opts.provider, key, text, opts.voice);
       const buffer = await audioContext().decodeAudioData(await blob.arrayBuffer());
       takes.push({ scene: i, name: `Narration — ${plan.scenes[i].name || `Scene ${i + 1}`}`, blob, buffer, duration: buffer.duration, url: URL.createObjectURL(blob) });
     } catch (error) {

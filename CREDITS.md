@@ -40,3 +40,18 @@ video; the others need no attribution.
 ## Icons (Shapes panel)
 
 Outline icons adapted from / in the style of [Lucide](https://lucide.dev) (ISC).
+
+## Built-in offline voice (desktop app)
+
+`electron/voice-worker.cjs`, bundled by `scripts/build-voice-worker.mjs` into
+`electron/voice/worker.cjs`, with 15 voice styles copied to `electron/voices/`.
+
+- [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) by hexgrad — Apache-2.0.
+  The model (ONNX export by [onnx-community](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX),
+  about 92 MB) is downloaded on first use, not shipped.
+- [kokoro-js](https://github.com/hexgrad/kokoro) — Apache-2.0.
+- [Transformers.js](https://github.com/huggingface/transformers.js) — Apache-2.0.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime-node`) — MIT.
+- [phonemizer.js](https://github.com/xenova/phonemizer.js) — Apache-2.0; it contains
+  [eSpeak NG](https://github.com/espeak-ng/espeak-ng) compiled to WebAssembly, which is
+  licensed **GPL-3.0-or-later**. Its source is available at that link.

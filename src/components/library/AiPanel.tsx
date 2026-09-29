@@ -3,7 +3,9 @@ import { AlertTriangle, Check, Circle, Image as ImageIcon, Loader2, Play, Rotate
 import { useAiSettings, imageReady, textReady, PROVIDER_LABELS, type ImageProvider } from '../../lib/ai/settings';
 import { plan, type Proposal } from '../../lib/ai/planner';
 import { planScript, buildScript, narratePlan, releaseTakes, type NarrationTake, type ScriptPlan } from '../../lib/ai/script';
-import { TTS_MODELS, type SpeechProvider } from '../../lib/ai/speech';
+import { isLocalNotSetUp, SPEECH_LABELS, speechProviders, voicesFor, type SpeechProvider } from '../../lib/ai/speech';
+import { useLocalVoice } from '../../store/localVoiceStore';
+import { useBuiltInVoice } from '../../store/builtInVoiceStore';
 import { generateImage } from '../../lib/ai/providers';
 import { sketchFromImage, type SketchResult } from '../../lib/sketch';
 import { loadRasterImage, isRasterFile } from '../../lib/images';
@@ -371,7 +373,7 @@ function TakePlayer({ take }: { take: NarrationTake }) {
 function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const s = useAiSettings();
   const ready = textReady(s);
-  const speech = (['openai', 'groq', 'gemini'] as SpeechProvider[]).filter((p) => s.keys[p]);
+  const speech = speechProviders(s);
   const [prompt, setPrompt] = useState('');
   const [narrate, setNarrate] = useState(speech.length > 0);
   // the chosen provider only counts while it has a key — otherwise the first provider that does
@@ -379,7 +381,8 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const [chosenProvider, setProvider] = useState<SpeechProvider | null>(null);
   const provider: SpeechProvider = chosenProvider && speech.includes(chosenProvider) ? chosenProvider : (speech[0] ?? 'openai');
   const [chosenVoice, setVoice] = useState<string | null>(null);
-  const voice = chosenVoice && TTS_MODELS[provider].voices.some((v) => v.id === chosenVoice) ? chosenVoice : TTS_MODELS[provider].voices[0].id;
+  const voices = voicesFor(provider, s);
+  const voice = chosenVoice && voices.some((v) => v.id === chosenVoice) ? chosenVoice : voices[0].id;
   const [stage, setStage] = useState<ScriptStage>('idle');
   const [detail, setDetail] = useState<string | undefined>();
   const [fraction, setFraction] = useState<number | undefined>();
@@ -387,6 +390,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
   const [takes, setTakes] = useState<NarrationTake[]>([]);
   const [warning, setWarning] = useState<string | null>(null);
   const willNarrate = narrate && speech.length > 0;
+  const voiceDownload = useBuiltInVoice((st) => st.progress);
   const busy = stage === 'planning' || stage === 'narrating' || stage === 'adding';
 
   // object URLs die with the component
@@ -426,7 +430,9 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
         setTakes(spoken);
         if (failed.length) setWarning(`Narration could not be made for scene${failed.length > 1 ? 's' : ''} ${failed.map((f) => f.scene + 1).join(', ')} — those scenes will be timed without a voice.`);
       } catch (e) {
-        reportAiError(e, provider, 'voice');
+        // the offline voice app isn't running: explain how to get it going rather than show an error
+        if (provider === 'local' && isLocalNotSetUp(e)) { useLocalVoice.setState({ status: 'offline' }); useLocalVoice.getState().openGuide(); }
+        else reportAiError(e, provider, 'voice');
         setWarning('The narration could not be generated — you can still add the scenes without a voice, or try again.');
       }
     }
@@ -473,15 +479,20 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
               </label>
               {narrate && (
                 <div className="grid grid-cols-2 gap-2">
-                  <select className="df-input !h-7 text-[12px]" value={provider} onChange={(e) => { const p = e.target.value as SpeechProvider; setProvider(p); setVoice(TTS_MODELS[p].voices[0].id); }}>
-                    {speech.map((p) => <option key={p} value={p}>{p === 'openai' ? 'OpenAI' : p === 'groq' ? 'Groq (PlayAI)' : 'Gemini'}</option>)}
+                  <select className="df-input !h-7 text-[12px]" value={provider} onChange={(e) => { const p = e.target.value as SpeechProvider; setProvider(p); setVoice(voicesFor(p, s)[0].id); }}>
+                    {speech.map((p) => <option key={p} value={p}>{SPEECH_LABELS[p]}</option>)}
                   </select>
                   <select className="df-input !h-7 text-[12px]" value={voice} onChange={(e) => setVoice(e.target.value)}>
-                    {TTS_MODELS[provider].voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    {voices.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
                   </select>
                 </div>
               )}
             </div>
+          )}
+          {!speech.includes('local') && !speech.includes('kokoro') && (
+            <button type="button" className="self-start text-[11px] text-t3 hover:text-accent hover:underline" onClick={() => useLocalVoice.getState().openGuide()}>
+              Narrate with a free offline voice on this computer — set it up
+            </button>
           )}
         </>
       ) : (
@@ -489,7 +500,7 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
         <div className="rounded-xl border border-line bg-panel2 px-3 py-2">
           <div className="line-clamp-2 text-[12px] leading-snug text-t1">“{prompt.trim()}”</div>
           <div className="mt-1 text-[10.5px] text-t3">
-            {willNarrate ? `Narration: ${provider === 'openai' ? 'OpenAI' : provider === 'groq' ? 'Groq' : 'Gemini'} · ${TTS_MODELS[provider].voices.find((v) => v.id === voice)?.label ?? voice}` : 'No narration'}
+            {willNarrate ? `Narration: ${SPEECH_LABELS[provider]} · ${voices.find((v) => v.id === voice)?.label ?? voice}` : 'No narration'}
           </div>
         </div>
       )}
@@ -502,7 +513,12 @@ function ScriptTab({ onAdded }: { onAdded?: () => void }) {
       {!ready && stage === 'idle' && <p className="text-[11.5px] text-t3">Add an API key in the settings (gear) to use this.</p>}
 
       {(stage === 'planning' || stage === 'narrating') && (
-        <Progress steps={steps} active={activeStep} detail={detail} fraction={stage === 'narrating' ? fraction : undefined} />
+        <Progress
+          steps={steps}
+          active={activeStep}
+          detail={stage === 'narrating' && provider === 'kokoro' && voiceDownload !== null ? `Downloading the built-in voice (one time, about 92 MB)… ${voiceDownload}%` : detail}
+          fraction={stage === 'narrating' ? fraction : undefined}
+        />
       )}
 
       {plan && (stage === 'ready' || stage === 'adding') && (

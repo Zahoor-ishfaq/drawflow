@@ -69,7 +69,73 @@ function roleNote(role: AiRole | undefined, name: string): string | undefined {
   }
 }
 
-export function explainAiError(err: unknown, provider?: TextProvider, role?: AiRole): Problem {
+/** A voice app on the user's own computer: no keys, plans or status pages — it is running or it isn't. */
+function explainLocalVoiceError(err: unknown, raw: string): Problem {
+  const status = statusOf(raw);
+  const details = raw.replace(/\s+/g, ' ').slice(0, 900);
+  const note = 'This request went to the local voice app set up in AI settings — nothing was sent to the internet.';
+  if (err instanceof TypeError || /failed to fetch|networkerror|load failed|econnrefused|err_(name|internet|connection)/i.test(raw)) {
+    return {
+      kind: 'network', title: 'Couldn\'t reach your local voice app', details, note,
+      message: 'Nothing answered at the address in AI settings, so the voice app is probably not running (or is still loading its model).',
+      steps: [
+        'Start the voice app (VoiceStudio, qwentts.cpp…) and wait until it has finished loading, then try again.',
+        'Check the address in AI settings → Local voice app and press Test — VoiceStudio uses http://127.0.0.1:3900/v1.',
+        window.drawflow ? 'A firewall can block local connections — allow the voice app.' : 'In a web browser the app must allow this page in its CORS settings; the DrawFlow desktop app needs no setup.',
+      ],
+      settings: true,
+    };
+  }
+  if (/only addresses on this computer|not a valid address/i.test(raw)) {
+    return { kind: 'request', title: 'That address can\'t be used for a local voice app', message: raw, steps: ['Enter an address on this computer (127.0.0.1 or localhost) or your home network in AI settings.'], settings: true };
+  }
+  if (status === 401 || status === 403) {
+    return {
+      kind: 'key', title: 'Your local voice app wants a key', details, note, showDetails: true,
+      message: 'The app answered but refused the request without a valid key.',
+      steps: ['Copy the API key from the voice app\'s settings into AI settings → Local voice app → Key.'],
+      settings: true,
+    };
+  }
+  if (status === 404 || status === 405) {
+    return {
+      kind: 'request', title: 'The local app doesn\'t offer text-to-speech at this address', details, note, showDetails: true,
+      message: 'Something answered, but not with an OpenAI-style /audio/speech endpoint.',
+      steps: ['The address usually ends in /v1 — e.g. http://127.0.0.1:3900/v1 for VoiceStudio.', 'Make sure the app\'s speech server is switched on (qwentts.cpp: run tts-server).'],
+      settings: true,
+    };
+  }
+  return {
+    kind: 'other', title: 'Your local voice app couldn\'t make the voice', details, note, showDetails: true,
+    message: 'The app answered with an error of its own — its message is below.',
+    steps: ['Check that the chosen voice still exists in the app (press Load voices in AI settings).', 'Make sure a speech model is installed and loaded in the app, then try again.', 'Very long scenes can run out of memory on small graphics cards — try shorter narration.'],
+    settings: true,
+  };
+}
+
+/** Who a failed call went to: a cloud provider, the built-in voice, or a voice app on this computer. */
+export type AiProviderId = TextProvider | 'kokoro' | 'local';
+
+/** The built-in voice: it only needs the internet once, to download its model. */
+function explainBuiltInVoiceError(raw: string): Problem {
+  const details = raw.replace(/\s+/g, ' ').slice(0, 900);
+  if (/fetch failed|failed to fetch|enotfound|econnrefused|econnreset|etimedout|network|could not locate file|unable to get model/i.test(raw)) {
+    return {
+      kind: 'network', title: 'Couldn\'t download the built-in voice', details,
+      message: 'The built-in voice needs the internet once, to download its voice model (about 92 MB). After that it works offline.',
+      steps: ['Check that you are online and press Generate again — the download continues from the start.', 'A firewall or proxy can block huggingface.co, where the model is downloaded from.'],
+    };
+  }
+  return {
+    kind: 'other', title: 'The built-in voice couldn\'t speak this text', details, showDetails: true,
+    message: 'The voice model ran but stopped with an error of its own — its message is below.',
+    steps: ['Press Generate again.', 'Try shorter text or another voice.', 'If it keeps happening, restart DrawFlow.'],
+  };
+}
+
+export function explainAiError(err: unknown, provider?: AiProviderId, role?: AiRole): Problem {
+  if (provider === 'local') return explainLocalVoiceError(err, err instanceof Error ? err.message : String(err ?? 'Unknown error'));
+  if (provider === 'kokoro') return explainBuiltInVoiceError(err instanceof Error ? err.message : String(err ?? 'Unknown error'));
   const raw = err instanceof Error ? err.message : String(err ?? 'Unknown error');
   const p = provider ?? guessProvider(raw);
   const name = p ? NAMES[p] : 'the AI provider';

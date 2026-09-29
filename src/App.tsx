@@ -12,6 +12,7 @@ import { onShortcut } from './hooks/useKeyboardShortcuts';
 import { FullscreenPreview } from './components/layout/FullscreenPreview';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { ProblemHost } from './components/dialogs/ProblemDialog';
+import { LocalVoiceGuideHost } from './components/dialogs/LocalVoiceGuide';
 import { TourOverlay } from './components/help/TourOverlay';
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
       {fullscreen && <FullscreenPreview />}
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
       <ProblemHost />
+      <LocalVoiceGuideHost />
       <TourOverlay />
     </div>
   );

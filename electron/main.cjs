@@ -9,9 +9,10 @@
 // CommonJS (.cjs) on purpose: this package is "type": "module", and in an ESM
 // main process the bare specifier 'electron' resolves to the npm package
 // (a path string) rather than the built-in module.
-const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, utilityProcess } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const { existsSync } = require('node:fs');
 
 const SCHEME = 'app';
 const DEV_SERVER_URL = process.argv.includes('--dev') ? 'http://localhost:5173' : null;
@@ -165,6 +166,87 @@ ipcMain.handle('drawflow:save-file', async (event, { filename, text }) => {
   await fs.writeFile(filePath, text, 'utf8');
   return true;
 });
+
+/** This computer or the home network: the only places a local voice app can live. */
+function isLocalHost(hostname) {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return h === 'localhost' || h === '::1' || h.endsWith('.local')
+    || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+}
+
+// Local voice apps (VoiceStudio, qwentts.cpp…): the page's CSP only lets it
+// reach the cloud providers, and those apps' CORS lists don't include app://,
+// so their requests are relayed from here — to local addresses only.
+ipcMain.handle('drawflow:local-fetch', async (_event, { url, method, headers, body }) => {
+  let target;
+  try { target = new URL(url); } catch { return { error: `Not a valid address: ${url}` }; }
+  if (!/^https?:$/.test(target.protocol) || !isLocalHost(target.hostname)) {
+    return { error: `Only addresses on this computer or your home network can be used for a local voice app (got ${target.host}).` };
+  }
+  try {
+    // generating a long take on a CPU can take minutes
+    const res = await fetch(target, { method, headers, body, signal: AbortSignal.timeout(10 * 60 * 1000) });
+    return {
+      status: res.status,
+      statusText: res.statusText,
+      contentType: res.headers.get('content-type') || '',
+      body: new Uint8Array(await res.arrayBuffer()),
+    };
+  } catch (error) {
+    const cause = error && error.cause && (error.cause.code || error.cause.message);
+    return { error: `Failed to fetch ${target.origin}${cause ? ` (${cause})` : ''}`, unreachable: true };
+  }
+});
+
+// The built-in offline voice (Kokoro), run in a utility process — see
+// voice-worker.cjs. Packaged builds use the single-file bundle made by
+// scripts/build-voice-worker.mjs; development runs the source directly.
+const VOICE_MODELS = () => path.join(app.getPath('userData'), 'models');
+const VOICE_MODEL_FILE = 'onnx-community/Kokoro-82M-v1.0-ONNX/onnx/model_quantized.onnx';
+let voiceWorker = null;
+let voiceSeq = 0;
+const voiceJobs = new Map(); // id → { resolve, onProgress }
+
+function startVoiceWorker() {
+  const bundled = path.join(__dirname, 'voice', 'worker.cjs');
+  const script = !DEV_SERVER_URL && existsSync(bundled) ? bundled : path.join(__dirname, 'voice-worker.cjs');
+  const child = utilityProcess.fork(script, [], {
+    serviceName: 'DrawFlow voice',
+    env: { ...process.env, DRAWFLOW_MODELS: VOICE_MODELS() },
+    stdio: 'ignore',
+  });
+  child.on('message', (msg) => {
+    const job = voiceJobs.get(msg.id);
+    if (!job) return;
+    if (msg.type === 'progress') { job.onProgress(msg.loaded, msg.total); return; }
+    voiceJobs.delete(msg.id);
+    job.resolve(msg.type === 'done' ? { wav: msg.wav } : { error: msg.message });
+  });
+  child.on('exit', () => {
+    if (voiceWorker === child) voiceWorker = null;
+    for (const job of voiceJobs.values()) job.resolve({ error: 'The built-in voice stopped unexpectedly. Try again.' });
+    voiceJobs.clear();
+  });
+  return child;
+}
+
+/** Speak with the built-in voice; resolves { wav } or { error }. Progress is the one-time model download. */
+ipcMain.handle('drawflow:voice-speak', (event, { text, voice, speed }) => {
+  if (!voiceWorker) voiceWorker = startVoiceWorker();
+  const id = ++voiceSeq;
+  return new Promise((resolve) => {
+    voiceJobs.set(id, {
+      resolve,
+      onProgress: (loaded, total) => { if (!event.sender.isDestroyed()) event.sender.send('drawflow:voice-progress', { loaded, total }); },
+    });
+    voiceWorker.postMessage({ id, type: 'speak', text, voice, speed });
+  });
+});
+
+/** Has the built-in voice's model been downloaded already? */
+ipcMain.handle('drawflow:voice-status', () => ({ downloaded: existsSync(path.join(VOICE_MODELS(), VOICE_MODEL_FILE)) }));
+
+app.on('will-quit', () => { if (voiceWorker) voiceWorker.kill(); });
 
 // The application menu: the default Edit / View / Window menus, plus a File
 // menu with the project actions the web app keeps under "Saved…".

@@ -6,8 +6,9 @@
 
 A photographed hand draws pictures and handwriting on a board while a narrator
 speaks and the camera glides from shot to shot. Add text, 5,000+ pictures and
-people, your own artwork, music, a recorded or AI voice — and download an
-MP4, WebM or GIF without anything leaving your computer.
+people, your own artwork, music, a recorded or AI voice — including a free
+offline voice made on your own computer — and download an MP4, WebM or GIF
+without anything leaving your computer.
 
 ![React](https://img.shields.io/badge/React_18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
@@ -64,6 +65,14 @@ yourself: `npm run desktop:pack` (output in `release/`).
   from shot to shot; per-element framing; ease-out, linear or cut moves.
 - **Voice** — record while the scribe plays, upload, or AI narration; *fit to
   narration* retimes the drawing to the phrases of the voiceover.
+- **Offline AI voice, free** — the desktop app has a built-in natural voice
+  ([Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), 15 English voices)
+  that runs on your processor: no key, no cost per word, no graphics card;
+  the model downloads once (about 92 MB) on first use. For your own cloned
+  voice, connect a free voice app such as
+  [VoiceStudio](https://github.com/debpalash/VoiceStudio) or
+  [qwentts.cpp](https://github.com/Panda-Panta/qwentts.cpp) — a setup window
+  explains what to download.
 - **AI, bring your own key** — Anthropic, OpenAI, Groq or Gemini: describe a
   scene and get pictures, write a script and get whole narrated scenes, turn a
   photo into a doodle (offline) or a cartoon. Keys stay in your browser.
@@ -146,7 +155,11 @@ There is no server and no account. Projects, uploads and settings live in
 your browser (or in files you save); rendering and every offline feature run
 locally. The only network calls are the ones you enable by entering an AI key,
 and they go straight from your browser to that provider. Keys are stored in
-this browser only — never in project files, exports or this repository.
+this browser only — never in project files, exports or this repository. The
+offline voice downloads its model from Hugging Face once, the first time you
+use it; after that, speech is generated on your computer and your text never
+leaves it. A connected voice app is reached on this computer or your home
+network only.
 
 ## Shortcuts
 
@@ -170,7 +183,10 @@ Made by **Zahoor Ishfaq**. Built with the help of Claude (Anthropic).
 Artwork, hands and fonts are open-licensed — every source and licence is
 listed in [CREDITS.md](CREDITS.md): OpenMoji, Open Doodles, Open Peeps, Tabler
 Icons, Health Icons, Flowbite Illustrations, illlustrations.co, Mega Doodles,
-Unsplash photographs, Google Fonts.
+Unsplash photographs, Google Fonts. The offline voice uses Kokoro-82M,
+kokoro-js and Transformers.js (Apache-2.0) and ONNX Runtime (MIT); its
+pronunciation step includes eSpeak NG, which is GPL-3.0 (details in
+CREDITS.md).
 
 ## License
 
