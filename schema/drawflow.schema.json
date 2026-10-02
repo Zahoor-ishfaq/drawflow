@@ -75,6 +75,7 @@
         "width": { "type": "integer", "minimum": 64 },
         "height": { "type": "integer", "minimum": 64 },
         "fps": { "enum": [24, 25, 30, 50, 60] },
+        "exportHeight": { "type": "integer", "minimum": 144, "description": "Preferred output height (720, 1080, 2160…) for render() and the CLI when none is given; default 1080" },
         "background": { "type": "string", "description": "Paper colour (CSS)" },
         "paper": { "$ref": "#/definitions/PaperStyle" },
         "duration": { "type": "number", "minimum": 0, "description": "Derived from the elements and clips; recomputed on load" },

@@ -79,6 +79,10 @@ yourself: `npm run desktop:pack` (output in `release/`).
 - **Export on your machine** — MP4 (H.264), WebM (VP9), GIF, PNG frames, up to
   4K, through the browser's hardware encoders running in parallel; a CLI
   renders `.drawflow.json` files headlessly.
+- **Works with AI assistants (MCP)** — an MCP server lets Claude Desktop,
+  Claude Code or any MCP client create a project, add scenes of text, SVG,
+  photos and library pictures, narrate them, preview frames and render the
+  video, without opening the editor. See [mcp/README.md](mcp/README.md).
 - **Projects that save themselves** — autosave with thumbnails, version
   history, eight starter templates, portable single-file projects with a JSON
   Schema.
@@ -127,6 +131,8 @@ browsers fall back to a software encoder).
 - **[User guide](docs/user-guide.md)** — every feature, step by step, with
   screenshots. Or press **Help** in the app for guided tours.
 - [Command line](docs/cli.md) — render, validate and preview projects headlessly.
+- [MCP server](mcp/README.md) — let an AI assistant make videos; setup for
+  Claude Desktop and Claude Code.
 - [Scripting API](docs/api.md) — `window.DrawFlow` for automation and tests.
 - [Plugins](docs/plugins.md) — add effects, asset providers, exporters and panels.
 - [Project format](docs/project-format.md) and the
@@ -148,6 +154,21 @@ npx drawflow preview my.drawflow.json
 The CLI serves the built app and drives headless Chrome/Edge through the same
 `window.DrawFlow` API the editor uses, so it renders exactly what the Export
 button renders.
+
+## AI assistants (MCP)
+
+```bash
+npm install && npm run build
+claude mcp add drawflow -- node /path/to/drawflow/mcp/server.mjs   # Claude Code
+npm run test:mcp                                                   # builds and renders a 3-scene sample
+```
+
+The MCP server (stdio) gives an assistant eight tools: `create_project`,
+`add_scene`, `add_voiceover` (text with the free offline voice, or an audio
+file), `get_preview`, `render`, `list_projects`, `get_project` and
+`list_voices`. It works through the same headless app session as the CLI, so
+its projects are ordinary `.drawflow.json` files you can open in the editor.
+Claude Desktop setup and every option: [mcp/README.md](mcp/README.md).
 
 ## Privacy
 

@@ -24,6 +24,7 @@ draft-07); this page explains the ideas behind it.
 | Field | Meaning |
 |---|---|
 | `width`, `height`, `fps` | Video size and frame rate (24/25/30/50/60). |
+| `exportHeight` | Optional: the output height `render()`, the CLI and the MCP server use when none is given (720, 1080, 2160…); default 1080. |
 | `background`, `paper` | Paper colour and style (`plain`, `grid`, `dots`, `lined`, `cream`, `chalkboard`, `kraft`). |
 | `hand` | Default hand: `marker`, `pen`, `chalk` (right hands), `marker-left`, `pen-left`, `chalk-left`, `none` or `custom:<id>`. |
 | `cameraEasing`, `cameraFill`, `zoomAtEnd`, `endHold` | Camera behaviour; `duration` is derived and recomputed on load. |

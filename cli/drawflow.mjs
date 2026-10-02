@@ -14,28 +14,17 @@
 // Render options:
 //   -o, --out <path>       output file (default: next to the project)
 //   --format mp4|webm|gif|png-sequence   (default mp4)
-//   --height <px>          720 | 1080 | 1440 | 2160 | any even number (default 1080)
+//   --height <px>          720 | 1080 | 1440 | 2160 | any even number (default: the project's exportHeight, else 1080)
 //   --scene <name>         render one scene only
 //   --lanes <n>            concurrent encoders (default: physical cores)
 //   --browser <path>       Chromium/Chrome/Edge executable to use
 //   --keep-open            leave the browser open afterwards (debugging)
 
-import { createServer } from 'node:http';
 import { readFile, writeFile, stat, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { cpus } from 'node:os';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
-const DIST = path.join(ROOT, 'dist');
-
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
-  '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp',
-  '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.map': 'application/json',
-};
+import { startApp } from './app-session.mjs';
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -52,54 +41,6 @@ function parseArgs(argv) {
   return args;
 }
 
-/** Serve dist/ with the isolation headers the fallback encoder needs. */
-function serveDist() {
-  return new Promise((resolve, reject) => {
-    const server = createServer(async (req, res) => {
-      const url = new URL(req.url, 'http://localhost');
-      let file = path.join(DIST, decodeURIComponent(url.pathname));
-      if (!file.startsWith(DIST)) { res.writeHead(403); res.end(); return; }
-      try {
-        if ((await stat(file)).isDirectory()) file = path.join(file, 'index.html');
-      } catch {
-        file = path.join(DIST, 'index.html'); // SPA fallback
-      }
-      try {
-        const data = await readFile(file);
-        res.writeHead(200, {
-          'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream',
-          'Cross-Origin-Opener-Policy': 'same-origin',
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-          'Cache-Control': 'no-store',
-        });
-        res.end(data);
-      } catch {
-        res.writeHead(404); res.end('not found');
-      }
-    });
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve({ server, url: `http://127.0.0.1:${server.address().port}/` }));
-  });
-}
-
-async function launchBrowser({ headed = false, executable } = {}) {
-  let pw;
-  try {
-    pw = await import('playwright-core');
-  } catch {
-    fail('playwright-core is not installed. Run `npm install` in the DrawFlow folder.');
-  }
-  const opts = { headless: !headed, args: ['--autoplay-policy=no-user-gesture-required'] };
-  // ELECTRON_RUN_AS_NODE leaks in from some editors and would break a launched Electron; harmless for Chrome
-  const tries = executable ? [{ executablePath: executable }] : [{ channel: 'chrome' }, { channel: 'msedge' }, { channel: 'chromium' }, {}];
-  let lastErr;
-  for (const t of tries) {
-    try { return await pw.chromium.launch({ ...opts, ...t }); } catch (e) { lastErr = e; }
-  }
-  fail(`No Chromium-based browser found (tried Chrome, Edge and Playwright's Chromium).\n` +
-    `Install Google Chrome or Microsoft Edge, or run \`npx playwright install chromium\`, or pass --browser <path>.\n${lastErr?.message ?? ''}`);
-}
-
 function fail(msg) {
   console.error(`\x1b[31m${msg}\x1b[0m`);
   process.exit(1);
@@ -107,23 +48,12 @@ function fail(msg) {
 
 function log(msg) { process.stdout.write(msg + '\n'); }
 
-async function openApp(page, url) {
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-  await page.waitForFunction(() => !!window.DrawFlow, null, { timeout: 60000 });
-}
-
 async function withApp({ headed = false, executable, keepOpen = false } = {}, fn) {
-  if (!existsSync(path.join(DIST, 'index.html'))) fail('dist/ not found — run `npm run build` first.');
-  const { server, url } = await serveDist();
-  const browser = await launchBrowser({ headed, executable });
+  const app = await startApp({ headed, executable, onPageError: (e) => console.error('page error:', String(e).slice(0, 300)) }).catch((e) => fail(e.message));
   try {
-    const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-    const page = await context.newPage();
-    page.on('pageerror', (e) => console.error('page error:', String(e).slice(0, 300)));
-    await openApp(page, url);
-    return await fn(page, url);
+    return await fn(app.page, app.url);
   } finally {
-    if (!keepOpen) { await browser.close(); server.close(); }
+    if (!keepOpen) await app.close();
   }
 }
 
@@ -161,7 +91,8 @@ async function cmdRender(args) {
   const files = args._.slice(1);
   if (!files.length) fail('render: give at least one .drawflow.json');
   const format = args.format ?? 'mp4';
-  const height = parseInt(args.height ?? '1080', 10);
+  // without --height the project's own export size applies (exportHeight, else 1080)
+  const height = args.height ? parseInt(args.height, 10) : undefined;
   const ext = { mp4: 'mp4', webm: 'webm', gif: 'gif', 'png-sequence': 'zip' }[format];
   if (!ext) fail(`Unknown format "${format}". Use mp4, webm, gif or png-sequence.`);
   if (files.length > 1 && args.out && !args.out.endsWith(path.sep) && !existsSync(args.out)) {
@@ -175,8 +106,8 @@ async function cmdRender(args) {
       const t0 = Date.now();
       const load = await page.evaluate((j) => window.DrawFlow.loadProject(j), json);
       for (const p of load.problems) log(`   • ${p}`);
-      const info = await page.evaluate(() => ({ name: window.DrawFlow.project.name, duration: window.DrawFlow.project.duration, fps: window.DrawFlow.project.fps }));
-      log(`Rendering "${info.name}" (${info.duration.toFixed(1)} s @ ${info.fps} fps) → ${format} ${height}p${args.scene ? `, scene "${args.scene}"` : ''}`);
+      const info = await page.evaluate(() => ({ name: window.DrawFlow.project.name, duration: window.DrawFlow.project.duration, fps: window.DrawFlow.project.fps, exportHeight: window.DrawFlow.project.exportHeight }));
+      log(`Rendering "${info.name}" (${info.duration.toFixed(1)} s @ ${info.fps} fps) → ${format} ${height ?? info.exportHeight ?? 1080}p${args.scene ? `, scene "${args.scene}"` : ''}`);
       // progress ticker
       const ticker = setInterval(async () => {
         try {

@@ -13,6 +13,8 @@ import { pluginApi, activateInstalledPlugins, getPlugins } from './plugins';
 import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
 import { slotEnd } from './timing';
+import { addScene, addVoiceover, describeProject, sceneRange } from './automation';
+import { KOKORO_VOICES } from './ai/speech';
 import type { DrawElement, Project } from '../types';
 
 export const VERSION = '0.2.0';
@@ -92,7 +94,7 @@ export const api = {
     try {
       const result = await exportVideo({
         format: opts.format ?? 'mp4',
-        height: opts.height ?? 1080,
+        height: opts.height ?? s.project.exportHeight ?? 1080,
         project: s.project,
         elements: s.elements,
         audioClips: s.audioClips,
@@ -114,6 +116,41 @@ export const api = {
     return { base64: await blobToBase64(r.blob), filename: r.filename, sizeBytes: r.sizeBytes, elapsedMs: r.elapsedMs, engine: r.engine };
   },
   bench: exportBench,
+
+  // --- automation (the MCP server, scripts) -----------------------------------
+  /** Start an empty project with these settings (the open one is replaced). */
+  newProject(settings: Partial<Pick<Project, 'name' | 'width' | 'height' | 'fps' | 'exportHeight' | 'paper' | 'hand'>> = {}): void {
+    const s = useStore.getState();
+    s.newProject();
+    s.updateProject(settings);
+  },
+  /** Add a scene of text / SVG / image / library items — see automation.ts. */
+  addScene,
+  /** Narrate a scene from an audio file or text (built-in voice) — see automation.ts. */
+  addVoiceover,
+  /** The open project as a plain summary (scenes, timing, items, voiceovers). */
+  describe: describeProject,
+  /** The built-in offline voice's speakers (text voiceovers need the desktop app or the MCP server). */
+  voices: KOKORO_VOICES,
+  /** One frame as a PNG (base64): a scene's finished drawing, or the frame at `time`. */
+  async previewBase64(opts: { scene?: string; time?: number; height?: number } = {}): Promise<{ base64: string; time: number }> {
+    const s = useStore.getState();
+    let t = opts.time ?? s.project.duration - 0.05;
+    if (opts.time === undefined && opts.scene) {
+      const sc = (s.project.scenes ?? []).find((x) => x.id === opts.scene || x.name.toLowerCase() === opts.scene!.toLowerCase())
+        ?? (/^\d+$/.test(opts.scene) ? (s.project.scenes ?? [])[parseInt(opts.scene, 10) - 1] : undefined);
+      if (!sc) throw new Error(`No scene "${opts.scene}".`);
+      const range = sceneRange(sc.id);
+      if (!range) throw new Error(`Scene "${sc.name}" has no elements.`);
+      // just after its last item is drawn — the end of the scene can already be inside the next one's fade
+      const drawn = Math.max(...api.elements.filter((e) => e.sceneId === sc.id && !e.hidden).map((e) => e.startTime + e.drawDuration));
+      t = Math.min(drawn + 0.5, range.end - 0.05); // text fills in just after its strokes
+    }
+    s.pause();
+    s.setTime(Math.max(0, t));
+    const r = await api.renderBase64({ format: 'png', height: opts.height ?? 540 });
+    return { base64: r.base64, time: +useStore.getState().currentTime.toFixed(2) };
+  },
 };
 
 export type DrawFlowApi = typeof api;

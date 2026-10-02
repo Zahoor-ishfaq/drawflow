@@ -29,7 +29,7 @@ Render options:
 |---|---|
 | `-o, --out <path>` | Output file; with several inputs, a folder. Default: next to the project. |
 | `--format mp4\|webm\|gif\|png-sequence` | Default `mp4`. |
-| `--height <px>` | 720, 1080, 1440, 2160 or any even number. Width follows the project aspect. |
+| `--height <px>` | 720, 1080, 1440, 2160 or any even number. Width follows the project aspect. Default: the project's `exportHeight`, else 1080. |
 | `--scene <name>` | Render one scene only. |
 | `--lanes <n>` | Concurrent encoders (default: physical cores). |
 | `--keep-open` | Leave the browser open for debugging. |
@@ -52,6 +52,12 @@ In CI, install the package and a browser, build, and render:
 
 Headless Chromium uses software encoders, so expect roughly real-time speed
 for 1080p on a two-core runner and better with more cores.
+
+## AI assistants (MCP)
+
+`npm run mcp` starts an MCP server over stdio that lets Claude Desktop, Claude
+Code or any MCP client create, narrate, preview and render projects with the
+same app session the CLI uses. See [mcp/README.md](../mcp/README.md).
 
 ## Exit codes
 

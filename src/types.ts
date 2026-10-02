@@ -208,6 +208,8 @@ export interface Project {
   width: number;              // artboard px, default 1920
   height: number;             // default 1080
   fps: number;                // default 30
+  /** preferred output height for render()/the CLI when none is given (e.g. 720, 1080, 2160); default 1080 */
+  exportHeight?: number;
   background: string;         // paper colour, default '#ffffff'
   paper: PaperStyle;
   duration: number;           // total timeline length, seconds (derived)
