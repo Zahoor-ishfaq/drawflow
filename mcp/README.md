@@ -9,6 +9,33 @@ It runs locally over **stdio**. Projects are ordinary `.drawflow.json` files,
 so anything the assistant makes can be opened and polished in the DrawFlow
 editor, and the editor's projects can be rendered by the assistant.
 
+## The easy way: install DrawFlow (Windows)
+
+No Node.js, no terminal, no config files.
+
+1. Download **DrawFlow-Setup** from the
+   [latest release](https://github.com/Zahoor-ishfaq/drawflow/releases/latest)
+   and install it.
+2. Open DrawFlow and choose **Help → Connect to AI apps (MCP)…**. It adds
+   DrawFlow to Claude Desktop, Cursor and Windsurf if they are on this computer.
+   Your other settings are left alone, and a copy of each file is kept as
+   `<file>.before-drawflow`.
+3. Restart your AI app and ask for a video:
+
+   > Make a 9:16 whiteboard video about how a seed becomes a tree.
+
+For any other MCP app, choose **Copy settings** in the same dialog and paste
+them into that app's MCP settings. For Claude Code, run this (with your own
+install folder):
+
+```bash
+claude mcp add drawflow -e ELECTRON_RUN_AS_NODE=1 -- "C:\Users\you\AppData\Local\Programs\DrawFlow\DrawFlow.exe" "C:\Users\you\AppData\Local\Programs\DrawFlow\resources\app.asar\electron\mcp\server.cjs"
+```
+
+Rendering uses Microsoft Edge or Google Chrome, and every Windows 10 or 11 PC
+has Edge. The portable exe can't be connected, because it runs from a temporary
+folder: use the Setup file.
+
 ## How it works
 
 The server keeps one headless DrawFlow open (the same session the
@@ -19,7 +46,9 @@ video is encoded by exactly the code the editor uses, so nothing is
 re-implemented. Text voiceovers use DrawFlow's built-in offline voice
 (Kokoro-82M): free, no API key, nothing sent to the internet.
 
-## Requirements
+## From source (macOS, Linux, or to change the code)
+
+Requirements:
 
 - **Node.js 20+**
 - **Google Chrome or Microsoft Edge** (or Playwright's Chromium:
@@ -27,7 +56,7 @@ re-implemented. Text voiceovers use DrawFlow's built-in offline voice
 - About 100 MB free for the voice model, downloaded once the first time a text
   voiceover is made
 
-## Install
+Install:
 
 ```bash
 git clone https://github.com/Zahoor-ishfaq/drawflow.git
@@ -42,7 +71,7 @@ client and checks the result (picture size, length, audible narration). The
 sample project, preview frames and `smoke-test.mp4` are left in your temp
 folder (`drawflow-mcp-test`) so you can look at them.
 
-## Add it to Claude Desktop
+### Add it to Claude Desktop
 
 Open **Settings → Developer → Edit Config**, or edit the file directly:
 
@@ -69,7 +98,7 @@ On macOS or Linux the path looks like `"/Users/you/drawflow/mcp/server.mjs"`.
 The `env` block is optional. Restart Claude Desktop; the DrawFlow tools appear
 in the tools menu.
 
-## Add it to Claude Code
+### Add it to Claude Code
 
 ```bash
 claude mcp add drawflow -- node /path/to/drawflow/mcp/server.mjs
@@ -110,13 +139,27 @@ Check it with `claude mcp list` or `/mcp` inside Claude Code.
 | `add_scene(project, content, draw_duration?, hold_duration?, name?, transition?)` | Appends a scene. `content` is one item or a list of up to 6: `{type:"text", text, size?}`, `{type:"svg", svg \| path}`, `{type:"image", path}`, `{type:"library", query}` (5,000+ built-in drawings). Each scene gets its own part of the board; the camera moves there and the board is cleared. |
 | `add_voiceover(project, scene, text \| audio_path, voice?, fit_drawing?)` | Narrates a scene from text (built-in voice) or an audio file (WAV, MP3, M4A, OGG, FLAC, WebM). By default the drawing is retimed so each item is drawn while its phrase is spoken; later scenes and their voiceovers move along. |
 | `get_preview(project, scene?, time?, height?)` | A PNG frame: the moment a scene is fully drawn, or any time. |
-| `render(project, output_path?, format?, height?, scene?)` | Renders MP4 (or WebM / GIF) with audio, reporting progress. Default output: next to the project file. |
+| `render(project, output_path?, format?, height?, scene?)` | Renders MP4 (or WebM / GIF) with audio. Default output: next to the project file. |
+| `check_job(job?)` | The result of a render or voiceover that is still working (see below). |
 | `list_projects()` | Projects in the projects folder. |
 | `get_project(project)` | Settings, scenes with timing, items and voiceovers, total length. |
 | `list_voices()` | The built-in voices (15 English voices, US and UK). |
 
 `project` can be the title, the file name or a full path, so projects saved
 from the editor work too. Scenes are named, numbered from 1, or given by id.
+
+The server also gives the assistant instructions on making a good video, and a
+`make_whiteboard_video` prompt (topic, format, length) for clients that show
+prompts.
+
+### Long jobs
+
+Most clients give up on a tool call after about a minute, and a render or the
+voice model's first download can take longer. So `render` and `add_voiceover`
+answer within 30 seconds: with the result, or with `status: "working"` and a job
+id. The work carries on in the background, and `check_job` returns its progress
+and then its result. Clients that support progress notifications also get those
+during a render.
 
 ## Example
 
@@ -131,9 +174,11 @@ scene, `get_preview` to check the layout, and finally `render`.
 
 ## Troubleshooting
 
-- **"dist/ not found"**: run `npm run build` in the DrawFlow folder.
-- **"No Chromium-based browser found"**: install Chrome or Edge, run
-  `npx playwright install chromium`, or set `DRAWFLOW_BROWSER`.
+- **DrawFlow doesn't appear in your AI app**: restart the AI app after
+  connecting. Claude Desktop must be fully quit, from the tray icon too.
+- **"dist/ not found"** (from source): run `npm run build` in the DrawFlow folder.
+- **"No Chromium-based browser found"**: install Chrome or Edge, or set
+  `DRAWFLOW_BROWSER`. From source, `npx playwright install chromium` also works.
 - **The first text voiceover takes a while**: the voice model (~92 MB) is
   being downloaded; later voiceovers take seconds.
 - **Render time**: roughly real time or faster for 1080p, more for 4K.

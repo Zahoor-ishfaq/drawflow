@@ -157,18 +157,27 @@ button renders.
 
 ## AI assistants (MCP)
 
+Ask your AI app for a video: "Make a 9:16 whiteboard video about how a seed
+becomes a tree."
+
+On Windows, install DrawFlow, then choose **Help → Connect to AI apps (MCP)…**.
+It connects Claude Desktop, Cursor and Windsurf, and gives you settings to paste
+into any other MCP app. You don't need Node.js or a terminal.
+
+From source:
+
 ```bash
 npm install && npm run build
 claude mcp add drawflow -- node /path/to/drawflow/mcp/server.mjs   # Claude Code
 npm run test:mcp                                                   # builds and renders a 3-scene sample
 ```
 
-The MCP server (stdio) gives an assistant eight tools: `create_project`,
+The MCP server (stdio) gives an assistant nine tools: `create_project`,
 `add_scene`, `add_voiceover` (text with the free offline voice, or an audio
-file), `get_preview`, `render`, `list_projects`, `get_project` and
-`list_voices`. It works through the same headless app session as the CLI, so
-its projects are ordinary `.drawflow.json` files you can open in the editor.
-Claude Desktop setup and every option: [mcp/README.md](mcp/README.md).
+file), `get_preview`, `render`, `check_job` (for long renders),
+`list_projects`, `get_project` and `list_voices`. It works through the same
+headless app session as the CLI, so its projects are ordinary `.drawflow.json`
+files you can open in the editor. Every option: [mcp/README.md](mcp/README.md).
 
 ## Privacy
 

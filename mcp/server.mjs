@@ -21,14 +21,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { readFile, writeFile, readdir, rename, mkdir, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ROOT, startApp } from '../cli/app-session.mjs';
+import { ROOT, startApp, renderToFile } from '../cli/app-session.mjs';
 
-const require = createRequire(import.meta.url);
-const VERSION = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
+const VERSION = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 const PROJECTS = path.resolve(process.env.DRAWFLOW_PROJECTS || path.join(os.homedir(), 'Documents', 'DrawFlow'));
 /** Same folder as the desktop app's userData/models, so the voice model is downloaded once for both. */
@@ -43,11 +41,20 @@ const log = (...a) => console.error('[drawflow-mcp]', ...a);
 // --- the headless app ---------------------------------------------------------
 
 let voice = null;
+let voiceDownload = null;   // percent while the model downloads, reported by check_job
 /** The built-in voice, loaded on first use (the model downloads once, ~92 MB). */
-function builtInVoice() {
+async function builtInVoice() {
   if (!voice) {
-    const { createVoice } = require('../electron/voice-core.cjs');
-    voice = createVoice({ modelsDir: MODELS, onProgress: (loaded, total) => log(`downloading the voice model… ${Math.floor((100 * loaded) / total)}%`) });
+    const core = await import('../electron/voice-core.cjs');
+    const { createVoice } = core.default ?? core;
+    voice = createVoice({
+      modelsDir: MODELS,
+      onProgress: (loaded, total) => {
+        voiceDownload = Math.floor((100 * loaded) / total);
+        log(`downloading the voice model… ${voiceDownload}%`);
+        if (loaded >= total) voiceDownload = null;
+      },
+    });
   }
   return voice;
 }
@@ -61,7 +68,7 @@ async function session() {
     onPageError: (e) => log('page error:', String(e).slice(0, 300)),
     prepare: async (context) => {
       // the page's built-in voice calls window.drawflow.voiceSpeak — as in the desktop app
-      await context.exposeFunction('__drawflowSpeak', async (text, voiceId, speed) => Buffer.from(await builtInVoice().speak(text, voiceId, speed ?? 1)).toString('base64'));
+      await context.exposeFunction('__drawflowSpeak', async (text, voiceId, speed) => Buffer.from(await (await builtInVoice()).speak(text, voiceId, speed ?? 1)).toString('base64'));
       await context.addInitScript(() => {
         window.drawflow = {
           voiceSpeak: async (text, voiceId, speed) => {
@@ -159,12 +166,56 @@ const failure = (e) => ({
   isError: true,
   content: [{ type: 'text', text: String(e?.message ?? e).replace(/^page\.evaluate: /, '').replace(/^Error: /, '').split(/\n\s+at /)[0].trim() }],
 });
-/** Wrap a handler: serialized, and errors returned as tool errors rather than protocol errors. */
-const tool = (fn) => (args, extra) => serial(() => fn(args, extra)).catch(failure);
+
+// Clients give up on a tool call after about a minute (Claude Desktop does, and so does the MCP SDK by
+// default), and a render or the voice model's first download takes longer. So those calls run as jobs: the
+// call answers within ANSWER_WITHIN, with the result or with a job id for check_job, and the work carries on.
+const ANSWER_WITHIN = 30_000;
+const jobs = new Map();
+let jobCount = 0;
+let running = null;
+const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const busy = () => failure(new Error(`DrawFlow is busy with ${running.what}. Call check_job with job "${running.id}" and try again when it is done.`));
+
+async function jobStatus(j) {
+  let percent = null;
+  if (j.kind === 'render') {
+    // each stage of a render counts from 0 again: report the furthest it has been
+    try { j.percent = Math.max(j.percent ?? 0, Math.round(100 * await app.page.evaluate(() => window.DrawFlow.store.getState().exportProgress))); } catch { /* page busy */ }
+    percent = j.percent ?? null;
+  }
+  return text({
+    status: 'working', job: j.id, what: j.what, seconds: Math.round((Date.now() - j.started) / 1000),
+    ...(percent !== null ? { percent } : {}),
+    ...(voiceDownload !== null ? { downloadingVoiceModelPercent: voiceDownload } : {}),
+    next: `Call check_job with job "${j.id}". The work continues in the background.`,
+  });
+}
+
+/** Wrap a handler: serialized, errors returned as tool errors, refused politely while a job holds the document. */
+const tool = (fn) => async (args, extra) => (running ? busy() : serial(() => fn(args, extra)).catch(failure));
+
+/** Wrap a handler that can outlast a client's patience: see ANSWER_WITHIN. */
+const job = (kind, what, fn) => async (args, extra) => {
+  if (running) return busy();
+  const j = { id: `${kind}-${++jobCount}`, kind, what: what(args), started: Date.now(), result: null };
+  running = j;
+  jobs.set(j.id, j);
+  if (jobs.size > 20) jobs.delete(jobs.keys().next().value);
+  j.done = serial(() => fn(args, extra)).catch(failure).then((r) => { j.result = r; running = null; return r; });
+  return Promise.race([j.done, pause(ANSWER_WITHIN).then(() => j.result ?? jobStatus(j))]);
+};
 
 // --- server ---------------------------------------------------------------------
 
-const server = new McpServer({ name: 'drawflow', version: VERSION });
+const INSTRUCTIONS = `DrawFlow makes whiteboard-animation videos: a hand draws words and pictures while a narrator speaks.
+To make a video: create_project, then for each scene add_scene and add_voiceover, then get_preview to check the scenes, then render.
+Good videos: 3 to 8 scenes, one idea per scene, 1 or 2 spoken sentences per scene. Keep on-screen text to a few words (the narration says the rest) and pair it with one picture from the library.
+For YouTube Shorts, TikTok or Reels use resolution "vertical" (9:16). Keep scene text very short there: the board is narrow.
+add_voiceover and render can take minutes. If one answers with status "working", call check_job until it is done before doing anything else.
+Finish by telling the user where the video file is.`;
+
+const server = new McpServer({ name: 'drawflow', title: 'DrawFlow', version: VERSION }, { instructions: INSTRUCTIONS });
 
 server.registerTool('create_project', {
   title: 'Create a DrawFlow project',
@@ -235,7 +286,7 @@ server.registerTool('add_voiceover', {
     voice: z.string().optional().describe('Built-in voice for text (see list_voices; default af_heart).'),
     fit_drawing: z.boolean().default(true).describe('Retime the scene\'s drawing to the narration.'),
   },
-}, tool(async ({ project, scene, text: words, audio_path, voice: voiceId, fit_drawing }) => {
+}, job('voice', ({ scene }) => `the voiceover for scene ${scene}`, async ({ project, scene, text: words, audio_path, voice: voiceId, fit_drawing }) => {
   if (!words && !audio_path) throw new Error('Give "text" to speak or an "audio_path".');
   const audio = audio_path ? await readMedia(audio_path, 'audio') : undefined;
   return withProject(project, async (page) => {
@@ -261,7 +312,7 @@ server.registerTool('get_preview', {
 
 server.registerTool('render', {
   title: 'Render the video',
-  description: 'Render the project to a video file with the same renderer as the editor\'s Export button (audio included). Takes roughly real time for 1080p; progress is reported while it runs.',
+  description: 'Render the project to a video file with the same renderer as the editor\'s Export button (audio included). Takes roughly real time for 1080p. A short video answers with the finished file; a longer one answers with a job id: call check_job until it is done.',
   inputSchema: {
     project: z.string().describe('Project title, file name or path.'),
     output_path: z.string().optional().describe('Where to write the file (default: next to the project, same name).'),
@@ -269,7 +320,7 @@ server.registerTool('render', {
     height: z.number().int().min(144).max(4320).optional().describe('Output height in pixels (default: the project\'s resolution).'),
     scene: z.string().optional().describe('Render one scene only (name or id).'),
   },
-}, tool(async ({ project, output_path, format, height, scene }, extra) => withProject(project, async (page, file) => {
+}, job('render', ({ project }) => `rendering ${project}`, async ({ project, output_path, format, height, scene }, extra) => withProject(project, async (page, file) => {
   const out = path.resolve(output_path ?? file.replace(/\.drawflow\.json$/i, `${scene ? `-${slug(scene)}` : ''}.${format}`));
   await mkdir(path.dirname(out), { recursive: true });
   const token = extra?._meta?.progressToken;
@@ -280,14 +331,44 @@ server.registerTool('render', {
     } catch { /* page busy */ }
   }, 1000);
   try {
-    const r = await page.evaluate((o) => window.DrawFlow.renderBase64(o), { format, height, scene });
-    await writeFile(out, Buffer.from(r.base64, 'base64'));
+    const r = await renderToFile(page, { format, height, scene }, out);
     const info = await page.evaluate(() => ({ duration: window.DrawFlow.project.duration, exportHeight: window.DrawFlow.project.exportHeight ?? 1080 }));
     return text({ file: out, format, height: height ?? info.exportHeight, seconds: +info.duration.toFixed(2), sizeMB: +(r.sizeBytes / 1048576).toFixed(2), renderSeconds: +(r.elapsedMs / 1000).toFixed(1), encoder: r.engine });
   } finally {
     if (ticker) clearInterval(ticker);
   }
 }, { save: false })));
+
+server.registerTool('check_job', {
+  title: 'Check on a long job',
+  description: 'The result of a render or voiceover that answered with status "working". Waits up to 25 seconds for it to finish, then answers with the result, or with its progress: if it is still working, call check_job again.',
+  inputSchema: { job: z.string().optional().describe('The job id (default: the job running now, or the latest one).') },
+  annotations: { readOnlyHint: true },
+}, async ({ job: id }) => {
+  const j = id ? jobs.get(id) : running ?? [...jobs.values()].at(-1);
+  if (!j) return failure(new Error(id ? `No job "${id}".` : 'No job has been started.'));
+  await Promise.race([j.done, pause(25_000)]);
+  return j.result ?? jobStatus(j);
+});
+
+server.registerPrompt('make_whiteboard_video', {
+  title: 'Make a whiteboard video',
+  description: 'Plan, narrate and render a whiteboard-animation video about a topic.',
+  argsSchema: {
+    topic: z.string().describe('What the video is about.'),
+    format: z.string().optional().describe('vertical (9:16, for Shorts), 1080p (16:9) or square. Default 1080p.'),
+    length: z.string().optional().describe('Rough length, for example "30 seconds" or "2 minutes".'),
+  },
+}, ({ topic, format, length }) => ({
+  messages: [{
+    role: 'user',
+    content: {
+      type: 'text',
+      text: `Make a whiteboard video with DrawFlow about: ${topic}.\nFormat: ${format ?? '1080p'}. Length: ${length ?? 'about a minute'}.\n` +
+        'First write the scenes (a few on-screen words, one picture and 1 or 2 spoken sentences each). Then create the project, add every scene with its voiceover, check each scene with get_preview and fix anything that looks wrong, render the video, and tell me where the file is.',
+    },
+  }],
+}));
 
 server.registerTool('list_projects', {
   title: 'List projects',
@@ -332,5 +413,4 @@ process.stdin.on('close', shutdown);
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-await server.connect(new StdioServerTransport());
-log(`ready — projects in ${PROJECTS}`);
+server.connect(new StdioServerTransport()).then(() => log(`ready — projects in ${PROJECTS}`));

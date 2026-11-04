@@ -8,6 +8,7 @@ playwright-report/
 
 .cache/
 
-# built by scripts/build-voice-worker.mjs
+# built by scripts/build-voice-worker.mjs and scripts/build-mcp-bundle.mjs
 electron/voice/
 electron/voices/
+electron/mcp/

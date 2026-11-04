@@ -9,10 +9,11 @@
 // CommonJS (.cjs) on purpose: this package is "type": "module", and in an ESM
 // main process the bare specifier 'electron' resolves to the npm package
 // (a path string) rather than the built-in module.
-const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, shell, utilityProcess } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { existsSync } = require('node:fs');
+const { serverEntry, settingsText, findApps, connect } = require('./mcp-connect.cjs');
 
 const SCHEME = 'app';
 const DEV_SERVER_URL = process.argv.includes('--dev') ? 'http://localhost:5173' : null;
@@ -248,6 +249,48 @@ ipcMain.handle('drawflow:voice-status', () => ({ downloaded: existsSync(path.joi
 
 app.on('will-quit', () => { if (voiceWorker) voiceWorker.kill(); });
 
+/** Help → Connect to AI apps: see mcp-connect.cjs. */
+async function connectAiApps() {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  const show = (options) => dialog.showMessageBox(win, { title: 'Connect to AI apps', noLink: true, ...options });
+  if (!app.isPackaged) {
+    await show({ type: 'info', message: 'This works in the installed app.', detail: 'From source, follow mcp/README.md instead.' });
+    return;
+  }
+  // the portable exe unpacks to a temporary folder, so an AI app could not find it again
+  if (process.env.PORTABLE_EXECUTABLE_FILE) {
+    await show({ type: 'info', message: 'AI apps need the installed version of DrawFlow.', detail: 'The portable version runs from a temporary folder. Install DrawFlow with the Setup file, then choose this again.' });
+    return;
+  }
+  const entry = serverEntry(process.execPath, path.join(__dirname, 'mcp', 'server.cjs'));
+  const apps = findApps();
+  const names = [...new Set(apps.map((a) => a.name))];
+  const buttons = apps.length ? [`Connect ${names.join(' and ')}`, 'Copy settings', 'Cancel'] : ['Copy settings', 'Cancel'];
+  const { response } = await show({
+    type: 'question',
+    buttons,
+    cancelId: buttons.length - 1,
+    message: apps.length ? 'Let your AI app make whiteboard videos with DrawFlow?' : 'No AI app found on this computer.',
+    detail: apps.length
+      ? `DrawFlow will be added to the settings of ${names.join(' and ')}. Nothing else in those settings changes, and a copy of each file is kept.\n\nFor any other app, use Copy settings and paste them into its MCP settings.`
+      : 'Claude Desktop, Cursor and Windsurf are connected automatically once installed. For any other MCP app, use Copy settings and paste them into its MCP settings.',
+  });
+  const choice = buttons[response];
+  if (choice === 'Cancel') return;
+  if (choice === 'Copy settings') {
+    clipboard.writeText(settingsText(entry));
+    await show({ type: 'info', message: 'Settings copied.', detail: 'Paste them into your AI app\'s MCP settings, then restart the app.' });
+    return;
+  }
+  const failed = [];
+  for (const a of apps) {
+    try { connect(a.file, entry); } catch (error) { failed.push(`${a.name}: could not read ${a.file} (${error.message})`); }
+  }
+  await show(failed.length
+    ? { type: 'warning', message: 'Some apps could not be connected.', detail: `${failed.join('\n')}\n\nNothing was changed in those files. Fix the file, or use Copy settings.` }
+    : { type: 'info', message: 'Connected.', detail: `Restart ${names.join(' and ')}, then ask for a video, for example:\n\n"Make a 9:16 whiteboard video about how a seed becomes a tree."` });
+}
+
 // The application menu: the default Edit / View / Window menus, plus a File
 // menu with the project actions the web app keeps under "Saved…".
 function buildMenu() {
@@ -279,6 +322,8 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
+        { label: 'Connect to AI apps (MCP)…', click: () => void connectAiApps() },
+        { type: 'separator' },
         { label: 'User guide', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow/blob/main/docs/user-guide.md') },
         { label: 'Report a problem', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow/issues') },
         { label: 'DrawFlow on GitHub', click: () => shell.openExternal('https://github.com/Zahoor-ishfaq/drawflow') },

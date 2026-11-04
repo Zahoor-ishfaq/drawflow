@@ -6,6 +6,9 @@
 //
 //   npm run test:mcp            (output in <temp>/drawflow-mcp-test)
 //
+// DRAWFLOW_TEST_EXE=<path to DrawFlow.exe> tests the server inside a built app
+// instead, launched exactly the way "Connect to AI apps" sets it up.
+//
 // The first run downloads the built-in voice model (~92 MB).
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -38,9 +41,15 @@ await writeFile(wav, toneWav());
 
 const env = { ...process.env, DRAWFLOW_PROJECTS: OUT };
 delete env.ELECTRON_RUN_AS_NODE;
-const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(ROOT, 'mcp', 'server.mjs')], env, stderr: 'pipe' });
+const EXE = process.env.DRAWFLOW_TEST_EXE;
+if (EXE) env.ELECTRON_RUN_AS_NODE = '1';
+const serverArgs = EXE ? [path.join(path.dirname(EXE), 'resources', 'app.asar', 'electron', 'mcp', 'server.cjs')] : [path.join(ROOT, 'mcp', 'server.mjs')];
+const transport = new StdioClientTransport({ command: EXE ?? process.execPath, args: serverArgs, env, stderr: 'pipe' });
 transport.stderr?.on('data', (d) => process.stderr.write(`    server: ${d}`));
 const client = new Client({ name: 'drawflow-smoke-test', version: '1.0.0' });
+// stdout must carry nothing but protocol messages: the client reports anything else as an error
+const stray = [];
+client.onerror = (e) => stray.push(String(e?.message ?? e));
 await client.connect(transport);
 
 async function call(name, args = {}, opts = {}) {
@@ -52,7 +61,9 @@ async function call(name, args = {}, opts = {}) {
 }
 
 const { tools } = await client.listTools();
-check(['create_project', 'add_scene', 'add_voiceover', 'get_preview', 'render', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
+check(['create_project', 'add_scene', 'add_voiceover', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
+check((client.getInstructions() ?? '').includes('create_project'), 'tells the assistant how to make a video');
+check((await client.listPrompts()).prompts.some((p) => p.name === 'make_whiteboard_video'), 'offers a make_whiteboard_video prompt');
 
 check(!(await call('create_project', { title: 'Smoke Test', resolution: '720p', fps: 30 })).isError, 'project created');
 check((await call('create_project', { title: 'Smoke Test' })).isError, 'duplicate project refused');
@@ -82,6 +93,10 @@ for (const sc of ['1', '2', '3']) {
   const img = r.content.find((c) => c.type === 'image');
   if (img) await writeFile(path.join(OUT, `preview-${sc}.png`), Buffer.from(img.data, 'base64'));
   check(!!img && img.data.length > 1000, `preview of scene ${sc}`);
+  // a "fully drawn" preview must not land in the next scene's fade (it would look washed out)
+  const at = parseFloat(/Frame at ([\d.]+) s/.exec(r.msg)?.[1] ?? 'NaN');
+  const next = d.scenes[parseInt(sc, 10)];
+  if (next) check(at < next.start - 0.3, `preview of scene ${sc} is taken before the fade (${at} s)`);
 }
 
 let progress = 0;
@@ -89,6 +104,7 @@ const rendered = await call('render', { project: 'Smoke Test' }, { onprogress: (
 check(!rendered.isError, `rendered (${progress} progress updates)`);
 check((await call('list_projects')).json().some((p) => p.project === 'smoke-test'), 'listed');
 check((await call('get_preview', { project: 'no such project' })).isError, 'unknown project refused');
+check(stray.length === 0, `stdout carried only protocol messages${stray.length ? ` (${stray[0]})` : ''}`);
 await client.close();
 
 // decode the MP4 in a browser engine: picture size, length, and a real audio track

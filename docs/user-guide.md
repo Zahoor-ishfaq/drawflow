@@ -413,6 +413,14 @@ what to do, and which setting was involved.
 
 ---
 
+### Let your AI app make the video
+
+The desktop app can also work the other way round: your own AI app drives
+DrawFlow and makes the whole video. Choose **Help → Connect to AI apps (MCP)…**,
+restart Claude Desktop, Cursor or Windsurf, then ask for a video, for example
+"Make a 9:16 whiteboard video about how a seed becomes a tree." Details are in
+the [MCP guide](../mcp/README.md).
+
 ## 12. Hands and paper
 
 ![Hands](screenshots/hands.png)
