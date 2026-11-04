@@ -105,6 +105,74 @@ async function pickAudioConfig(opts: SessionOptions): Promise<AudioEncoderConfig
   return null;
 }
 
+/** Loudest sample in the mix. */
+function peakOf(buffer: AudioBuffer): number {
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; }
+  }
+  return peak;
+}
+
+/**
+ * Decode encoded audio back and check no sample exceeds `limit` — a corrupt
+ * frame decodes to values hundreds of times louder than the mix itself.
+ * Resolves true when it cannot check (no AudioDecoder) or all is well.
+ */
+async function decodesWithin(encoded: { chunk: EncodedAudioChunk; meta: EncodedAudioChunkMetadata }[], config: AudioEncoderConfig, limit: number): Promise<boolean> {
+  if (typeof AudioDecoder === 'undefined') return true;
+  const dc = encoded.find((e) => e.meta.decoderConfig)?.meta.decoderConfig;
+  let ok = true;
+  let broken = false;
+  const dec = new AudioDecoder({
+    output: (d) => {
+      try {
+        const n = d.numberOfFrames;
+        const plane = new Float32Array(n);
+        for (let c = 0; c < d.numberOfChannels && ok; c++) {
+          d.copyTo(plane, { planeIndex: c, format: 'f32-planar' });
+          for (let i = 0; i < n; i++) if (!(Math.abs(plane[i]) <= limit)) { ok = false; break; }
+        }
+      } finally {
+        d.close();
+      }
+    },
+    error: () => { broken = true; },
+  });
+  try {
+    dec.configure({
+      codec: dc?.codec ?? config.codec,
+      sampleRate: dc?.sampleRate ?? config.sampleRate,
+      numberOfChannels: dc?.numberOfChannels ?? config.numberOfChannels,
+      ...(dc?.description ? { description: dc.description } : {}),
+    });
+    for (const { chunk } of encoded) dec.decode(chunk);
+    await dec.flush();
+  } catch {
+    return true; // the check itself is unavailable: keep the encoding rather than fail the export
+  } finally {
+    if (dec.state !== 'closed') dec.close();
+  }
+  return ok && !broken;
+}
+
+/**
+ * Triangular dither at one 16-bit step (about -90 dB, far below hearing),
+ * from a fixed-seed generator so the same project always encodes the same;
+ * `variant` picks another sequence for a retry.
+ */
+function ditherNoise(variant = 0): () => number {
+  let seed = 0x2545f491 + variant * 0x9e3779b9;
+  const next = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return () => (next() - next()) / 32768;
+}
+
 /** Returns null when the browser can't encode video at all (caller uses ffmpeg). */
 export async function createEncodeSession(opts: SessionOptions): Promise<EncodeSession | null> {
   const videoConfig = await pickVideoConfig(opts);
@@ -155,14 +223,42 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
   };
   let rawDescription: ArrayBuffer | null = null;
 
+  // audio is encoded in addAudio(), checked, and only then handed to the muxer
   let audio: AudioEncoder | null = null;
-  if (audioConfig) {
-    audio = new AudioEncoder({
-      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta ?? {}),
-      error: fail,
-    });
-    audio.configure(audioConfig);
-  }
+
+  /** The whole mix encoded once (100 ms pieces), with dither variant `attempt`; resolves with the chunks. */
+  const encodeAudio = async (buffer: AudioBuffer, attempt: number) => {
+    const config = audioConfig!;
+    const out: { chunk: EncodedAudioChunk; meta: EncodedAudioChunkMetadata }[] = [];
+    const enc = new AudioEncoder({ output: (chunk, meta) => out.push({ chunk, meta: meta ?? {} }), error: fail });
+    audio = enc;
+    enc.configure(config);
+    const channels = config.numberOfChannels;
+    const rate = config.sampleRate;
+    const total = buffer.length;
+    const chunkFrames = Math.round(rate / 10); // 100 ms
+    const chans = Array.from({ length: channels }, (_, c) =>
+      buffer.getChannelData(Math.min(c, buffer.numberOfChannels - 1)));
+    const dither = ditherNoise(attempt);
+    for (let start = 0; start < total; start += chunkFrames) {
+      if (failure) throw failure;
+      await waitForQueue(() => enc.encodeQueueSize);
+      const n = Math.min(chunkFrames, total - start);
+      const data = new Float32Array(n * channels);
+      for (let c = 0; c < channels; c++) data.set(chans[c].subarray(start, start + n), c * n);
+      for (let i = 0; i < data.length; i++) data[i] += dither();
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((start / rate) * 1e6), data });
+      try {
+        enc.encode(ad);
+      } finally {
+        ad.close();
+      }
+    }
+    await enc.flush();
+    enc.close();
+    if (failure) throw failure;
+    return out;
+  };
 
   const frameMicros = 1e6 / fps;
   const keyEvery = fps * 2;
@@ -219,41 +315,27 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
     },
 
     async addAudio(buffer) {
-      if (!audio || !audioConfig) return;
-      const channels = audioConfig.numberOfChannels;
-      const rate = audioConfig.sampleRate;
-      const total = buffer.length;
-      const chunkFrames = Math.round(rate / 10); // 100 ms
-      const chans = Array.from({ length: channels }, (_, c) =>
-        buffer.getChannelData(Math.min(c, buffer.numberOfChannels - 1)));
-      for (let start = 0; start < total; start += chunkFrames) {
-        if (failure) throw failure;
-        await waitForQueue(() => audio!.encodeQueueSize);
-        const n = Math.min(chunkFrames, total - start);
-        const data = new Float32Array(n * channels);
-        for (let c = 0; c < channels; c++) data.set(chans[c].subarray(start, start + n), c * n);
-        const ad = new AudioData({
-          format: 'f32-planar',
-          sampleRate: rate,
-          numberOfFrames: n,
-          numberOfChannels: channels,
-          timestamp: Math.round((start / rate) * 1e6),
-          data,
-        });
-        try {
-          audio.encode(ad);
-        } finally {
-          ad.close();
+      if (!audioConfig) return;
+      // Windows' AAC encoder now and then writes a corrupt frame: a burst of
+      // noise that makes some players stop. So the audio is encoded, decoded
+      // back and checked; if a frame is broken it is encoded again with a
+      // different (inaudible) dither, which moves the encoder off the bad path.
+      const limit = Math.max(1.5, 2 * peakOf(buffer));
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const encoded = await encodeAudio(buffer, attempt);
+        const check = audioConfig.codec === 'opus' || attempt === 3 ? true : await decodesWithin(encoded, audioConfig, limit);
+        if (check) {
+          for (const { chunk, meta } of encoded) muxer.addAudioChunk(chunk, meta);
+          return;
         }
+        console.warn(`[export] the AAC encoder produced a corrupt frame (attempt ${attempt + 1}); encoding the audio again`);
       }
     },
 
     async finish() {
       if (video) await video.flush();
-      if (audio) await audio.flush();
       if (failure) throw failure;
       video?.close();
-      audio?.close();
       muxer.finalize();
       return new Uint8Array((muxer.target as Mp4Target | WebmTarget).buffer);
     },

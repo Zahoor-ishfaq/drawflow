@@ -6,12 +6,14 @@
 // Errors are thrown (never process.exit) so a long-running caller survives them.
 
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, open } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// cli/ sits next to dist/; the installer's bundled copy runs from electron/mcp/, one level deeper
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const ROOT = existsSync(path.join(HERE, '..', 'dist')) ? path.resolve(HERE, '..') : path.resolve(HERE, '..', '..');
 export const DIST = path.join(ROOT, 'dist');
 
 const MIME = {
@@ -93,4 +95,34 @@ export async function startApp({ headed = false, executable, onPageError, prepar
     server.close();
     throw e;
   }
+}
+
+/**
+ * Render the open project and write it to `out`. The file stays in the page
+ * and is copied out in 32 MB slices: one base64 string of a long video would
+ * exceed V8's maximum string length (about 512 MB) and arrive empty.
+ */
+export async function renderToFile(page, opts, out) {
+  const r = await page.evaluate(async (o) => {
+    const res = await window.DrawFlow.render(o);
+    window.__renderBlob = res.blob;
+    return { sizeBytes: res.sizeBytes, elapsedMs: res.elapsedMs, engine: res.engine };
+  }, opts);
+  const SLICE = 32 * 1024 * 1024;
+  const fh = await open(out, 'w');
+  try {
+    for (let at = 0; at < r.sizeBytes; at += SLICE) {
+      const b64 = await page.evaluate(async ([s, e]) => {
+        const bytes = new Uint8Array(await window.__renderBlob.slice(s, e).arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return btoa(bin);
+      }, [at, Math.min(r.sizeBytes, at + SLICE)]);
+      await fh.write(Buffer.from(b64, 'base64'));
+    }
+  } finally {
+    await fh.close();
+    await page.evaluate(() => { delete window.__renderBlob; }).catch(() => {});
+  }
+  return r;
 }

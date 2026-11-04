@@ -24,7 +24,7 @@ import { readFile, writeFile, stat, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { cpus } from 'node:os';
-import { startApp } from './app-session.mjs';
+import { startApp, renderToFile } from './app-session.mjs';
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -115,22 +115,18 @@ async function cmdRender(args) {
           process.stdout.write(`\r   ${Math.round(p * 100)}%   `);
         } catch { /* page busy */ }
       }, 500);
-      let result;
-      try {
-        result = await page.evaluate(
-          (o) => window.DrawFlow.renderBase64(o),
-          { format, height, scene: args.scene },
-        );
-      } finally {
-        clearInterval(ticker);
-        process.stdout.write('\r');
-      }
       const base = path.basename(f).replace(/\.drawflow\.json$|\.json$/i, '');
       let out;
       if (!args.out) out = path.join(path.dirname(f), `${base}${args.scene ? `-${args.scene.replace(/[^\w-]+/g, '_')}` : ''}.${ext}`);
       else if (files.length > 1 || existsSync(args.out) && (await stat(args.out)).isDirectory()) out = path.join(args.out, `${base}.${ext}`);
       else out = args.out;
-      await writeFile(out, Buffer.from(result.base64, 'base64'));
+      let result;
+      try {
+        result = await renderToFile(page, { format, height, scene: args.scene }, out);
+      } finally {
+        clearInterval(ticker);
+        process.stdout.write('\r');
+      }
       log(`   ✓ ${out}  (${(result.sizeBytes / 1048576).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(1)} s, ${result.engine})`);
     }
   });
