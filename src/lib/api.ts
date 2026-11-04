@@ -2,7 +2,7 @@
 // renderer, the test-suite, benchmarks and plugins. Everything here is a
 // thin wrapper over the store and the export pipeline.
 
-import { useStore } from '../store/useStore';
+import { sequenceOrder, useStore } from '../store/useStore';
 import { useUiStore } from '../store/uiStore';
 import { exportVideo, type ExportFormat, type ExportOptions, type ExportResult } from './exportVideo';
 import { exportProjectFile, importProjectFile, parseProjectFile, saveNow } from './persistence';
@@ -13,6 +13,7 @@ import { pluginApi, activateInstalledPlugins, getPlugins } from './plugins';
 import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
 import { slotEnd } from './timing';
+import { buildSceneSpans } from './renderFrame';
 import { addScene, addVoiceover, describeProject, sceneRange } from './automation';
 import { KOKORO_VOICES } from './ai/speech';
 import type { DrawElement, Project } from '../types';
@@ -142,9 +143,14 @@ export const api = {
       if (!sc) throw new Error(`No scene "${opts.scene}".`);
       const range = sceneRange(sc.id);
       if (!range) throw new Error(`Scene "${sc.name}" has no elements.`);
-      // just after its last item is drawn — the end of the scene can already be inside the next one's fade
+      // just after its last item is drawn (text fills in just after its strokes), but before the
+      // next scene's fade: that starts ahead of the next scene, and can start before this one's end
       const drawn = Math.max(...api.elements.filter((e) => e.sceneId === sc.id && !e.hidden).map((e) => e.startTime + e.drawDuration));
-      t = Math.min(drawn + 0.5, range.end - 0.05); // text fills in just after its strokes
+      const spans = buildSceneSpans(sequenceOrder(s.elements).filter((e) => !e.hidden), s.project);
+      const here = spans.findIndex((x) => x.scene.id === sc.id);
+      const next = here >= 0 ? spans[here + 1] : undefined;
+      const fadeStart = next ? next.start - (next.scene.transition === 'cut' ? 0 : Math.max(0.1, next.scene.transitionDuration) / 2) : range.end;
+      t = Math.min(drawn + 0.5, Math.max(drawn, fadeStart - 0.05));
     }
     s.pause();
     s.setTime(Math.max(0, t));
