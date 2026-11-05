@@ -10,12 +10,13 @@ import { addImageFile, addImportedSvg, addLibraryIllustration, addTextSized } fr
 import { elementBounds } from './camera';
 import { slotEnd } from './timing';
 import { decodeToSource } from '../store/audioSources';
-import { speechSegments } from './audioTools';
+import { clipCaptions, speechSegments } from './audioTools';
+import { cuesInRange, decodeSrt, parseSrt, subtitleCues, subtitleSettings, toSrt } from './subtitles';
 import { fitToPhrases } from './narration';
 import { loadLibraryIndex } from '../assets/illustrations';
 import { buildIndex, searchAll } from './librarySearch';
 import { KOKORO_VOICES, synthesizeSpeech } from './ai/speech';
-import type { AudioClip, DrawElement, Scene } from '../types';
+import type { AudioClip, DrawElement, Scene, SubtitleSettings } from '../types';
 
 export type SceneItem =
   | { type: 'text'; text: string; size?: 'title' | 'normal' | 'small' }
@@ -195,11 +196,38 @@ export async function addVoiceover(opts: VoiceoverOptions): Promise<{ scene: str
   const at = members(scene.id)[0].startTime;
   useStore.getState().addAudioClip({
     id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration,
-    volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scene.id,
+    volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scene.id, ...clipCaptions(src.buffer, opts.text),
   }, { overwrite: true });
   useStore.getState().select(null);
   const range = sceneRange(scene.id)!;
   return { scene: scene.name, duration: +src.duration.toFixed(2), ...range };
+}
+
+/** Turn subtitles on or off, or change how they look. */
+export function setSubtitles(change: Partial<Omit<SubtitleSettings, 'cues'>>): SubtitleSettings {
+  const s = useStore.getState();
+  const given = Object.fromEntries(Object.entries(change).filter(([, v]) => v !== undefined));
+  const next = { ...subtitleSettings(s.project), ...given };
+  if (!['top', 'middle', 'bottom'].includes(next.position)) throw new Error('Subtitle position must be top, middle or bottom.');
+  if (!(next.size >= 12 && next.size <= 160)) throw new Error('Subtitle size must be between 12 and 160.');
+  s.updateProject({ subtitles: next });
+  return next;
+}
+
+/** Use a subtitle file (.srt or .vtt) for the whole video, and show it. Returns how many lines it has. */
+export function importSubtitles(file: string | ArrayBuffer | Uint8Array): number {
+  const cues = parseSrt(typeof file === 'string' ? file : decodeSrt(file));
+  if (!cues.length) throw new Error('No subtitles found. Is this an .srt file?');
+  const s = useStore.getState();
+  s.updateProject({ subtitles: { ...subtitleSettings(s.project), show: true, cues } });
+  return cues.length;
+}
+
+/** The project's subtitles as .srt text, optionally just those of a time range (timed from its start). */
+export function subtitlesSrt(range?: { start: number; end: number }): string {
+  const { project, audioClips } = useStore.getState();
+  const cues = subtitleCues(project, audioClips);
+  return toSrt(range ? cuesInRange(cues, range.start, range.end) : cues);
 }
 
 /** A plain summary of the open project: settings, scenes with their timing, items and voiceovers. */
@@ -218,6 +246,7 @@ export function describeProject() {
         voiceovers: audioClips.filter((c) => c.sceneId === sc.id).map((c) => ({ name: c.name, lane: c.lane, start: +c.startTime.toFixed(2), duration: +c.duration.toFixed(2) })),
       };
     }),
+    subtitles: (({ cues: _, ...look }) => ({ ...look, lines: subtitleCues(p, audioClips).length }))(subtitleSettings(p)),
     otherAudio: audioClips.filter((c) => !c.sceneId).map((c) => ({ name: c.name, lane: c.lane, start: +c.startTime.toFixed(2), duration: +c.duration.toFixed(2) })),
   };
 }

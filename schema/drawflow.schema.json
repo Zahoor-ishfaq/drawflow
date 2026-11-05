@@ -89,7 +89,29 @@
         "handOffset": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } },
         "handSmoothing": { "type": "number", "minimum": 0, "maximum": 1 },
         "customHands": { "type": "array", "items": { "$ref": "#/definitions/CustomHand" } },
-        "fonts": { "type": "array", "items": { "$ref": "#/definitions/CustomFont" } }
+        "fonts": { "type": "array", "items": { "$ref": "#/definitions/CustomFont" } },
+        "subtitles": { "$ref": "#/definitions/SubtitleSettings" }
+      }
+    },
+    "SubtitleCue": {
+      "type": "object",
+      "required": ["start", "end", "text"],
+      "properties": {
+        "start": { "type": "number", "minimum": 0 },
+        "end": { "type": "number", "minimum": 0 },
+        "text": { "type": "string" }
+      }
+    },
+    "SubtitleSettings": {
+      "type": "object",
+      "properties": {
+        "show": { "type": "boolean" },
+        "font": { "type": "string", "description": "Font family name" },
+        "size": { "type": "number", "minimum": 12, "maximum": 160, "description": "Text height in pixels on a 1080p frame; scales with the output" },
+        "position": { "enum": ["top", "middle", "bottom"] },
+        "color": { "type": "string" },
+        "box": { "type": "boolean", "description": "Dark band behind the words, otherwise an outline" },
+        "cues": { "type": "array", "items": { "$ref": "#/definitions/SubtitleCue" }, "description": "From an imported .srt, in timeline seconds; replaces the voice clips' own subtitles" }
       }
     },
     "Emphasis": {
@@ -168,7 +190,9 @@
         "volume": { "type": "number", "minimum": 0, "maximum": 1.5 },
         "fadeIn": { "type": "number", "minimum": 0 }, "fadeOut": { "type": "number", "minimum": 0 },
         "muted": { "type": "boolean" }, "solo": { "type": "boolean" },
-        "sceneId": { "type": "string" }
+        "sceneId": { "type": "string" },
+        "transcript": { "type": "string", "description": "The words spoken in this clip" },
+        "cues": { "type": "array", "items": { "$ref": "#/definitions/SubtitleCue" }, "description": "Subtitles in seconds into the source, so they follow the clip" }
       }
     }
   }

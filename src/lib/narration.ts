@@ -25,21 +25,20 @@ export function narrationPhrases(clips: AudioClip[], minPause = 0.35): SpeechSeg
 export function matchPhrases(phrases: SpeechSegment[], count: number): SpeechSegment[] {
   if (count === 0 || phrases.length === 0) return [];
   if (phrases.length === count) return phrases;
+  let out = phrases.map((p) => ({ ...p }));
   if (phrases.length > count) {
     // group consecutive phrases into `count` buckets of similar total length
     const total = phrases[phrases.length - 1].end - phrases[0].start;
     const per = total / count;
-    const out: SpeechSegment[] = [];
+    out = [];
     let cur = { ...phrases[0] };
     for (let i = 1; i < phrases.length; i++) {
       if (cur.end - cur.start >= per * 0.85 && out.length < count - 1) { out.push(cur); cur = { ...phrases[i] }; }
       else cur.end = phrases[i].end;
     }
     out.push(cur);
-    return out;
   }
-  // fewer phrases than elements: split the longest phrases evenly
-  const out = phrases.map((p) => ({ ...p }));
+  // fewer phrases than elements, or a long phrase swallowed its neighbours: split the longest evenly
   while (out.length < count) {
     let li = 0;
     for (let i = 1; i < out.length; i++) if (out[i].end - out[i].start > out[li].end - out[li].start) li = i;

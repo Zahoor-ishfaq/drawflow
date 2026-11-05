@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { useRenderContext } from '../../store/selectors';
 import { snap, useUiStore } from '../../store/uiStore';
@@ -8,6 +8,9 @@ import {
 } from '../../lib/renderFrame';
 import { cameraAt, cameraForElement, elementBounds, viewBoxFor } from '../../lib/camera';
 import { paperDef } from '../../assets/paper';
+import { prepareGifs } from '../../lib/gif';
+import { cueAt } from '../../lib/subtitles';
+import { prepareSubtitleFont, subtitleSprite } from '../../lib/subtitleSprite';
 import { ElementNode } from './ElementNode';
 import { Hand } from './Hand';
 import { SelectionBox } from './SelectionBox';
@@ -60,6 +63,20 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({});
 
+  // GIFs decode and fonts load in the background: paint again once they are ready
+  const [loads, setLoads] = useState(0);
+  const repaint = () => setLoads((n) => n + 1);
+  useEffect(() => {
+    let live = true;
+    void prepareGifs(ctx.stacked.map((e) => e.image?.src)).then((fresh) => { if (fresh && live) repaint(); });
+    return () => { live = false; };
+  }, [ctx.stacked]);
+  const subtitleFont = ctx.subtitles?.font;
+  useEffect(() => {
+    if (subtitleFont) void prepareSubtitleFont(ctx.subtitles ?? undefined, project).then(repaint);
+  }, [subtitleFont, project.fonts]);
+  const stillFrame = useMemo(() => ({ ...FULL_FRAME }), [loads]);
+
   const cameraMode = mode === 'camera';
   const selected = ordered.find((e) => e.id === selectedId) ?? null;
   const selectedEls = useMemo(
@@ -80,6 +97,10 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const pxPerUnit = cssWidth / vb.width; // screen px per canvas unit
   const overlay = cameraMode ? sceneOverlayAt(currentTime, ctx.scenes) : null;
   const drawn = cameraMode ? visibleAt(ctx, currentTime) : ctx.stacked;
+  // the words on screen; while editing, the first line stands in so the settings can be seen
+  const cue = ctx.subtitles ? cueAt(ctx.cues, currentTime) ?? (cameraMode ? null : ctx.cues[0] ?? null) : null;
+  const subtitle = cue ? subtitleSprite(cue.text, ctx.subtitles!, project.width, project.height) : null;
+  const subtitleArea = cameraMode ? vb : boundary;
 
   // Where the camera will be while the selected element draws. Shown (as a
   // passive outline under the artwork) only when it differs from the
@@ -376,7 +397,7 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
       )}
 
       {drawn.map((el) => {
-        const frame = cameraMode ? elementFrameAt(el, currentTime, vb) : FULL_FRAME;
+        const frame = cameraMode ? elementFrameAt(el, currentTime, vb) : stillFrame;
         if (!frame) return null;
         return (
           <ElementNode
@@ -397,6 +418,18 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
         ) : (
           <rect x={vb.x + vb.width * (overlay.amount * 2 - 1)} y={vb.y} width={vb.width} height={vb.height} fill={overlay.color ?? background} pointerEvents="none" />
         )
+      )}
+
+      {subtitle && subtitleArea && (
+        <image
+          href={subtitle.url()}
+          x={subtitleArea.x + subtitle.x * subtitleArea.width}
+          y={subtitleArea.y + subtitle.y * subtitleArea.height}
+          width={subtitle.width * subtitleArea.width}
+          height={subtitle.height * subtitleArea.height}
+          preserveAspectRatio="none"
+          pointerEvents="none"
+        />
       )}
 
       {/* smart guides */}

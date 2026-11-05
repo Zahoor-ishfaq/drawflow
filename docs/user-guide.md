@@ -141,6 +141,22 @@ alignment, line height, letter spacing and right-to-left. With a text element
 selected, the Inspector's *Style* tab edits the same things, and *Typewriter*
 under Entrance shows the words one at a time instead of drawing them.
 
+### Animated GIFs
+
+Upload a GIF the same way as any picture: **Library** > **Uploads**. It plays
+inside your video from the moment it appears and loops for as long as it stays
+on the board. It pops in instead of being drawn by the hand, so it can be
+watched while it plays; choose another effect under *Entrance* if you prefer.
+Move and resize it like a picture.
+
+*Edit view* shows its first frame, so it holds still while you arrange things.
+Press Play or switch to *Camera view* to see it move. The picture you see there
+is the picture in the video: dragging the playhead back and forth lands on the
+same frame every time.
+
+In the web version this works in Chrome and Edge. A browser that can't read the
+frames of a GIF shows it still.
+
 ### Pictures from the AI
 
 The **AI** tab can suggest library pictures and drawings from a description,
@@ -374,6 +390,51 @@ more. Transcription (*Fit to sentences*) still uses Groq or OpenAI. The
 desktop app connects to the voice app directly; in a web browser the voice
 app must allow DrawFlow's page in its CORS settings.
 
+### Subtitles
+
+Subtitles are the words of the narration on screen, timed to the voice and
+drawn into the video. Open **Subtitles** in the left rail and tick *Show
+subtitles in the video*.
+
+**Where the words come from**
+
+- **AI voices** add them by themselves: the words you typed are the subtitles.
+- **A recording or an audio file:** click its clip on the timeline and fill in
+  *Words spoken* in the Inspector. With a Groq or OpenAI key, *Write the words
+  from the audio* fills them in for you.
+- **An `.srt` file:** *Import .srt* uses that file for the whole video, in place
+  of the voice's own lines. *Remove the imported file* goes back to them.
+
+To correct the wording, use *Save .srt*, change the file in Notepad, and import
+it again. An `.srt` from another program works too, in any language, including
+older Chinese files in GBK.
+
+**How they look**
+
+Choose the font, size, position (top, middle or bottom), text colour, and
+whether there is a dark band behind the words. Without the band the words get
+an outline, so they stay readable on any paper. The size is measured on a 1080p
+video and scales with the output, so a 4K or vertical video looks the same.
+*Edit view* shows the first line, so you can see each change straight away.
+
+Any language works. Text that a font has no letters for falls back to a font on
+your computer that has them, so Chinese shows correctly even with Arial chosen.
+
+**How the timing works**
+
+DrawFlow listens for the pauses in the voice and matches them to the commas and
+full stops in the text, so each line starts when its words are spoken. Long
+sentences split into short lines by themselves. Subtitles belong to their voice
+clip: move, trim or split the clip and they follow.
+
+The timing is worked out from pauses, not from recognising the words, so it is
+close rather than exact. On real narration, half the lines start within 0.1 s
+of their first word and 9 in 10 within about 0.4 s. A voice that speaks without
+pausing gives it less to go on. For word-perfect timing, import an `.srt`.
+
+To save the subtitles for YouTube, use *Save .srt* here or in *Download video*.
+Rendering one scene saves that scene's lines, timed from its start.
+
 ---
 
 ## 11. The AI assistant
@@ -416,8 +477,8 @@ what to do, and which setting was involved.
 ### Let your AI app make the video
 
 The desktop app can also work the other way round: your own AI app drives
-DrawFlow and makes the whole video. Choose **Help → Connect to AI apps (MCP)…**,
-restart Claude Desktop, Cursor or Windsurf, then ask for a video, for example
+DrawFlow and makes the whole video. Click **Connect AI (MCP)** at the top of the
+window, restart Claude Desktop, Cursor or Windsurf, then ask for a video, for example
 "Make a 9:16 whiteboard video about how a seed becomes a tree." Details are in
 the [MCP guide](../mcp/README.md).
 

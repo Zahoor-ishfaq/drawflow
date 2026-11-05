@@ -32,6 +32,7 @@ draft-07); this page explains the ideas behind it.
 | `markers[]` | `{ id, time, name, color }` on the timeline ruler. |
 | `handOffset`, `handSmoothing` | Hand picture nudge and motion smoothing. |
 | `customHands[]`, `fonts[]` | Uploaded hand photos (with pen tip) and TTF/OTF fonts, embedded. |
+| `subtitles` | Optional: `{ show, font, size, position: top\|middle\|bottom, color, box, cues? }`. `size` is in pixels on a 1080p frame. `cues[]` come from an imported `.srt` (`{ start, end, text }` in timeline seconds) and replace the voice clips' own subtitles. |
 
 ## Elements
 
@@ -65,6 +66,12 @@ elements take no time and are not rendered.
 `startTime` on the timeline, `offset` into the source, `duration`, `volume`
 (0–1.5), `fadeIn`/`fadeOut`, `muted`, `solo`, optional `sceneId` (the clip
 moves with the scene). `sources[]` hold the bytes: `{ id, name, type, data }`.
+A voice clip can also hold its `transcript` and its subtitles as `cues[]`
+(`{ start, end, text }` in seconds into the source, so they follow the clip when
+it moves or is trimmed).
+
+An element's picture stays as one `image.src` data URL. An animated GIF keeps
+its original bytes there; its frames are worked out when it is shown.
 
 ## Compatibility
 

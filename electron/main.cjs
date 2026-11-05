@@ -249,7 +249,7 @@ ipcMain.handle('drawflow:voice-status', () => ({ downloaded: existsSync(path.joi
 
 app.on('will-quit', () => { if (voiceWorker) voiceWorker.kill(); });
 
-/** Help → Connect to AI apps: see mcp-connect.cjs. */
+/** The Connect AI (MCP) button, and the same item under Help: see mcp-connect.cjs. */
 async function connectAiApps() {
   const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
   const show = (options) => dialog.showMessageBox(win, { title: 'Connect to AI apps', noLink: true, ...options });
@@ -290,6 +290,8 @@ async function connectAiApps() {
     ? { type: 'warning', message: 'Some apps could not be connected.', detail: `${failed.join('\n')}\n\nNothing was changed in those files. Fix the file, or use Copy settings.` }
     : { type: 'info', message: 'Connected.', detail: `Restart ${names.join(' and ')}, then ask for a video, for example:\n\n"Make a 9:16 whiteboard video about how a seed becomes a tree."` });
 }
+
+ipcMain.handle('drawflow:connect-ai', () => connectAiApps());
 
 // The application menu: the default Edit / View / Window menus, plus a File
 // menu with the project actions the web app keeps under "Saved…".

@@ -16,6 +16,7 @@
 //   --format mp4|webm|gif|png-sequence   (default mp4)
 //   --height <px>          720 | 1080 | 1440 | 2160 | any even number (default: the project's exportHeight, else 1080)
 //   --scene <name>         render one scene only
+//   --srt                  also write the subtitles as an .srt file beside the video
 //   --lanes <n>            concurrent encoders (default: physical cores)
 //   --browser <path>       Chromium/Chrome/Edge executable to use
 //   --keep-open            leave the browser open afterwards (debugging)
@@ -34,7 +35,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--')) {
       const [k, v] = a.slice(2).split('=');
       if (v !== undefined) args[k] = v;
-      else if (['keep-open', 'headed', 'help', 'json'].includes(k)) args[k] = true;
+      else if (['keep-open', 'headed', 'help', 'json', 'srt'].includes(k)) args[k] = true;
       else args[k] = argv[++i];
     } else args._.push(a);
   }
@@ -126,6 +127,11 @@ async function cmdRender(args) {
       } finally {
         clearInterval(ticker);
         process.stdout.write('\r');
+      }
+      if (args.srt) {
+        const srt = await page.evaluate((scene) => window.DrawFlow.subtitlesSrt({ scene }), args.scene);
+        if (srt) await writeFile(out.replace(/\.[^.\\/]+$/, '.srt'), srt);
+        else log('   • This project has no subtitles.');
       }
       log(`   ✓ ${out}  (${(result.sizeBytes / 1048576).toFixed(1)} MB, ${((Date.now() - t0) / 1000).toFixed(1)} s, ${result.engine})`);
     }

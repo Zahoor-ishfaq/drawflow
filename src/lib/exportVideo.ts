@@ -13,6 +13,8 @@ import { encodeWav, mixdownBuffer, MIX_SAMPLE_RATE } from './audioMix';
 import { createEncodeSession } from './mediaEncoder';
 import { canRenderFast, renderAndEncodeParallel } from './parallelRender';
 import { makeRenderContext, svgStringForTime } from './renderFrame';
+import { prepareGifs } from './gif';
+import { prepareSubtitleFont } from './subtitleSprite';
 import { getFFmpeg, terminateFFmpeg } from './ffmpegClient';
 import { allHands, loadHandDataUrl } from '../assets/hands';
 
@@ -91,7 +93,7 @@ function canvasToBlob(canvas: AnyCanvas, type: string, quality?: number): Promis
 }
 
 /** Everything needed to paint any time t of the scribe at the output size. */
-async function makeFrameRenderer(project: Project, elements: DrawElement[], outW: number, outH: number) {
+async function makeFrameRenderer(project: Project, elements: DrawElement[], clips: AudioClip[], outW: number, outH: number) {
   // hand photos must be embedded (an SVG rasterized via <img> can't fetch)
   const handImages: Partial<Record<HandStyle, string>> = {};
   const used = new Set<HandStyle>([project.hand, ...elements.map((e) => e.hand ?? project.hand)]);
@@ -100,7 +102,9 @@ async function makeFrameRenderer(project: Project, elements: DrawElement[], outW
       handImages[h.id] = await loadHandDataUrl(h);
     }),
   );
-  const render = makeRenderContext(project, elements);
+  await prepareGifs(elements.map((e) => e.image?.src));
+  await prepareSubtitleFont(project.subtitles, project);
+  const render = makeRenderContext(project, elements, clips);
   const canvas = makeCanvas(outW, outH);
   const ctx = canvas.getContext('2d') as AnyCtx | null;
   if (!ctx) throw new Error('Could not create a 2D canvas context.');
@@ -155,7 +159,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
 
   const t0 = performance.now();
   opts.onPhase('loading');
-  const renderer = await makeFrameRenderer(project, elements, outW, outH);
+  const renderer = await makeFrameRenderer(project, elements, audioClips, outW, outH);
   const { canvas, ctx } = renderer;
   const fps = project.fps;
   const range = opts.range ?? { start: 0, end: project.duration };
@@ -237,7 +241,7 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
         try {
           const s = performance.now();
           const stats = await renderAndEncodeParallel({
-            ctx: makeRenderContext(project, elements), outW, outH, fps,
+            ctx: makeRenderContext(project, elements, audioClips), outW, outH, fps,
             start: range.start, totalFrames, signal,
             videoConfig: session.videoConfig, keyEvery: session.keyEvery,
             onSegment: (chunks, description) => { session.addRawChunks(chunks, description); delivered++; },

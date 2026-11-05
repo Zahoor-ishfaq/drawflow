@@ -3,8 +3,9 @@
 // in schema/drawflow.schema.json; this keeps the app running on files that
 // are slightly off rather than refusing them.
 
-import type { AudioClip, DrawElement, Project } from '../types';
+import type { AudioClip, DrawElement, Project, SubtitleCue } from '../types';
 import { DEFAULT_PROJECT } from '../store/useStore';
+import { SUBTITLE_DEFAULTS } from './subtitles';
 
 export interface DocumentInput {
   project: Partial<Project> | undefined;
@@ -29,6 +30,28 @@ const DIRECTIONS = new Set(['left', 'right', 'top', 'bottom']);
 const LANES = new Set(['music', 'voice', 'sfx']);
 const PAPERS = new Set(['plain', 'grid', 'dots', 'lined', 'cream', 'chalkboard', 'kraft']);
 
+function cleanCues(v: unknown): SubtitleCue[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return (v as Partial<SubtitleCue>[]).filter((c) =>
+    c && typeof c.text === 'string' && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end! > c.start!,
+  ).map((c) => ({ start: Math.max(0, c.start!), end: c.end!, text: c.text! }));
+}
+
+function cleanSubtitles(v: unknown): Project['subtitles'] {
+  if (!v || typeof v !== 'object') return undefined;
+  const s = v as Record<string, unknown>;
+  const d = SUBTITLE_DEFAULTS;
+  return {
+    show: bool(s.show, d.show),
+    font: str(s.font, d.font),
+    size: num(s.size, d.size, 12, 160),
+    position: s.position === 'top' || s.position === 'middle' || s.position === 'bottom' ? s.position : d.position,
+    color: str(s.color, d.color),
+    box: bool(s.box, d.box),
+    cues: cleanCues(s.cues),
+  };
+}
+
 export function validateDocument(input: DocumentInput): ValidatedDocument {
   const problems: string[] = [];
   const p = (input.project ?? {}) as Record<string, unknown>;
@@ -50,6 +73,7 @@ export function validateDocument(input: DocumentInput): ValidatedDocument {
     endHold: num(p.endHold, 1.5, 0, 60),
     scenes: Array.isArray(p.scenes) ? (p.scenes as Project['scenes']) : [],
     markers: Array.isArray(p.markers) ? (p.markers as Project['markers']) : [],
+    subtitles: cleanSubtitles(p.subtitles),
   };
   if (p.fps !== undefined && project.fps !== p.fps) problems.push(`Frame rate ${String(p.fps)} is not supported; using 30.`);
 
@@ -108,6 +132,8 @@ export function validateDocument(input: DocumentInput): ValidatedDocument {
       fadeIn: num(c.fadeIn, 0, 0),
       fadeOut: num(c.fadeOut, 0, 0),
       muted: bool(c.muted, false),
+      transcript: typeof c.transcript === 'string' ? c.transcript : undefined,
+      cues: cleanCues(c.cues),
     });
   });
 

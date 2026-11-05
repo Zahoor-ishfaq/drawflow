@@ -14,6 +14,8 @@ interface DesktopBridge {
   voiceSpeak?(text: string, voice: string, speed?: number): Promise<{ wav: Uint8Array } | { error: string }>;
   voiceStatus?(): Promise<{ downloaded: boolean }>;
   onVoiceProgress?(handler: (msg: { loaded: number; total: number }) => void): () => void;
+  /** Opens the dialog that connects DrawFlow to an AI app over MCP. */
+  connectAiApps(): Promise<void>;
 }
 interface Window {
   drawflow?: DesktopBridge;

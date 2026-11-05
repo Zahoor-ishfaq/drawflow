@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useUiStore } from '../../store/uiStore';
-import { Hand, Layers, LibraryBig, Mic, Sparkles, StickyNote, Type, X } from 'lucide-react';
+import { Captions, Hand, Layers, LibraryBig, Mic, Sparkles, StickyNote, Type, X } from 'lucide-react';
 import { TextPanel } from '../library/TextPanel';
 import { LibraryPanel } from '../library/LibraryPanel';
 import { AudioPanel } from '../library/AudioPanel';
+import { SubtitlesPanel } from '../library/SubtitlesPanel';
 import { HandPanel } from '../library/HandPanel';
 import { PaperPanel } from '../library/PaperPanel';
 import { AiPanel } from '../library/AiPanel';
@@ -13,12 +14,13 @@ import { useEffect, useRef as useRef2 } from 'react';
 import { IconButton } from '../ui/IconButton';
 import { onOpenTool } from '../../lib/tours';
 
-type Tool = 'library' | 'text' | 'voice' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
+type Tool = 'library' | 'text' | 'voice' | 'subtitles' | 'ai' | 'layers' | 'hand' | 'paper' | `plugin:${string}`;
 
 const ADD_TOOLS: { id: Tool; label: string; Icon: typeof Type }[] = [
   { id: 'library', label: 'Library', Icon: LibraryBig },
   { id: 'text', label: 'Text', Icon: Type },
   { id: 'voice', label: 'Voice', Icon: Mic },
+  { id: 'subtitles', label: 'Subtitles', Icon: Captions },
   { id: 'ai', label: 'AI', Icon: Sparkles },
 ];
 
@@ -45,6 +47,7 @@ const PANEL_TITLES: Record<string, string> = {
   library: 'Library',
   text: 'Add text',
   voice: 'Voice & sound',
+  subtitles: 'Subtitles',
   ai: 'AI assistant',
   layers: 'Layers',
   hand: 'Set hand',
@@ -120,6 +123,7 @@ export function IconRail() {
             {open === 'library' && <LibraryPanel />}
             {open === 'text' && <TextPanel onAdded={close} />}
             {open === 'voice' && <AudioPanel onAdded={close} />}
+            {open === 'subtitles' && <SubtitlesPanel />}
             {open === 'ai' && <AiPanel />}
             {open === 'layers' && <LayersPanel />}
             {open.startsWith('plugin:') && <PluginPanelHost id={open.slice(7)} />}

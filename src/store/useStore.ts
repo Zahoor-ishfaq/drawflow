@@ -209,7 +209,7 @@ function commit(
   elements: DrawElement[],
   extra: Partial<AppState> = {},
 ): DrawElement[] {
-  const project = { ...get().project, ...(extra.project ?? {}) };
+  const project = extra.project ?? get().project;
   const clips = extra.audioClips ?? get().audioClips;
   const chained = rechain(normalizeScenes(elements, project.scenes));
   // keep the selection consistent with what exists

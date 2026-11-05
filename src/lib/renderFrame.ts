@@ -4,7 +4,7 @@
 // transitions and hand pose. Both the live React canvas and the deterministic
 // export pipeline consume these, so preview and exported video always match.
 
-import type { Direction, DrawElement, HandStyle, MotionEasing, Project, Scene } from '../types';
+import type { AudioClip, Direction, DrawElement, HandStyle, MotionEasing, Project, Scene, SubtitleCue, SubtitleSettings } from '../types';
 import { applyTransform, dashPropsAt, handTransformAt, measurePaths, pointAt, type DashProps, type PathMeasure } from './drawing';
 import { buildCameraTimeline, cameraAt, localBounds, viewBoxFor, type CameraTimeline } from './camera';
 import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
@@ -12,6 +12,9 @@ import { paperDef } from '../assets/paper';
 import { scribblePath, scribbleStrokeWidth } from './scribble';
 import { drawEnd, emphasisWindow, exitWindow, slotEnd } from './timing';
 import { pluginEffect } from './plugins';
+import { gifFrameAt } from './gif';
+import { subtitleCues, subtitleSettings } from './subtitles';
+import { subtitleSpriteAt } from './subtitleSprite';
 
 export const FILL_FADE_SECONDS = 0.2;
 const HAND_IN_SECONDS = 0.45;
@@ -40,11 +43,13 @@ export interface ElementFrame {
   visibleCount: number | null;
   /** erase exit: scribble strokes that hide the element, in local coords */
   erase: { d: string; strokeWidth: number; dash: DashProps } | null;
+  /** seconds an animated GIF has been playing */
+  gifClock: number;
 }
 
 export const FULL_FRAME: ElementFrame = {
   groupOpacity: 1, fillOpacity: 1, dashes: null, dx: 0, dy: 0, scale: 1, rotate: 0,
-  clip: null, highlight: 0, revealMask: null, visibleCount: null, erase: null,
+  clip: null, highlight: 0, revealMask: null, visibleCount: null, erase: null, gifClock: 0,
 };
 
 export function elementProgress(el: DrawElement, t: number): number {
@@ -318,6 +323,8 @@ export function elementFrameAt(
   const after = applyExit(el, t, frame, view);
   if (!after) return null;
   const op = el.opacity ?? 1;
+  // a picture always gets a new frame object, or the live canvas would keep a GIF still
+  if (el.image) return { ...after, groupOpacity: after.groupOpacity * op, gifClock: t - el.startTime };
   return op === 1 ? after : { ...after, groupOpacity: after.groupOpacity * op };
 }
 
@@ -646,8 +653,9 @@ export function elementInnerSvg(el: DrawElement, frame: ElementFrame): string {
     if (crop) {
       inner += `<clipPath id="crop-${uid}"><rect x="${crop.x}" y="${crop.y}" width="${crop.width}" height="${crop.height}"/></clipPath>`;
     }
+    const src = gifFrameAt(el.image.src, frame.gifClock)?.url() ?? el.image.src;
     inner +=
-      `<image href="${el.image.src}" width="${el.image.width}" height="${el.image.height}" ` +
+      `<image href="${src}" width="${el.image.width}" height="${el.image.height}" ` +
       `preserveAspectRatio="none"${masked ? ` mask="url(#${maskId})"` : ''}${crop ? ` clip-path="url(#crop-${uid})"` : ''}/>`;
     return out + open + inner + close;
   }
@@ -698,17 +706,24 @@ export interface RenderContext {
   stacked: DrawElement[];
   timeline: CameraTimeline;
   scenes: SceneSpan[];
+  /** how subtitles look, or null when they are off */
+  subtitles: SubtitleSettings | null;
+  /** subtitles in timeline seconds */
+  cues: SubtitleCue[];
 }
 
-export function makeRenderContext(project: Project, elements: DrawElement[]): RenderContext {
+export function makeRenderContext(project: Project, elements: DrawElement[], clips: AudioClip[] = []): RenderContext {
   const visible = elements.filter((e) => !e.hidden);
   const ordered = [...visible].sort((a, b) => a.zIndex - b.zIndex);
+  const subtitles = subtitleSettings(project);
   return {
     project,
     ordered,
     stacked: sortedByZ(visible),
     timeline: buildCameraTimeline(ordered, project),
     scenes: buildSceneSpans(ordered, project),
+    subtitles: subtitles.show ? subtitles : null,
+    cues: subtitles.show ? subtitleCues(project, clips) : [],
   };
 }
 
@@ -782,6 +797,14 @@ export function svgStringForTime(
       const x = vb.x + vb.width * (a * 2 - 1);
       parts.push(`<rect x="${x}" y="${vb.y}" width="${vb.width}" height="${vb.height}" fill="${color}"/>`);
     }
+  }
+
+  const sub = subtitleSpriteAt(ctx, t, outWidth, outHeight);
+  if (sub) {
+    parts.push(
+      `<image href="${sub.url()}" x="${vb.x + sub.x * vb.width}" y="${vb.y + sub.y * vb.height}" ` +
+        `width="${sub.width * vb.width}" height="${sub.height * vb.height}" preserveAspectRatio="none"/>`,
+    );
   }
 
   parts.push('</svg>');

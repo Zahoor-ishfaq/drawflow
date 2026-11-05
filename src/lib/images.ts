@@ -1,6 +1,8 @@
 // Raster image intake: decode, downscale large pictures, and produce a
 // data: URL (embedded so the export serializer can rasterize it).
 
+import { gifFrameCount } from './gif';
+
 const MAX_SIDE = 1600;
 
 export interface LoadedImage {
@@ -27,12 +29,22 @@ function loadImageEl(src: string): Promise<HTMLImageElement> {
   });
 }
 
+async function isGifFile(file: Blob): Promise<boolean> {
+  const head = new Uint8Array(await file.slice(0, 3).arrayBuffer());
+  return String.fromCharCode(...head) === 'GIF';
+}
+
 export async function loadRasterImage(file: Blob, mime = file.type): Promise<LoadedImage> {
-  const raw = await readAsDataUrl(file);
+  const gif = await isGifFile(file);
+  // a file with no type would otherwise lose the mark that says it is a GIF
+  const raw = await readAsDataUrl(gif ? new Blob([file], { type: 'image/gif' }) : file);
   const img = await loadImageEl(raw);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   if (w === 0 || h === 0) throw new Error('Could not decode this image.');
+
+  // shrinking would re-encode it as a still: an animated GIF keeps its own bytes
+  if (gif && (await gifFrameCount(raw)) > 1) return { src: raw, width: w, height: h };
 
   const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
   if (scale === 1 && file.size < 2_500_000) return { src: raw, width: w, height: h };

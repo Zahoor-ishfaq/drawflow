@@ -139,7 +139,7 @@ export function ProjectMenu() {
     <div ref={ref} className="relative">
       <button
         type="button"
-        className="df-ui-anim flex h-8 items-center gap-1.5 rounded-full border border-line bg-panel px-3 text-[12px] text-t2 transition-colors hover:bg-hov hover:text-t1"
+        className="df-ui-anim flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-panel px-3 text-[12px] text-t2 transition-colors hover:bg-hov hover:text-t1"
         onClick={() => setOpen((o) => !o)}
         title="Project: checkpoints are saved automatically in this browser"
       >

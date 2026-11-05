@@ -65,6 +65,10 @@ yourself: `npm run desktop:pack` (output in `release/`).
   from shot to shot; per-element framing; ease-out, linear or cut moves.
 - **Voice** — record while the scribe plays, upload, or AI narration; *fit to
   narration* retimes the drawing to the phrases of the voiceover.
+- **Animated GIFs** — put a GIF on the board and it plays inside the video.
+- **Subtitles** — words on screen, timed to the voice and drawn into the video,
+  with your choice of font, size, position and colour, in any language. Save
+  them as an `.srt` for YouTube, or import your own.
 - **Offline AI voice, free** — the desktop app has a built-in natural voice
   ([Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), 15 English voices)
   that runs on your processor: no key, no cost per word, no graphics card;
@@ -160,8 +164,8 @@ button renders.
 Ask your AI app for a video: "Make a 9:16 whiteboard video about how a seed
 becomes a tree."
 
-On Windows, install DrawFlow, then choose **Help → Connect to AI apps (MCP)…**.
-It connects Claude Desktop, Cursor and Windsurf, and gives you settings to paste
+On Windows, install DrawFlow, then click **Connect AI (MCP)** at the top of the
+window. It connects Claude Desktop, Cursor and Windsurf, and gives you settings to paste
 into any other MCP app. You don't need Node.js or a terminal.
 
 From source:

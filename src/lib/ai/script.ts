@@ -17,7 +17,7 @@ import { measurePaths } from '../drawing';
 import { useStore } from '../../store/useStore';
 import { audioContext, decodeToSource } from '../../store/audioSources';
 import { fitToPhrases, matchPhrases } from '../narration';
-import { speechSegments } from '../audioTools';
+import { clipCaptions, speechSegments } from '../audioTools';
 import { paperDef } from '../../assets/paper';
 import type { DrawElement, Scene } from '../../types';
 
@@ -70,6 +70,8 @@ export async function planScript(request: string): Promise<ScriptPlan> {
 export interface NarrationTake {
   scene: number;
   name: string;
+  /** the words spoken, for subtitles */
+  text?: string;
   blob: Blob;
   buffer: AudioBuffer;
   duration: number;
@@ -99,7 +101,7 @@ export async function narratePlan(plan: ScriptPlan, opts: NarrateOptions): Promi
     try {
       const blob = await synthesizeSpeech(opts.provider, key, text, opts.voice);
       const buffer = await audioContext().decodeAudioData(await blob.arrayBuffer());
-      takes.push({ scene: i, name: `Narration — ${plan.scenes[i].name || `Scene ${i + 1}`}`, blob, buffer, duration: buffer.duration, url: URL.createObjectURL(blob) });
+      takes.push({ scene: i, name: `Narration — ${plan.scenes[i].name || `Scene ${i + 1}`}`, text, blob, buffer, duration: buffer.duration, url: URL.createObjectURL(blob) });
     } catch (error) {
       failed.push({ scene: i, error });
       if (takes.length === 0 && k === todo.length - 1) throw error;
@@ -244,7 +246,7 @@ export async function buildScript(plan: ScriptPlan, opts: BuildOptions = {}): Pr
       if (!scenes[si]) continue;
       opts.onProgress?.(`Placing narration for scene ${si + 1} of ${plan.scenes.length}`);
       const src = await decodeToSource(take.blob, take.name);
-      useStore.getState().addAudioClip({ id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration, volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scenes[si].id });
+      useStore.getState().addAudioClip({ id: crypto.randomUUID(), name: src.name, lane: 'voice', sourceId: src.id, startTime: at, offset: 0, duration: src.duration, volume: 1, fadeIn: 0, fadeOut: 0, muted: false, sceneId: scenes[si].id, ...clipCaptions(src.buffer, take.text) });
       // one phrase per item in the scene, cut at the narrator's real pauses
       const segs = speechSegments(src.buffer, 0, src.duration, 0.3);
       const wanted = elements.filter((e) => e.sceneId === scenes[si].id && !e.hidden && !e.withPrevious).length;

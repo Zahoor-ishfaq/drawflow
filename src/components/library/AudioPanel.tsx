@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 import { audioContext, decodeToSource, getSource } from '../../store/audioSources';
 import { importAudioFile, clipSelectionId } from '../timeline/AudioLane';
 import { startRecording, useRecorder } from '../../lib/recorder';
-import { SFX, previewSfx, sfxSource } from '../../lib/audioTools';
+import { SFX, clipCaptions, previewSfx, sfxSource } from '../../lib/audioTools';
 import { fitToPhrases, narrationPhrases } from '../../lib/narration';
 import { hasBuiltInVoice, isLocalNotSetUp, SPEECH_LABELS, speechKey, speechProviders, synthesizeSpeech, transcribe, voicesFor, type SpeechProvider } from '../../lib/ai/speech';
 import { getAiSettings, updateAiSettings, useAiSettings } from '../../lib/ai/settings';
@@ -18,10 +18,10 @@ import { Field } from '../ui/Field';
 import { SectionHeader } from '../ui/Field';
 import type { AudioClip } from '../../types';
 
-function addClip(sourceId: string, name: string, lane: AudioClip['lane'], duration: number, at: number): void {
+function addClip(sourceId: string, name: string, lane: AudioClip['lane'], duration: number, at: number, extra?: Partial<AudioClip>): void {
   useStore.getState().addAudioClip({
     id: crypto.randomUUID(), name, lane, sourceId, startTime: Math.max(0, at), offset: 0, duration,
-    volume: 1, fadeIn: 0, fadeOut: 0, muted: false,
+    volume: 1, fadeIn: 0, fadeOut: 0, muted: false, ...extra,
   });
 }
 
@@ -80,7 +80,7 @@ function AiVoice({ at }: { at: number }) {
       }
       const blob = await synthesizeSpeech(provider, speechKey(provider, getAiSettings()), text.trim(), voice);
       const src = await decodeToSource(blob, `AI voice — ${text.trim().slice(0, 28)}`);
-      addClip(src.id, src.name, 'voice', src.duration, at);
+      addClip(src.id, src.name, 'voice', src.duration, at, clipCaptions(src.buffer, text));
     } catch (e) {
       if (provider === 'local' && isLocalNotSetUp(e)) {
         // it was there and has gone (closed, crashed): back to the setup popup

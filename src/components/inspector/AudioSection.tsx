@@ -1,14 +1,65 @@
-import { useState } from 'react';
-import { Copy, Headphones, Scissors, Sparkles, Trash2, Volume2, VolumeX, Wand2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Captions, Copy, Headphones, Scissors, Sparkles, Trash2, Volume2, VolumeX, Wand2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { useAudioSource } from '../../store/audioSources';
 import { setClipVolume } from '../../lib/audioEngine';
-import { cleanVoice, normalizeGain } from '../../lib/audioTools';
+import { cleanVoice, clipCaptions, normalizeGain } from '../../lib/audioTools';
+import { transcribe } from '../../lib/ai/speech';
+import { useAiSettings } from '../../lib/ai/settings';
+import { reportAiError } from '../../store/problemStore';
 import { Field, SectionHeader } from '../ui/Field';
 import { Slider } from '../ui/Slider';
 import { NumberInput } from '../ui/NumberInput';
 import { Button } from '../ui/Button';
-import type { AudioClip } from '../../types';
+import type { AudioClip, AudioSource } from '../../types';
+
+/** The words spoken in a voice clip: subtitles are timed from them. */
+function ClipWords({ clip, source }: { clip: AudioClip; source: AudioSource | undefined }) {
+  const ai = useAiSettings();
+  const [text, setText] = useState(clip.transcript ?? '');
+  const [listening, setListening] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => setText(clip.transcript ?? ''), [clip.id, clip.transcript]);
+  const provider = ai.keys.groq ? 'groq' : ai.keys.openai ? 'openai' : null;
+
+  const save = (words: string) => {
+    if (source && words.trim() !== (clip.transcript ?? '')) useStore.getState().updateAudioClip(clip.id, clipCaptions(source.buffer, words));
+  };
+
+  const listen = async () => {
+    if (!source || !provider || listening) return;
+    setListening(true);
+    setNote(null);
+    try {
+      const t = await transcribe(provider, ai.keys[provider], source.blob, source.blob.type.includes('webm') ? 'audio.webm' : 'audio.wav');
+      setText(t.text);
+      save(t.text);
+    } catch (e) {
+      setNote(reportAiError(e, provider, 'transcribe').title);
+    } finally {
+      setListening(false);
+    }
+  };
+
+  return (
+    <Field label="Words spoken (for subtitles)">
+      <textarea
+        className="df-input min-h-[72px] resize-y py-1.5 leading-snug"
+        value={text}
+        placeholder="Type or paste what is said in this clip."
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => save(text)}
+      />
+      {provider && (
+        <Button variant="secondary" className="mt-1.5 w-full justify-center" disabled={!source || listening} onClick={() => void listen()}
+          title="Send the audio to your transcription service and fill in the words">
+          <Captions size={13} /> {listening ? 'Listening…' : 'Write the words from the audio'}
+        </Button>
+      )}
+      {note && <p className="mt-1 text-[11px] text-red-500">{note}</p>}
+    </Field>
+  );
+}
 
 const LANE_TITLES = { voice: 'Voiceover clip', music: 'Music clip', sfx: 'Sound effect' } as const;
 
@@ -76,6 +127,7 @@ export function AudioSection({ clip }: { clip: AudioClip }) {
           <Sparkles size={13} /> {busy === 'clean' ? 'Cleaning…' : 'Clean up background noise'}
         </Button>
       )}
+      {clip.lane === 'voice' && <ClipWords clip={clip} source={source} />}
 
       <Field label="Volume">
         <Slider

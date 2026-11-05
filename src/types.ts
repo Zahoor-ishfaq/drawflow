@@ -156,6 +156,30 @@ export interface AudioClip {
   solo?: boolean;
   /** clip follows this scene when scenes are reordered */
   sceneId?: string;
+  /** the words spoken in this clip */
+  transcript?: string;
+  /** subtitles for those words, in seconds into the source, so they follow the clip */
+  cues?: SubtitleCue[];
+}
+
+export interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export type SubtitlePosition = 'top' | 'middle' | 'bottom';
+
+/** How subtitles look in the video. */
+export interface SubtitleSettings {
+  show: boolean;
+  font: string;               // font family name
+  size: number;               // px on a 1080p frame; scales with the output
+  position: SubtitlePosition;
+  color: string;
+  box: boolean;               // dark band behind the words, else an outline
+  /** subtitles from an imported .srt, in timeline seconds */
+  cues?: SubtitleCue[];
 }
 
 export type PaperStyle = 'plain' | 'grid' | 'dots' | 'lined' | 'cream' | 'chalkboard' | 'kraft';
@@ -227,4 +251,5 @@ export interface Project {
   handSmoothing?: number;
   customHands?: CustomHand[];
   fonts?: CustomFont[];
+  subtitles?: SubtitleSettings;
 }

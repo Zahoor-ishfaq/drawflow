@@ -13,6 +13,7 @@ import { NumberInput } from '../ui/NumberInput';
 import { sequenceOrder } from '../../store/useStore';
 import { slotEnd } from '../../lib/timing';
 import { usePlugins } from '../../lib/plugins';
+import { cuesInRange, saveSrt, subtitleCues, subtitleSettings } from '../../lib/subtitles';
 
 type DialogState =
   | { step: 'options' }
@@ -45,6 +46,10 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const exportProgress = useStore((s) => s.exportProgress);
   const project = useStore((s) => s.project);
   const elements = useStore((s) => s.elements);
+  const clips = useStore((s) => s.audioClips);
+  const updateProject = useStore((s) => s.updateProject);
+  const subtitles = subtitleSettings(project);
+  const cues = subtitleCues(project, clips);
   // one export range per scene (the whole project by default)
   const scenes = (project.scenes ?? []).map((sc) => {
     const members = sequenceOrder(elements).filter((e) => e.sceneId === sc.id && !e.hidden);
@@ -148,6 +153,19 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                       <option key={sc.id} value={sc.id}>{sc.name} only ({sc.start.toFixed(1)}s – {sc.end.toFixed(1)}s)</option>
                     ))}
                   </select>
+                </Field>
+              )}
+              {cues.length > 0 && (
+                <Field label="Subtitles">
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-[12.5px]">
+                      <input type="checkbox" checked={subtitles.show} onChange={(e) => updateProject({ subtitles: { ...subtitles, show: e.target.checked } })} />
+                      Show in the video
+                    </label>
+                    <Button variant="secondary" onClick={() => saveSrt(range ? `${project.name} ${range.name}` : project.name, range ? cuesInRange(cues, range.start, range.end) : cues)}>
+                      Save .srt
+                    </Button>
+                  </div>
                 </Field>
               )}
               <div className="flex items-center gap-3 text-[12px] text-t3">

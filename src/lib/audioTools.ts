@@ -4,7 +4,8 @@
 
 import { encodeWav } from './audioMix';
 import { decodeToSource } from '../store/audioSources';
-import type { AudioSource } from '../types';
+import { cuesFromSpeech } from './subtitles';
+import type { AudioClip, AudioSource } from '../types';
 
 const SR = 48000;
 
@@ -106,6 +107,14 @@ function applyGate(buffer: AudioBuffer): void {
 // --- narration -------------------------------------------------------------
 
 export interface SpeechSegment { start: number; end: number }
+
+/** What a voice clip stores for its subtitles: the words spoken, timed to the audio. */
+export function clipCaptions(buffer: AudioBuffer, text: string | undefined): Pick<AudioClip, 'transcript' | 'cues'> {
+  const words = text?.trim();
+  if (!words) return { transcript: undefined, cues: undefined };
+  const speech = speechSegments(buffer, 0, buffer.duration, 0.1);
+  return { transcript: words, cues: cuesFromSpeech(words, speech.length ? speech : [{ start: 0, end: buffer.duration }]) };
+}
 
 /**
  * Split speech into phrases at pauses of at least `minPause` seconds.

@@ -25,7 +25,7 @@ export async function exportBench(height = 1080, seconds = 4): Promise<Record<st
   const rgba: ArrayBuffer[] = [];
   const c2 = canvas.getContext('2d')!;
   for (let i = 0; i < n; i++) {
-    painter.paint(frameSpec(ctx, i / fps));
+    painter.paint(frameSpec(ctx, i / fps, outW, outH));
     if (i < 8) rgba.push(c2.getImageData(0, 0, outW, outH).data.buffer);
   }
   out.paintMsPerFrame = +((performance.now() - t0) / n).toFixed(2);
@@ -52,7 +52,7 @@ export async function exportBench(height = 1080, seconds = 4): Promise<Record<st
         if (source === 'buffer') {
           frame = new VideoFrame(new Uint8Array(rgba[idx % rgba.length]), { format: 'RGBA', codedWidth: outW, codedHeight: outH, timestamp: i * 33333, duration: 33333 });
         } else {
-          painter.paint(frameSpec(ctx, idx / fps));
+          painter.paint(frameSpec(ctx, idx / fps, outW, outH));
           frame = new VideoFrame(canvas, { timestamp: i * 33333, duration: 33333 });
         }
         while (enc.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 1));

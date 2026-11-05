@@ -15,6 +15,8 @@ import {
   handFrameAt, paperAt, sceneOverlayAt, visibleAt, type RenderContext,
 } from './renderFrame';
 import { createCanvasPainter, type CanvasAssets, type FrameSpec } from './canvasRender';
+import { prepareGifs } from './gif';
+import { subtitleSpriteAt } from './subtitleSprite';
 
 export interface RawChunk {
   type: 'key' | 'delta';
@@ -61,7 +63,7 @@ async function bitmapFromDataUrl(src: string): Promise<ImageBitmap> {
 }
 
 /** Frame description for the painter: everything except pixels. */
-export function frameSpec(ctx: RenderContext, t: number): FrameSpec {
+export function frameSpec(ctx: RenderContext, t: number, outW: number, outH: number): FrameSpec {
   const { project, ordered, timeline } = ctx;
   const view = viewBoxFor(cameraAt(t, timeline, project), project);
   const h = handFrameAt(ordered, t, project, timeline);
@@ -72,6 +74,7 @@ export function frameSpec(ctx: RenderContext, t: number): FrameSpec {
     paper: paperAt(ctx, t),
     overlay: sceneOverlayAt(t, ctx.scenes),
     elementIds: visibleAt(ctx, t).map((e) => e.id),
+    subtitle: subtitleSpriteAt(ctx, t, outW, outH),
   };
 }
 
@@ -79,6 +82,7 @@ export function frameSpec(ctx: RenderContext, t: number): FrameSpec {
 export async function loadCanvasAssets(ctx: RenderContext): Promise<CanvasAssets> {
   const { project } = ctx;
   const images = new Map<string, ImageBitmap>();
+  await prepareGifs(ctx.stacked.map((e) => e.image?.src));
   for (const el of ctx.stacked) {
     if (el.kind === 'image' && el.image) images.set(el.id, await bitmapFromDataUrl(el.image.src));
   }
@@ -180,7 +184,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
           check();
         }
         let t0 = performance.now();
-        lane.painter.paint(frameSpec(ctx, start + i / fps));
+        lane.painter.paint(frameSpec(ctx, start + i / fps, outW, outH));
         stats.paintMs += performance.now() - t0; t0 = performance.now();
         const frame = new VideoFrame(lane.canvas, { timestamp: Math.round(i * frameMicros), duration: Math.round(frameMicros) });
         try {

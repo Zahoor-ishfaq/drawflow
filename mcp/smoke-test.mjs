@@ -7,7 +7,7 @@
 //   npm run test:mcp            (output in <temp>/drawflow-mcp-test)
 //
 // DRAWFLOW_TEST_EXE=<path to DrawFlow.exe> tests the server inside a built app
-// instead, launched exactly the way "Connect to AI apps" sets it up.
+// instead, launched exactly the way the "Connect AI (MCP)" button sets it up.
 //
 // The first run downloads the built-in voice model (~92 MB).
 
@@ -16,7 +16,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { ROOT } from '../cli/app-session.mjs';
+
+const { GIFEncoder } = createRequire(import.meta.url)('gifenc');
 
 const OUT = path.join(os.tmpdir(), 'drawflow-mcp-test');
 await rm(OUT, { recursive: true, force: true });
@@ -61,7 +64,7 @@ async function call(name, args = {}, opts = {}) {
 }
 
 const { tools } = await client.listTools();
-check(['create_project', 'add_scene', 'add_voiceover', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
+check(['create_project', 'add_scene', 'add_voiceover', 'set_subtitles', 'import_subtitles', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
 check((client.getInstructions() ?? '').includes('create_project'), 'tells the assistant how to make a video');
 check((await client.listPrompts()).prompts.some((p) => p.name === 'make_whiteboard_video'), 'offers a make_whiteboard_video prompt');
 
@@ -104,6 +107,31 @@ const rendered = await call('render', { project: 'Smoke Test' }, { onprogress: (
 check(!rendered.isError, `rendered (${progress} progress updates)`);
 check((await call('list_projects')).json().some((p) => p.project === 'smoke-test'), 'listed');
 check((await call('get_preview', { project: 'no such project' })).isError, 'unknown project refused');
+
+// a GIF on the board and subtitles, the way an assistant asks for them
+const gif = GIFEncoder();
+for (const c of [[230, 30, 30], [30, 30, 230]]) gif.writeFrame(new Uint8Array(64 * 64), 64, 64, { palette: [c, [0, 0, 0]], delay: 300 });
+gif.finish();
+await writeFile(path.join(OUT, 'dots.gif'), gif.bytes());
+await writeFile(path.join(OUT, 'zh.srt'), '1\n00:00:00,500 --> 00:00:02,000\n你好，世界\n');
+const untilDone = async (r) => {
+  let cur = r;
+  while (!cur.isError && cur.json().status === 'working') cur = await call('check_job', { job: cur.json().job });
+  return cur;
+};
+check(!(await call('create_project', { title: 'Subtitled', resolution: '720p', fps: 30 })).isError, 'second project created');
+check(!(await call('add_scene', { project: 'Subtitled', name: 'Clip', content: [{ type: 'image', path: path.join(OUT, 'dots.gif') }] })).isError, 'an animated GIF goes on the board');
+check(!(await untilDone(await call('add_voiceover', { project: 'Subtitled', scene: '1', text: 'One short line. And one more after it.' }))).isError, 'voiceover for the subtitles');
+const look = await call('set_subtitles', { project: 'Subtitled', show: true, position: 'top', size: 52 });
+check(!look.isError && look.json().lines >= 1 && look.json().position === 'top', 'subtitles on, at the top');
+check((await call('get_project', { project: 'Subtitled' })).json().subtitles?.show === true, 'get_project reports them');
+check(!(await call('get_preview', { project: 'Subtitled', time: 1 })).isError, 'preview with a subtitle');
+const subtitled = await untilDone(await call('render', { project: 'Subtitled' }));
+check(!subtitled.isError && subtitled.json().subtitles?.endsWith('.srt'), 'render writes an .srt beside the video');
+check((await readFile(subtitled.json().subtitles, 'utf8')).includes('One short line.'), 'the .srt has the narration');
+const zh = await call('import_subtitles', { project: 'Subtitled', path: path.join(OUT, 'zh.srt') });
+check(!zh.isError && zh.json().lines === 1, 'an .srt file imports');
+check((await call('import_subtitles', { project: 'Subtitled', path: path.join(OUT, 'nope.srt') })).isError, 'a missing .srt is refused');
 check(stray.length === 0, `stdout carried only protocol messages${stray.length ? ` (${stray[0]})` : ''}`);
 await client.close();
 

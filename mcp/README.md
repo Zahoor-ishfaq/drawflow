@@ -16,8 +16,8 @@ No Node.js, no terminal, no config files.
 1. Download **DrawFlow-Setup** from the
    [latest release](https://github.com/Zahoor-ishfaq/drawflow/releases/latest)
    and install it.
-2. Open DrawFlow and choose **Help → Connect to AI apps (MCP)…**. It adds
-   DrawFlow to Claude Desktop, Cursor and Windsurf if they are on this computer.
+2. Open DrawFlow and click **Connect AI (MCP)** at the top of the window. It
+   adds DrawFlow to Claude Desktop, Cursor and Windsurf if they are on this computer.
    Your other settings are left alone, and a copy of each file is kept as
    `<file>.before-drawflow`.
 3. Restart your AI app and ask for a video:
@@ -138,12 +138,17 @@ Check it with `claude mcp list` or `/mcp` inside Claude Code.
 | `create_project(title, resolution, fps, paper?)` | New empty project. `resolution`: `720p`, `1080p`, `1440p`, `4k`, `vertical` (1080x1920), `square` or `WIDTHxHEIGHT`; `fps`: 24/25/30/50/60. |
 | `add_scene(project, content, draw_duration?, hold_duration?, name?, transition?)` | Appends a scene. `content` is one item or a list of up to 6: `{type:"text", text, size?}`, `{type:"svg", svg \| path}`, `{type:"image", path}`, `{type:"library", query}` (5,000+ built-in drawings). Each scene gets its own part of the board; the camera moves there and the board is cleared. |
 | `add_voiceover(project, scene, text \| audio_path, voice?, fit_drawing?)` | Narrates a scene from text (built-in voice) or an audio file (WAV, MP3, M4A, OGG, FLAC, WebM). By default the drawing is retimed so each item is drawn while its phrase is spoken; later scenes and their voiceovers move along. |
+| `set_subtitles(project, show?, font?, size?, position?, color?, box?)` | Turns subtitles on or off and sets how they look. Voiceover text becomes subtitles timed to the voice. |
+| `import_subtitles(project, path)` | Uses an `.srt` or `.vtt` file for the whole video. |
 | `get_preview(project, scene?, time?, height?)` | A PNG frame: the moment a scene is fully drawn, or any time. |
-| `render(project, output_path?, format?, height?, scene?)` | Renders MP4 (or WebM / GIF) with audio. Default output: next to the project file. |
+| `render(project, output_path?, format?, height?, scene?)` | Renders MP4 (or WebM / GIF) with audio. Default output: next to the project file. When the project has subtitles, an `.srt` is written beside the video. |
 | `check_job(job?)` | The result of a render or voiceover that is still working (see below). |
 | `list_projects()` | Projects in the projects folder. |
 | `get_project(project)` | Settings, scenes with timing, items and voiceovers, total length. |
 | `list_voices()` | The built-in voices (15 English voices, US and UK). |
+
+An animated GIF given as a picture in `add_scene` plays inside the video. To get
+subtitles for your own audio, give `add_voiceover` both `audio_path` and `text`.
 
 `project` can be the title, the file name or a full path, so projects saved
 from the editor work too. Scenes are named, numbered from 1, or given by id.

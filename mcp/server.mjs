@@ -212,6 +212,7 @@ const INSTRUCTIONS = `DrawFlow makes whiteboard-animation videos: a hand draws w
 To make a video: create_project, then for each scene add_scene and add_voiceover, then get_preview to check the scenes, then render.
 Good videos: 3 to 8 scenes, one idea per scene, 1 or 2 spoken sentences per scene. Keep on-screen text to a few words (the narration says the rest) and pair it with one picture from the library.
 For YouTube Shorts, TikTok or Reels use resolution "vertical" (9:16). Keep scene text very short there: the board is narrow.
+Subtitles: narration text from add_voiceover becomes subtitles timed to the voice, also when you give audio_path with text. Call set_subtitles with show true to put them in the video, and choose font, size and position there. For a language other than English use a font that has its letters, such as Microsoft YaHei for Chinese.
 add_voiceover and render can take minutes. If one answers with status "working", call check_job until it is done before doing anything else.
 Finish by telling the user where the video file is.`;
 
@@ -281,7 +282,7 @@ server.registerTool('add_voiceover', {
   inputSchema: {
     project: z.string().describe('Project title, file name or path.'),
     scene: z.string().describe('Scene name, id or number (1 = first).'),
-    text: z.string().optional().describe('Narration to speak with the built-in voice.'),
+    text: z.string().optional().describe('Narration to speak with the built-in voice. With audio_path, the words said in that audio: they become its subtitles.'),
     audio_path: z.string().optional().describe('…or a path to an audio file (WAV, MP3, M4A, OGG, FLAC, WebM).'),
     voice: z.string().optional().describe('Built-in voice for text (see list_voices; default af_heart).'),
     fit_drawing: z.boolean().default(true).describe('Retime the scene\'s drawing to the narration.'),
@@ -290,9 +291,44 @@ server.registerTool('add_voiceover', {
   if (!words && !audio_path) throw new Error('Give "text" to speak or an "audio_path".');
   const audio = audio_path ? await readMedia(audio_path, 'audio') : undefined;
   return withProject(project, async (page) => {
-    const r = await page.evaluate((o) => window.DrawFlow.addVoiceover(o), { scene, text: audio ? undefined : words, audio, voice: voiceId, fit: fit_drawing });
+    const r = await page.evaluate((o) => window.DrawFlow.addVoiceover(o), { scene, text: words, audio, voice: voiceId, fit: fit_drawing });
     const total = await page.evaluate(() => window.DrawFlow.project.duration);
     return text({ scene: r.scene, voiceoverSeconds: r.duration, sceneStarts: +r.start.toFixed(2), sceneEnds: +r.end.toFixed(2), projectDuration: +total.toFixed(2) });
+  });
+}));
+
+server.registerTool('set_subtitles', {
+  title: 'Set the subtitles',
+  description: 'Turn subtitles on or off and choose how they look. They come from the voiceover text, timed to the voice, or from import_subtitles. They show in get_preview and in the rendered video; check one with get_preview.',
+  inputSchema: {
+    project: z.string().describe('Project title, file name or path.'),
+    show: z.boolean().optional().describe('Show subtitles in the video.'),
+    font: z.string().optional().describe('A font installed on this computer, or Inter, Caveat or Shadows Into Light. Default Arial. Chinese text falls back to a Chinese font by itself.'),
+    size: z.number().min(12).max(160).optional().describe('Text height in pixels on a 1080p video; it scales with the output. Default 44.'),
+    position: z.enum(['top', 'middle', 'bottom']).optional().describe('Default bottom.'),
+    color: z.string().optional().describe('Text colour, such as #ffffff.'),
+    box: z.boolean().optional().describe('Dark band behind the words (default true); false uses an outline instead.'),
+  },
+}, tool(async ({ project, ...change }) => withProject(project, async (page) => {
+  const look = await page.evaluate((c) => { const { cues: _, ...rest } = window.DrawFlow.setSubtitles(c); return rest; }, change);
+  const lines = await page.evaluate(() => window.DrawFlow.describe().subtitles.lines);
+  return text({ ...look, lines, ...(lines ? {} : { note: 'No subtitles yet: add a voiceover with text, or use import_subtitles.' }) });
+})));
+
+server.registerTool('import_subtitles', {
+  title: 'Import a subtitle file',
+  description: 'Use an .srt or .vtt file for the whole video, in place of the subtitles made from the voiceovers, and show them.',
+  inputSchema: {
+    project: z.string().describe('Project title, file name or path.'),
+    path: z.string().describe('Path to the .srt or .vtt file.'),
+  },
+}, tool(async ({ project, path: file }) => {
+  const abs = path.resolve(file);
+  if (!existsSync(abs)) throw new Error(`File not found: ${abs}`);
+  const base64 = (await readFile(abs)).toString('base64');
+  return withProject(project, async (page) => {
+    const lines = await page.evaluate((b) => window.DrawFlow.importSubtitles(Uint8Array.from(atob(b), (c) => c.charCodeAt(0))), base64);
+    return text({ lines, showing: true });
   });
 }));
 
@@ -312,7 +348,7 @@ server.registerTool('get_preview', {
 
 server.registerTool('render', {
   title: 'Render the video',
-  description: 'Render the project to a video file with the same renderer as the editor\'s Export button (audio included). Takes roughly real time for 1080p. A short video answers with the finished file; a longer one answers with a job id: call check_job until it is done.',
+  description: 'Render the project to a video file with the same renderer as the editor\'s Export button (audio included). When the project has subtitles, an .srt file is written beside the video too. Takes roughly real time for 1080p. A short video answers with the finished file; a longer one answers with a job id: call check_job until it is done.',
   inputSchema: {
     project: z.string().describe('Project title, file name or path.'),
     output_path: z.string().optional().describe('Where to write the file (default: next to the project, same name).'),
@@ -333,7 +369,10 @@ server.registerTool('render', {
   try {
     const r = await renderToFile(page, { format, height, scene }, out);
     const info = await page.evaluate(() => ({ duration: window.DrawFlow.project.duration, exportHeight: window.DrawFlow.project.exportHeight ?? 1080 }));
-    return text({ file: out, format, height: height ?? info.exportHeight, seconds: +info.duration.toFixed(2), sizeMB: +(r.sizeBytes / 1048576).toFixed(2), renderSeconds: +(r.elapsedMs / 1000).toFixed(1), encoder: r.engine });
+    const srt = await page.evaluate((s) => window.DrawFlow.subtitlesSrt({ scene: s }), scene);
+    const subtitles = srt ? out.replace(/\.[^.\\/]+$/, '.srt') : undefined;
+    if (subtitles) await writeFile(subtitles, srt);
+    return text({ file: out, ...(subtitles ? { subtitles } : {}), format, height: height ?? info.exportHeight, seconds: +info.duration.toFixed(2), sizeMB: +(r.sizeBytes / 1048576).toFixed(2), renderSeconds: +(r.elapsedMs / 1000).toFixed(1), encoder: r.engine });
   } finally {
     if (ticker) clearInterval(ticker);
   }

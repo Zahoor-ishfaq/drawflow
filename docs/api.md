@@ -23,8 +23,11 @@ too.
 | `renderBase64(options)` | Same, with the file as base64 (for automation tools that cannot read Blobs). |
 | `newProject(settings)` | Start an empty project: `{ name, width, height, fps, exportHeight, paper, hand }`. |
 | `addScene(options)` | Append a scene of content: `{ name, items, drawDuration, holdDuration, transition }`, items being `{ type: 'text', text, size }`, `{ type: 'svg', svg, label }`, `{ type: 'image', base64, mime, name }` or `{ type: 'library', query, color }`. The scene gets its own part of the board and clears it; items are placed by the editor's own layout. Resolves `{ id, name, elements, start, end }`. |
-| `addVoiceover(options)` | Narrate a scene: `{ scene, audio: { base64, mime, name } }` or `{ scene, text, voice }` (built-in voice, desktop app or MCP server only), `fit` (default true) retimes the scene's drawing to the narration as Script → scribe does; later scenes' voiceovers move with them. |
-| `describe()` | The open project as a plain summary: settings, scenes with timing, items and voiceovers. |
+| `addVoiceover(options)` | Narrate a scene: `{ scene, audio: { base64, mime, name } }` or `{ scene, text, voice }` (built-in voice, desktop app or MCP server only), `fit` (default true) retimes the scene's drawing to the narration as Script → scribe does; later scenes' voiceovers move with them. Give `text` with `audio` to get subtitles for that audio. |
+| `setSubtitles(change)` | Turn subtitles on or off, or set how they look: `{ show, font, size, position, color, box }`. Returns the settings. |
+| `importSubtitles(file)` | Use an `.srt` or `.vtt` for the whole video and show it; `file` is its text or bytes. Returns the number of lines. |
+| `subtitlesSrt({ scene? })` | The subtitles as `.srt` text: the whole video, or one scene timed from its start. Empty when there are none. |
+| `describe()` | The open project as a plain summary: settings, scenes with timing, items, voiceovers and subtitles. |
 | `previewBase64({ scene, time, height })` | One PNG frame (base64): the moment a scene is fully drawn, or the frame at `time`. |
 | `voices` | The built-in voice's speakers (`{ id, label }`). |
 | `bench(height, seconds)` | Paint/encode throughput of this machine. |

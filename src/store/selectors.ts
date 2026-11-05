@@ -17,5 +17,6 @@ export function useSequence(): DrawElement[] {
 export function useRenderContext(): RenderContext {
   const elements = useStore((s) => s.elements);
   const project = useStore((s) => s.project);
-  return useMemo(() => makeRenderContext(project, elements), [project, elements]);
+  const clips = useStore((s) => s.audioClips);
+  return useMemo(() => makeRenderContext(project, elements, clips), [project, elements, clips]);
 }

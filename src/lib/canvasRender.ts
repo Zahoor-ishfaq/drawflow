@@ -7,6 +7,8 @@ import type { DrawElement, PaperStyle, Project } from '../types';
 import { cuffPath, sleevePath, type HandDef } from '../assets/hands';
 import { localBounds } from './camera';
 import { scribbleStrokeWidth } from './scribble';
+import { gifFrameAt } from './gif';
+import type { SubtitleSprite } from './subtitleSprite';
 import {
   elementFrameAt, elementTransform, pathColors, type ElementFrame, type Rect,
 } from './renderFrame';
@@ -36,6 +38,8 @@ export interface FrameSpec {
   overlay: { kind: 'fade' | 'wipe'; amount: number; color?: string } | null;
   /** elements to draw, in stacking order (already filtered for scenes / hidden) */
   elementIds: string[];
+  /** the subtitle on screen, sized for this canvas */
+  subtitle: SubtitleSprite | null;
 }
 
 const pathCache = new Map<string, Path2D>();
@@ -257,7 +261,7 @@ export function createCanvasPainter(
       target.clip();
     }
     if (el.kind === 'image' && el.image) {
-      const bmp = assets.images.get(el.id);
+      const bmp = gifFrameAt(el.image.src, frame.gifClock)?.bitmap ?? assets.images.get(el.id);
       target.globalAlpha = alpha;
       if (bmp) drawImage(target, el, frame, bmp, scratch);
       target.globalAlpha = 1;
@@ -322,6 +326,7 @@ export function createCanvasPainter(
         }
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (spec.subtitle) ctx.drawImage(spec.subtitle.canvas, Math.round(spec.subtitle.x * outW), Math.round(spec.subtitle.y * outH));
     },
   };
 }

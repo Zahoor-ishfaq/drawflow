@@ -72,9 +72,9 @@ export function HelpMenu() {
 /** Top-right "Open Source" link to the repository. */
 export function OpenSourceButton() {
   return (
-    <a href={ABOUT.repo} target="_blank" rel="noreferrer" title="Source code on GitHub" data-tour="open-source"
+    <a href={ABOUT.repo} target="_blank" rel="noreferrer" title="Source code on GitHub" aria-label="Open Source" data-tour="open-source"
       className="df-ui-anim inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-panel2 px-3.5 text-[13px] font-medium whitespace-nowrap text-t1 transition-all hover:border-[#cbd2dc] hover:bg-hov">
-      <Github size={15} /> Open Source
+      <Github size={15} /> <span className="max-[1400px]:hidden">Open Source</span>
     </a>
   );
 }

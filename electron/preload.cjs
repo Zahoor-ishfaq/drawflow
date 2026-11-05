@@ -1,7 +1,7 @@
 // Sandboxed preload. The editor is a self-contained web app and needs no Node
 // access, so this exposes only the app version, the native File menu's
-// messages, a "save this text to a file" call, a relay to a local voice app
-// and the built-in voice behind contextBridge. Kept
+// messages, a "save this text to a file" call, a relay to a local voice app,
+// the built-in voice and the Connect AI dialog behind contextBridge. Kept
 // as .cjs because sandboxed preloads must be CommonJS.
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -35,5 +35,9 @@ contextBridge.exposeInMainWorld('drawflow', {
     const fn = (_event, msg) => handler(msg);
     ipcRenderer.on('drawflow:voice-progress', fn);
     return () => ipcRenderer.removeListener('drawflow:voice-progress', fn);
+  },
+  /** Opens the dialog that connects DrawFlow to an AI app over MCP. */
+  connectAiApps() {
+    return ipcRenderer.invoke('drawflow:connect-ai');
   },
 });

@@ -12,6 +12,7 @@ import { SHAPES } from '../assets/shapes';
 import type { LibraryAsset } from '../assets/library';
 import { paperDef, isDarkPaper } from '../assets/paper';
 import { loadLibrarySvg, pictureSrc, type LibraryEntry } from '../assets/illustrations';
+import { isGifSrc } from './gif';
 import { loadRasterImage } from './images';
 import { scribblePath } from './scribble';
 import type { GalleryItem } from './gallery';
@@ -242,6 +243,8 @@ export function addImageElement(image: ImageRef, label: string): void {
     strokeColor: '#000000',
     strokeWidth: 1,
     drawDuration: 3,
+    // a GIF is there to be watched: the hand scribbling over it would hide it for most of its time
+    ...(isGifSrc(image.src) ? { style: 'pop' as const, drawDuration: 0.6 } : {}),
     ...placeNew(paths, scale),
   });
 }

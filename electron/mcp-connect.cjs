@@ -1,4 +1,4 @@
-// Help → Connect to AI apps: adds the installed DrawFlow to an AI app's MCP
+// The Connect AI (MCP) button: adds the installed DrawFlow to an AI app's MCP
 // settings, so nobody has to edit a config file by hand.
 //
 // An MCP client starts this app's own exe in Node mode (ELECTRON_RUN_AS_NODE)

@@ -14,7 +14,7 @@ import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
 import { slotEnd } from './timing';
 import { buildSceneSpans } from './renderFrame';
-import { addScene, addVoiceover, describeProject, sceneRange } from './automation';
+import { addScene, addVoiceover, describeProject, importSubtitles, sceneRange, setSubtitles, subtitlesSrt } from './automation';
 import { KOKORO_VOICES } from './ai/speech';
 import type { DrawElement, Project } from '../types';
 
@@ -34,6 +34,16 @@ async function blobToBase64(blob: Blob): Promise<string> {
   let s = '';
   for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, Array.from(buf.subarray(i, i + 0x8000)));
   return btoa(s);
+}
+
+/** The part of the video a scene render covers. */
+function sceneWindow(scene: string): NonNullable<ExportOptions['range']> {
+  const s = useStore.getState();
+  const sc = (s.project.scenes ?? []).find((x) => x.id === scene || x.name.toLowerCase() === scene.toLowerCase());
+  if (!sc) throw new Error(`No scene "${scene}".`);
+  const members = api.elements.filter((e) => e.sceneId === sc.id && !e.hidden);
+  if (!members.length) throw new Error(`Scene "${sc.name}" has no elements.`);
+  return { start: Math.max(0, members[0].startTime - members[0].transitionIn), end: Math.min(s.project.duration, Math.max(...members.map(slotEnd)) + 0.5) };
 }
 
 export const api = {
@@ -82,14 +92,7 @@ export const api = {
   /** Render the open project; resolves with the file and its metadata. */
   async render(opts: RenderOptions = {}): Promise<ExportResult & { blob: Blob }> {
     const s = useStore.getState();
-    let range: ExportOptions['range'];
-    if (opts.scene) {
-      const sc = (s.project.scenes ?? []).find((x) => x.id === opts.scene || x.name.toLowerCase() === opts.scene!.toLowerCase());
-      if (!sc) throw new Error(`No scene "${opts.scene}".`);
-      const members = api.elements.filter((e) => e.sceneId === sc.id && !e.hidden);
-      if (!members.length) throw new Error(`Scene "${sc.name}" has no elements.`);
-      range = { start: Math.max(0, members[0].startTime - members[0].transitionIn), end: Math.min(s.project.duration, Math.max(...members.map(slotEnd)) + 0.5) };
-    }
+    const range = opts.scene ? sceneWindow(opts.scene) : undefined;
     s.pause();
     s.setExporting(true);
     try {
@@ -129,6 +132,14 @@ export const api = {
   addScene,
   /** Narrate a scene from an audio file or text (built-in voice) — see automation.ts. */
   addVoiceover,
+  /** Turn subtitles on or off, or set their font, size, position, colour and band. */
+  setSubtitles,
+  /** Use an .srt or .vtt file's text or bytes for the subtitles, and show them. */
+  importSubtitles,
+  /** The subtitles as .srt text: the whole video, or `{ scene }` timed from that scene's render. */
+  subtitlesSrt(opts: { scene?: string } = {}): string {
+    return subtitlesSrt(opts.scene ? sceneWindow(opts.scene) : undefined);
+  },
   /** The open project as a plain summary (scenes, timing, items, voiceovers). */
   describe: describeProject,
   /** The built-in offline voice's speakers (text voiceovers need the desktop app or the MCP server). */

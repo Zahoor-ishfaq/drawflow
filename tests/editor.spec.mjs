@@ -2,6 +2,16 @@ import { test, expect } from '@playwright/test';
 import { openApp, addText, elements, project } from './helpers.mjs';
 
 test.describe('editor', () => {
+  test('Connect AI (MCP) is in the top bar, and in a browser it opens the guide', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => { window.open = (url) => { window.__opened = url; return null; }; });
+    await page.locator('header').getByRole('button', { name: 'Connect AI (MCP)' }).click();
+    // everything in the top bar stays on screen at the smallest window, which Windows' frame makes 1008 wide
+    await page.setViewportSize({ width: 1008, height: 680 });
+    expect(await page.evaluate(() => [...document.querySelectorAll('header button, header a')].filter((e) => e.getBoundingClientRect().right > innerWidth).length)).toBe(0);
+    expect(await page.evaluate(() => window.__opened)).toMatch(/drawflow\/blob\/main\/mcp\/README\.md$/);
+  });
+
   test('adds elements that chain on the timeline', async ({ page }) => {
     await openApp(page);
     await addText(page, 'Alpha', 1);

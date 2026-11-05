@@ -31,6 +31,7 @@ Render options:
 | `--format mp4\|webm\|gif\|png-sequence` | Default `mp4`. |
 | `--height <px>` | 720, 1080, 1440, 2160 or any even number. Width follows the project aspect. Default: the project's `exportHeight`, else 1080. |
 | `--scene <name>` | Render one scene only. |
+| `--srt` | Also write the subtitles as an `.srt` file beside the video. |
 | `--lanes <n>` | Concurrent encoders (default: physical cores). |
 | `--keep-open` | Leave the browser open for debugging. |
 
