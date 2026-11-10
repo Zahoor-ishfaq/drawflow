@@ -66,6 +66,8 @@ yourself: `npm run desktop:pack` (output in `release/`).
 - **Voice** — record while the scribe plays, upload, or AI narration; *fit to
   narration* retimes the drawing to the phrases of the voiceover.
 - **Animated GIFs** — put a GIF on the board and it plays inside the video.
+- **Motion paths** — send anything along a route you draw on the board: a bird
+  flapping across the sky, a car down a road, turning to face where it goes.
 - **Subtitles** — words on screen, timed to the voice and drawn into the video,
   with your choice of font, size, position and colour, in any language. Save
   them as an `.srt` for YouTube, or import your own.

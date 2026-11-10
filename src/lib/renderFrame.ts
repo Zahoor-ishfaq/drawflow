@@ -10,7 +10,8 @@ import { buildCameraTimeline, cameraAt, localBounds, viewBoxFor, type CameraTime
 import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
 import { paperDef } from '../assets/paper';
 import { scribblePath, scribbleStrokeWidth } from './scribble';
-import { drawEnd, emphasisWindow, exitWindow, slotEnd } from './timing';
+import { drawEnd, emphasisWindow, exitWindow, motionWindow, slotEnd } from './timing';
+import { pathTable, poseAt, turnBetween } from './motionPath';
 import { pluginEffect } from './plugins';
 import { gifFrameAt } from './gif';
 import { subtitleCues, subtitleSettings } from './subtitles';
@@ -256,6 +257,36 @@ function applyEmphasis(el: DrawElement, t: number, frame: ElementFrame): Element
   }
 }
 
+const FACING_ANGLE: Record<Direction, number> = { right: 0, bottom: 90, left: 180, top: -90 };
+
+/**
+ * Motion path: offset the element by how far along its route it is. Before it
+ * sets off it sits at the start; afterwards it stays at the end. With `orient`
+ * it also turns so the side the picture faces (`facing`, default right) points
+ * along the route, about its own centre (elements pivot on their origin, so the
+ * turn is paired with a shift that keeps the centre on the route).
+ */
+function applyMotion(el: DrawElement, t: number, frame: ElementFrame): ElementFrame {
+  const w = motionWindow(el);
+  const m = el.motion;
+  if (!w || !m) return frame;
+  const raw = t <= w.start ? 0 : t >= w.end ? 1 : (t - w.start) / (w.end - w.start);
+  const table = pathTable(m.points, m.smooth !== false);
+  const pose = poseAt(table, ease(raw, m.easing ?? 'easeInOut'));
+  let dx = pose.x, dy = pose.y, rotate = 0;
+  if (m.orient) {
+    rotate = turnBetween(FACING_ANGLE[m.facing ?? 'right'] ?? 0, pose.angle);
+    const b = localBounds(el);
+    const sx = el.scale * (el.flipX ? -1 : 1), sy = el.scale * (el.flipY ? -1 : 1);
+    const r0 = (el.rotation * Math.PI) / 180, r1 = ((el.rotation + rotate) * Math.PI) / 180;
+    const cx = (b.x + b.width / 2) * sx, cy = (b.y + b.height / 2) * sy;
+    // where the centre sits from the origin, before and after the extra turn
+    dx += (cx * Math.cos(r0) - cy * Math.sin(r0)) - (cx * Math.cos(r1) - cy * Math.sin(r1));
+    dy += (cx * Math.sin(r0) + cy * Math.cos(r0)) - (cx * Math.sin(r1) + cy * Math.cos(r1));
+  }
+  return { ...frame, dx: frame.dx + dx, dy: frame.dy + dy, rotate: frame.rotate + rotate };
+}
+
 /** Returns null once the exit has finished (element gone). */
 function applyExit(el: DrawElement, t: number, frame: ElementFrame, view: { width: number; height: number }): ElementFrame | null {
   const w = exitWindow(el);
@@ -320,6 +351,7 @@ export function elementFrameAt(
   if (el.hidden || t < el.startTime) return null;
   let frame = entranceFrame(el, t, view);
   frame = applyEmphasis(el, t, frame);
+  frame = applyMotion(el, t, frame);
   const after = applyExit(el, t, frame, view);
   if (!after) return null;
   const op = el.opacity ?? 1;

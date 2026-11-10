@@ -36,6 +36,29 @@ export interface Exit {
   direction: Direction;
 }
 
+export interface MotionPoint { x: number; y: number }
+
+/**
+ * Moves an element along a route (e.g. a bird flying across the board while its
+ * GIF flaps). The route goes through `points`: offsets in canvas units from the
+ * element's centre, the first one normally {0, 0}. The element travels from the
+ * first point to the last and stays at the end.
+ */
+export interface MotionPath {
+  points: MotionPoint[];
+  /** seconds to travel the whole route */
+  duration: number;
+  /** seconds after the element has appeared (drawn) before it sets off */
+  delay: number;
+  /** curve through the points (default) or straight lines between them */
+  smooth?: boolean;
+  easing?: MotionEasing;      // default 'easeInOut'
+  /** turn to face the direction of travel */
+  orient?: boolean;
+  /** with `orient`: which way the picture itself faces, so that side leads (default 'right') */
+  facing?: Direction;
+}
+
 /** Raster picture attached to an 'image' element. */
 export interface ImageRef {
   src: string;      // data: URL (embedded so export can rasterize it)
@@ -103,6 +126,8 @@ export interface DrawElement {
   strokeOrder?: StrokeOrder;
   revealMode?: RevealMode;    // images with style 'draw'
   emphasis?: Emphasis | null;
+  /** travel along a path after appearing; overlaps later elements like an exit does */
+  motion?: MotionPath | null;
   exit?: Exit | null;
   zIndex: number;             // play order (stacking = play order + layer)
 

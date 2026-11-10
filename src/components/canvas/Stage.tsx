@@ -11,6 +11,7 @@ import { paperDef } from '../../assets/paper';
 import { prepareGifs } from '../../lib/gif';
 import { cueAt } from '../../lib/subtitles';
 import { prepareSubtitleFont, subtitleSprite } from '../../lib/subtitleSprite';
+import { pathTable, poseAt, routeD } from '../../lib/motionPath';
 import { ElementNode } from './ElementNode';
 import { Hand } from './Hand';
 import { SelectionBox } from './SelectionBox';
@@ -35,7 +36,8 @@ type DragState =
   | { mode: 'scale'; id: string; startDist: number; startScale: number }
   | { mode: 'rotate'; id: string; startAngle: number; startRotation: number }
   | { mode: 'pan'; lastX: number; lastY: number; moved: boolean }
-  | { mode: 'marquee'; x0: number; y0: number; x1: number; y1: number; additive: boolean };
+  | { mode: 'marquee'; x0: number; y0: number; x1: number; y1: number; additive: boolean }
+  | { mode: 'pathPoint'; id: string; index: number };
 
 const ACCENT = '#0d9d97';
 const CLICK_SLOP = 4; // px of movement below which a drag counts as a click
@@ -54,6 +56,8 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const updateElements = useStore((s) => s.updateElements);
   const showGuides = useUiStore((s) => s.showGuides);
   const lowQuality = useUiStore((s) => s.lowQualityPreview);
+  const pathEditId = useUiStore((s) => s.pathEditId);
+  const setUi = useUiStore((s) => s.set);
   const ctx = useRenderContext();
   const { ordered, timeline } = ctx;
 
@@ -119,6 +123,27 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
     }
     return r;
   }, [selected, selectedIds.length, cameraMode, ordered, project, boundary]);
+
+  // Motion path of the selected element (or the one being drawn): its route on
+  // the board, from the element's centre. Points are stored as offsets from that
+  // centre, so the route moves with the element.
+  const routeEl = (pathEditId ? ordered.find((e) => e.id === pathEditId) : selectedEls.length === 1 ? selected : null) ?? null;
+  const route = useMemo(() => {
+    if (!routeEl?.motion || cameraMode) return null;
+    const b = elementBounds(routeEl);
+    const c = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    const p0 = routeEl.motion.points[0] ?? { x: 0, y: 0 };
+    const abs = routeEl.motion.points.map((p) => ({ x: c.x + p.x - p0.x, y: c.y + p.y - p0.y }));
+    const smooth = routeEl.motion.smooth !== false;
+    const end = abs.length > 1 ? poseAt(pathTable(abs, smooth), 1) : null;
+    return { id: routeEl.id, centre: c, p0, abs, d: abs.length > 1 ? routeD(abs, smooth) : '', endAngle: end?.angle ?? 0 };
+  }, [routeEl, cameraMode]);
+  const editingRoute = !!pathEditId && route?.id === pathEditId;
+
+  // leave path drawing when its element is deselected or deleted
+  useEffect(() => {
+    if (pathEditId && (selectedId !== pathEditId || !ordered.some((e) => e.id === pathEditId))) setUi({ pathEditId: null });
+  }, [pathEditId, selectedId, ordered, setUi]);
 
   const toCanvasPoint = (clientX: number, clientY: number) => {
     const svg = svgRef.current;
@@ -191,6 +216,27 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
     capture(e);
   };
 
+  // drawing a motion path: a click anywhere on the board adds the next point
+  const onRouteBoardDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || !route) return;
+    e.stopPropagation();
+    const el = useStore.getState().elements.find((x) => x.id === route.id);
+    if (!el?.motion) return;
+    const p = toCanvasPoint(e.clientX, e.clientY);
+    const point = { x: Math.round(p.x - route.centre.x + route.p0.x), y: Math.round(p.y - route.centre.y + route.p0.y) };
+    updateElement(el.id, { motion: { ...el.motion, points: [...el.motion.points, point] } });
+    // keep the pointer: dragging right away moves the new point
+    dragRef.current = { mode: 'pathPoint', id: el.id, index: el.motion.points.length };
+    capture(e);
+  };
+
+  const onRoutePointDown = (e: React.PointerEvent, index: number) => {
+    if (e.button !== 0 || !route || index === 0) return;
+    e.stopPropagation();
+    dragRef.current = { mode: 'pathPoint', id: route.id, index };
+    capture(e);
+  };
+
   /** Smart guides: pull a single moving element onto other elements' edges/centres. */
   const guideSnap = (el: DrawElement, x: number, y: number): { x: number; y: number; gx?: number; gy?: number } => {
     if (!showGuides || cameraMode) return { x, y };
@@ -241,6 +287,14 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
       return;
     }
     const p = toCanvasPoint(e.clientX, e.clientY);
+    if (drag.mode === 'pathPoint') {
+      const el = useStore.getState().elements.find((x) => x.id === drag.id);
+      if (!el?.motion || !route) return;
+      const points = el.motion.points.slice();
+      points[drag.index] = { x: Math.round(snap(p.x) - route.centre.x + route.p0.x), y: Math.round(snap(p.y) - route.centre.y + route.p0.y) };
+      updateElement(el.id, { motion: { ...el.motion, points } });
+      return;
+    }
     if (drag.mode === 'move') {
       drag.moved = true;
       if (drag.items.length === 1) {
@@ -459,6 +513,44 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
           fill={ACCENT} fillOpacity={0.08} stroke={ACCENT} strokeWidth={1 / pxPerUnit}
           strokeDasharray={`${4 / pxPerUnit} ${3 / pxPerUnit}`} pointerEvents="none"
         />
+      )}
+
+      {/* motion path: the route the element travels; while drawing, clicks add points */}
+      {route && !isPlaying && (
+        <g data-testid="motion-route">
+          {editingRoute && (
+            <rect
+              x={vb.x} y={vb.y} width={vb.width} height={vb.height}
+              fill="transparent" style={{ cursor: 'crosshair' }}
+              onPointerDown={onRouteBoardDown}
+            />
+          )}
+          {route.d && (
+            <path
+              d={route.d} fill="none" stroke={ACCENT} strokeWidth={2.5 / pxPerUnit}
+              strokeDasharray={`${9 / pxPerUnit} ${6 / pxPerUnit}`} strokeLinecap="round" pointerEvents="none"
+            />
+          )}
+          {route.abs.length > 1 && (() => {
+            const end = route.abs[route.abs.length - 1];
+            const s = 12 / pxPerUnit;
+            return (
+              <path
+                d={`M${s} 0 L${-s} ${-s * 0.7} L${-s * 0.5} 0 L${-s} ${s * 0.7} Z`} fill={ACCENT} pointerEvents="none"
+                transform={`translate(${end.x} ${end.y}) rotate(${route.endAngle})`}
+              />
+            );
+          })()}
+          {route.abs.map((pt, i) => (
+            <circle
+              key={i} cx={pt.x} cy={pt.y} r={(i === 0 ? 5 : 6.5) / pxPerUnit}
+              fill={i === 0 ? ACCENT : '#ffffff'} stroke={ACCENT} strokeWidth={2 / pxPerUnit}
+              style={{ cursor: editingRoute && i > 0 ? 'move' : 'default' }}
+              pointerEvents={editingRoute && i > 0 ? 'all' : 'none'}
+              onPointerDown={(e) => onRoutePointDown(e, i)}
+            />
+          ))}
+        </g>
       )}
     </svg>
   );

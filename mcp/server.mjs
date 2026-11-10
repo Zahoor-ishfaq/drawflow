@@ -213,6 +213,7 @@ To make a video: create_project, then for each scene add_scene and add_voiceover
 Good videos: 3 to 8 scenes, one idea per scene, 1 or 2 spoken sentences per scene. Keep on-screen text to a few words (the narration says the rest) and pair it with one picture from the library.
 For YouTube Shorts, TikTok or Reels use resolution "vertical" (9:16). Keep scene text very short there: the board is narrow.
 Subtitles: narration text from add_voiceover becomes subtitles timed to the voice, also when you give audio_path with text. Call set_subtitles with show true to put them in the video, and choose font, size and position there. For a language other than English use a font that has its letters, such as Microsoft YaHei for Chinese.
+To make something move across the board (a bird flying, a car driving), add it to a scene (an animated GIF keeps playing), then call add_motion_path with the route.
 add_voiceover and render can take minutes. If one answers with status "working", call check_job until it is done before doing anything else.
 Finish by telling the user where the video file is.`;
 
@@ -296,6 +297,26 @@ server.registerTool('add_voiceover', {
     return text({ scene: r.scene, voiceoverSeconds: r.duration, sceneStarts: +r.start.toFixed(2), sceneEnds: +r.end.toFixed(2), projectDuration: +total.toFixed(2) });
   });
 }));
+
+server.registerTool('add_motion_path', {
+  title: 'Make an item travel along a path',
+  description: 'Make one item of a scene travel along a route after it appears, for example a bird (an animated GIF) flying across the board while it flaps its wings. The route goes through the points in order, as a smooth curve unless straight is true; the item stays at the last point. Later items keep drawing meanwhile. Pass an empty points list to remove the path.',
+  inputSchema: {
+    project: z.string().describe('Project title, file name or path.'),
+    scene: z.string().describe('Scene name, id or number (1 = first).'),
+    item: z.number().int().min(1).default(1).describe('Which item of the scene, in drawing order (1 = first).'),
+    points: z.array(z.tuple([z.number(), z.number()])).max(100).describe('The route as [x, y] offsets in pixels from the item\'s centre, in order; [0, 0] is where it starts. The board is the project size (1920x1080 for 1080p): e.g. [[-400, -250], [-900, -380]] flies up and to the left. Empty to remove.'),
+    duration: z.number().min(0.1).max(600).default(3).describe('Seconds to travel the whole route.'),
+    delay: z.number().min(0).max(600).default(0).describe('Seconds after the item has appeared before it sets off.'),
+    easing: z.enum(['easeInOut', 'easeIn', 'easeOut', 'linear']).default('easeInOut').describe('Speed along the route: smooth start and stop, speed up, slow down, or constant.'),
+    orient: z.boolean().default(false).describe('Turn the item so its front points along the route.'),
+    facing: z.enum(['right', 'left', 'up', 'down']).default('right').describe('With orient: which way the picture itself faces (its front), e.g. "left" for a bird drawn flying to the left.'),
+    straight: z.boolean().default(false).describe('Straight lines between the points instead of a curve.'),
+  },
+}, tool(async ({ project, scene, item, points, duration, delay, easing, orient, facing, straight }) => withProject(project, async (page) => {
+  const r = await page.evaluate((o) => window.DrawFlow.setMotionPath(o), { scene, item, points, duration, delay, easing, orient, facing, straight });
+  return text(r);
+})));
 
 server.registerTool('set_subtitles', {
   title: 'Set the subtitles',

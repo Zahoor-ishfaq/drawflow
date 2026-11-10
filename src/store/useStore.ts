@@ -15,7 +15,7 @@ export type LayerOp = 'forward' | 'backward' | 'front' | 'back';
 /** Animation settings that "copy timing" carries between elements. */
 const ANIMATION_KEYS = [
   'drawDuration', 'pauseAfter', 'transitionIn', 'withPrevious', 'style', 'slideFrom', 'easing',
-  'strokeOrder', 'revealMode', 'emphasis', 'exit', 'camera', 'cameraZoom', 'hand',
+  'strokeOrder', 'revealMode', 'emphasis', 'motion', 'exit', 'camera', 'cameraZoom', 'hand',
 ] as const satisfies readonly (keyof DrawElement)[];
 type AnimationSettings = Pick<DrawElement, (typeof ANIMATION_KEYS)[number]>;
 

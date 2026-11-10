@@ -6,6 +6,7 @@
 import type { AudioClip, DrawElement, Project, SubtitleCue } from '../types';
 import { DEFAULT_PROJECT } from '../store/useStore';
 import { SUBTITLE_DEFAULTS } from './subtitles';
+import { cleanMotion } from './motionPath';
 
 export interface DocumentInput {
   project: Partial<Project> | undefined;
@@ -113,6 +114,11 @@ export function validateDocument(input: DocumentInput): ValidatedDocument {
       cameraZoom: num(e.cameraZoom, 1, 0.25, 3),
     };
     if (el.style === 'typewriter' && kind !== 'text') el.style = 'draw';
+    if (e.motion != null) {
+      const motion = cleanMotion(e.motion);
+      if (motion) el.motion = motion;
+      else { delete el.motion; problems.push(`"${el.label}" had a motion path that could not be used; removed.`); }
+    }
     elements.push(el);
   });
 

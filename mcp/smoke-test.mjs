@@ -64,7 +64,7 @@ async function call(name, args = {}, opts = {}) {
 }
 
 const { tools } = await client.listTools();
-check(['create_project', 'add_scene', 'add_voiceover', 'set_subtitles', 'import_subtitles', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
+check(['create_project', 'add_scene', 'add_voiceover', 'add_motion_path', 'set_subtitles', 'import_subtitles', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
 check((client.getInstructions() ?? '').includes('create_project'), 'tells the assistant how to make a video');
 check((await client.listPrompts()).prompts.some((p) => p.name === 'make_whiteboard_video'), 'offers a make_whiteboard_video prompt');
 
@@ -121,6 +121,10 @@ const untilDone = async (r) => {
 };
 check(!(await call('create_project', { title: 'Subtitled', resolution: '720p', fps: 30 })).isError, 'second project created');
 check(!(await call('add_scene', { project: 'Subtitled', name: 'Clip', content: [{ type: 'image', path: path.join(OUT, 'dots.gif') }] })).isError, 'an animated GIF goes on the board');
+const flight = await call('add_motion_path', { project: 'Subtitled', scene: 'Clip', points: [[250, -120], [500, -60]], duration: 2, orient: true });
+check(!flight.isError && flight.json().end > flight.json().start, 'the GIF flies along a motion path');
+check((await call('get_project', { project: 'Subtitled' })).json().scenes[0].items[0].motionPath?.points === 3, 'get_project reports the path');
+check((await call('add_motion_path', { project: 'Subtitled', scene: 'Clip', item: 5, points: [[10, 10]] })).isError, 'a missing item is refused');
 check(!(await untilDone(await call('add_voiceover', { project: 'Subtitled', scene: '1', text: 'One short line. And one more after it.' }))).isError, 'voiceover for the subtitles');
 const look = await call('set_subtitles', { project: 'Subtitled', show: true, position: 'top', size: 52 });
 check(!look.isError && look.json().lines >= 1 && look.json().position === 'top', 'subtitles on, at the top');

@@ -157,6 +157,9 @@ same frame every time.
 In the web version this works in Chrome and Edge. A browser that can't read the
 frames of a GIF shows it still.
 
+To make it move across the board as it plays — a bird flying, say — give it a
+**motion path** ([section 6](#6-how-each-element-animates)).
+
 ### Pictures from the AI
 
 The **AI** tab can suggest library pictures and drawings from a description,
@@ -214,6 +217,22 @@ radial, centre). *Easing* shapes the motion.
 
 **Emphasis** — after drawing: pulse, shake, bounce, spin, grow or highlight,
 with duration, delay and repeat count. The next element waits for it.
+
+**Motion path** — after it appears, the element travels along a route: a bird
+flying across the board (an animated GIF keeps flapping while it moves), a car
+driving down a road, an arrow following a line. Under *Travel after it appears*
+pick a ready-made route (fly up to the left or right, a wave, straight left,
+right or up) or **Draw my own path on the board**: click the board to add
+points, drag a point to move it, `Backspace` removes the last point and `Enter`
+(or **Done**) finishes. The route is a smooth curve through the points, or
+straight lines if you untick *Smooth curve*. Set how long the trip *Takes*, how
+long it waits before it *Sets off*, and its *Speed* (smooth start and stop,
+speed up, slow down, or constant). Tick **Turn to face the direction of
+travel** and say which way the picture faces (right, left, up or down): that
+side then leads the way, round every bend. The element stays at the end of the
+route, and later elements keep drawing while it travels. The route is shown on
+the board, dashed, whenever the element is selected, and it moves with the
+element. Press Play or switch to *Camera view* to watch it.
 
 **Exit** — fade, slide, wipe, shrink, *erase* (the hand rubs it out) or
 *reverse draw* (the hand undraws it), starting a chosen delay after the

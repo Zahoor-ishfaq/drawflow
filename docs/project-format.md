@@ -52,6 +52,7 @@ elements take no time and are not rendered.
 | `style` | Entrance: `draw`, `appear`, `fade`, `slide`, `wipe`, `scale`, `pop`, `bounce`, `typewriter` or `plugin:<id>`. `slideFrom` and `easing` refine it. |
 | `strokeOrder`, `revealMode` | How the hand draws vector art / reveals a photo. |
 | `emphasis` | `{ kind, duration, delay, repeat }` played after drawing; the next element waits for it. |
+| `motion` | Optional motion path `{ points, duration, delay, smooth?, easing?, orient?, facing? }`: the element travels through `points` (`{ x, y }` offsets in canvas px from its centre, the first normally `{ x: 0, y: 0 }`) over `duration` seconds, setting off `delay` seconds after it has appeared, and stays at the last point. `smooth` (default true) makes a curve through the points; `easing` defaults to `easeInOut`; `orient` turns it so the side named by `facing` (`right` by default, or `left`, `top`, `bottom`) leads along the route. Like an exit, it does not hold up later elements. |
 | `exit` | `{ kind, duration, delay, direction }` played `delay` seconds after the element's slot; later elements keep drawing meanwhile. |
 | `camera`, `cameraZoom`, `customCamera` | Framing while the element draws: `auto`, `previous`, `custom`, `scene`, `whole`. |
 | `hand` | Per-element hand override. |

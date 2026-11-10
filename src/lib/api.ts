@@ -14,7 +14,7 @@ import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
 import { slotEnd } from './timing';
 import { buildSceneSpans } from './renderFrame';
-import { addScene, addVoiceover, describeProject, importSubtitles, sceneRange, setSubtitles, subtitlesSrt } from './automation';
+import { addScene, addVoiceover, describeProject, importSubtitles, sceneRange, setMotionPath, setSubtitles, subtitlesSrt } from './automation';
 import { KOKORO_VOICES } from './ai/speech';
 import type { DrawElement, Project } from '../types';
 
@@ -132,6 +132,8 @@ export const api = {
   addScene,
   /** Narrate a scene from an audio file or text (built-in voice) — see automation.ts. */
   addVoiceover,
+  /** Make an element travel along a route after it appears (e.g. a GIF bird flying) — see automation.ts. */
+  setMotionPath,
   /** Turn subtitles on or off, or set their font, size, position, colour and band. */
   setSubtitles,
   /** Use an .srt or .vtt file's text or bytes for the subtitles, and show them. */

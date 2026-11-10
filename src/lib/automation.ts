@@ -8,7 +8,8 @@
 import { sequenceOrder, useStore } from '../store/useStore';
 import { addImageFile, addImportedSvg, addLibraryIllustration, addTextSized } from './addElements';
 import { elementBounds } from './camera';
-import { slotEnd } from './timing';
+import { motionWindow, slotEnd } from './timing';
+import { cleanMotion } from './motionPath';
 import { decodeToSource } from '../store/audioSources';
 import { clipCaptions, speechSegments } from './audioTools';
 import { cuesInRange, decodeSrt, parseSrt, subtitleCues, subtitleSettings, toSrt } from './subtitles';
@@ -16,7 +17,7 @@ import { fitToPhrases } from './narration';
 import { loadLibraryIndex } from '../assets/illustrations';
 import { buildIndex, searchAll } from './librarySearch';
 import { KOKORO_VOICES, synthesizeSpeech } from './ai/speech';
-import type { AudioClip, DrawElement, Scene, SubtitleSettings } from '../types';
+import type { AudioClip, DrawElement, MotionEasing, Scene, SubtitleSettings } from '../types';
 
 export type SceneItem =
   | { type: 'text'; text: string; size?: 'title' | 'normal' | 'small' }
@@ -230,6 +231,67 @@ export function subtitlesSrt(range?: { start: number; end: number }): string {
   return toSrt(range ? cuesInRange(cues, range.start, range.end) : cues);
 }
 
+export interface MotionPathOptions {
+  /** element id or label… */
+  element?: string;
+  /** …or a scene (id, name or 1-based number) and the item in it (1-based, in drawing order) */
+  scene?: string;
+  item?: number;
+  /**
+   * The route, as offsets in canvas px from the element's centre: [x, y] pairs or {x, y}.
+   * A starting [0, 0] is added when the first point is not the centre.
+   */
+  points: unknown[];
+  /** seconds to travel the route (default 3) */
+  duration?: number;
+  /** seconds after the element has appeared before it sets off (default 0) */
+  delay?: number;
+  easing?: MotionEasing;
+  /** turn to face the direction of travel */
+  orient?: boolean;
+  /** with orient: which way the picture faces, so that side leads — 'right' (default), 'left', 'up' or 'down' */
+  facing?: 'right' | 'left' | 'up' | 'down';
+  /** straight lines between the points instead of a curve */
+  straight?: boolean;
+}
+
+/**
+ * Make an element travel along a route after it appears (a bird flying across
+ * the board while its GIF flaps). Pass `points: []` to remove its motion path.
+ */
+export function setMotionPath(opts: MotionPathOptions): { element: string; label: string; start: number; end: number; projectDuration: number } | { element: string; label: string; removed: true } {
+  const st = useStore.getState();
+  let el: DrawElement | undefined;
+  if (opts.element) {
+    el = st.elements.find((e) => e.id === opts.element) ?? st.elements.find((e) => e.label.toLowerCase() === opts.element!.trim().toLowerCase());
+    if (!el) throw new Error(`No element "${opts.element}".`);
+  } else if (opts.scene !== undefined) {
+    const sc = findScene(String(opts.scene));
+    const list = members(sc.id);
+    const n = opts.item ?? 1;
+    el = list[n - 1];
+    if (!el) throw new Error(`Scene "${sc.name}" has ${list.length} item(s); there is no item ${n}.`);
+  } else throw new Error('Say which element: "element" (id or label), or "scene" and "item".');
+
+  if (!opts.points?.length) {
+    st.updateElement(el.id, { motion: null });
+    return { element: el.id, label: el.label, removed: true };
+  }
+  const raw = opts.points.map((p) => (Array.isArray(p) ? { x: p[0], y: p[1] } : p)) as { x: unknown; y: unknown }[];
+  const first = raw[0];
+  const points = first && first.x === 0 && first.y === 0 ? raw : [{ x: 0, y: 0 }, ...raw];
+  const motion = cleanMotion({
+    points, duration: opts.duration ?? 3, delay: opts.delay ?? 0, easing: opts.easing ?? 'easeInOut',
+    orient: !!opts.orient, smooth: !opts.straight,
+    facing: opts.facing === 'up' ? 'top' : opts.facing === 'down' ? 'bottom' : opts.facing,
+  });
+  if (!motion) throw new Error('A motion path needs at least one point to travel to, as [x, y] numbers.');
+  st.updateElement(el.id, { motion });
+  const fresh = useStore.getState().elements.find((e) => e.id === el!.id)!;
+  const w = motionWindow(fresh)!;
+  return { element: el.id, label: el.label, start: +w.start.toFixed(2), end: +w.end.toFixed(2), projectDuration: +useStore.getState().project.duration.toFixed(2) };
+}
+
 /** A plain summary of the open project: settings, scenes with their timing, items and voiceovers. */
 export function describeProject() {
   const { project: p, elements, audioClips } = useStore.getState();
@@ -242,7 +304,13 @@ export function describeProject() {
       return {
         number: i + 1, id: sc.id, name: sc.name, transition: sc.transition,
         start: range ? +range.start.toFixed(2) : null, end: range ? +range.end.toFixed(2) : null,
-        items: order.filter((e) => e.sceneId === sc.id).map((e) => ({ kind: e.kind, label: e.label, start: +e.startTime.toFixed(2), drawDuration: e.drawDuration, holdAfter: e.pauseAfter })),
+        items: order.filter((e) => e.sceneId === sc.id).map((e) => {
+          const w = motionWindow(e);
+          return {
+            kind: e.kind, label: e.label, start: +e.startTime.toFixed(2), drawDuration: e.drawDuration, holdAfter: e.pauseAfter,
+            ...(w && e.motion ? { motionPath: { points: e.motion.points.length, setsOff: +w.start.toFixed(2), arrives: +w.end.toFixed(2) } } : {}),
+          };
+        }),
         voiceovers: audioClips.filter((c) => c.sceneId === sc.id).map((c) => ({ name: c.name, lane: c.lane, start: +c.startTime.toFixed(2), duration: +c.duration.toFixed(2) })),
       };
     }),

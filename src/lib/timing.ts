@@ -2,6 +2,7 @@
 // Slot = draw → emphasis → pause; the next element starts after the slot.
 // An exit runs `exit.delay` seconds after the slot ends and may overlap
 // later elements — it only extends the project length, never the chain.
+// A motion path behaves the same way, starting after the element has appeared.
 
 import type { DrawElement } from '../types';
 
@@ -36,10 +37,23 @@ export function exitWindow(el: DrawElement): { start: number; end: number } | nu
   return { start, end: start + Math.max(0.05, x.duration) };
 }
 
+/**
+ * When the element travels its motion path (absolute seconds), or null. It sets
+ * off `delay` seconds after it has appeared and, like an exit, runs alongside
+ * later elements instead of holding them up.
+ */
+export function motionWindow(el: DrawElement): { start: number; end: number } | null {
+  const m = el.motion;
+  if (!m || !m.points || m.points.length < 2) return null;
+  const start = drawEnd(el) + Math.max(0, m.delay);
+  return { start, end: start + Math.max(0.1, m.duration) };
+}
+
 /** Last moment the element affects the picture. */
 export function elementEnd(el: DrawElement): number {
   const x = exitWindow(el);
-  return x ? Math.max(slotEnd(el), x.end) : slotEnd(el);
+  const m = motionWindow(el);
+  return Math.max(slotEnd(el), x ? x.end : 0, m ? m.end : 0);
 }
 
 /** True once the exit has completely finished (element is gone). */

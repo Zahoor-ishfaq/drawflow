@@ -1,11 +1,12 @@
 import type {
-  CameraMode, Direction, DrawElement, DrawStyle, EmphasisKind, ExitKind, MotionEasing, RevealMode, StrokeOrder,
+  CameraMode, Direction, DrawElement, DrawStyle, EmphasisKind, ExitKind, MotionEasing, MotionPath, MotionPoint, RevealMode, StrokeOrder,
 } from '../../types';
 import { useStore } from '../../store/useStore';
+import { useUiStore } from '../../store/uiStore';
 import { useSequence } from '../../store/selectors';
 import { cameraForElement, viewFromRect } from '../../lib/camera';
-import { slotEnd, exitWindow } from '../../lib/timing';
-import { Camera, Crosshair } from 'lucide-react';
+import { slotEnd, exitWindow, motionWindow } from '../../lib/timing';
+import { Camera, Crosshair, Route } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Field, SectionHeader } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
@@ -63,6 +64,116 @@ const EXITS: { value: ExitKind | 'none'; label: string }[] = [
   { value: 'erase', label: 'Erase (hand rubs it out)' },
   { value: 'reverseDraw', label: 'Reverse draw' },
 ];
+
+type RouteChoice = 'none' | 'draw' | 'arcLeft' | 'arcRight' | 'wave' | 'left' | 'right' | 'up';
+
+const FACINGS: { value: Direction; label: string }[] = [
+  { value: 'right', label: 'Right' },
+  { value: 'left', label: 'Left' },
+  { value: 'top', label: 'Up' },
+  { value: 'bottom', label: 'Down' },
+];
+
+const ROUTES: { value: RouteChoice; label: string }[] = [
+  { value: 'none', label: 'Stays where it is' },
+  { value: 'draw', label: 'Draw my own path on the board…' },
+  { value: 'arcLeft', label: 'Fly up and to the left' },
+  { value: 'arcRight', label: 'Fly up and to the right' },
+  { value: 'wave', label: 'Wave to the right' },
+  { value: 'left', label: 'Straight to the left' },
+  { value: 'right', label: 'Straight to the right' },
+  { value: 'up', label: 'Straight up' },
+];
+
+/** Ready-made routes, sized to the board, as offsets from the element's centre. */
+function presetRoute(kind: RouteChoice, w: number, h: number): MotionPoint[] {
+  const p = (x: number, y: number) => ({ x: Math.round(x * w), y: Math.round(y * h) });
+  switch (kind) {
+    case 'arcLeft': return [p(0, 0), p(-0.22, -0.2), p(-0.5, -0.3)];
+    case 'arcRight': return [p(0, 0), p(0.22, -0.2), p(0.5, -0.3)];
+    case 'wave': return [p(0, 0), p(0.12, -0.1), p(0.24, 0.05), p(0.36, -0.1), p(0.48, 0)];
+    case 'left': return [p(0, 0), p(-0.5, 0)];
+    case 'right': return [p(0, 0), p(0.5, 0)];
+    case 'up': return [p(0, 0), p(0, -0.45)];
+    default: return [p(0, 0)];
+  }
+}
+
+/** Inspector controls for an element's motion path (travel along a route after appearing). */
+function MotionPathControls({ element: el }: { element: DrawElement }) {
+  const updateElement = useStore((s) => s.updateElement);
+  const setCameraView = useStore((s) => s.setCameraView);
+  const project = useStore((s) => s.project);
+  const pathEditId = useUiStore((s) => s.pathEditId);
+  const setUi = useUiStore((s) => s.set);
+  const m = el.motion;
+  const editing = pathEditId === el.id;
+  const patchMotion = (p: Partial<MotionPath>) => m && updateElement(el.id, { motion: { ...m, ...p } });
+  const w = motionWindow(el);
+
+  const choose = (v: RouteChoice) => {
+    if (v === 'none') { updateElement(el.id, { motion: null }); setUi({ pathEditId: null }); return; }
+    const points = presetRoute(v, project.width, project.height);
+    updateElement(el.id, { motion: { points, duration: m?.duration ?? 3, delay: m?.delay ?? 0, easing: m?.easing ?? 'easeInOut', ...(m?.orient ? { orient: true } : {}), ...(m?.smooth === false ? { smooth: false } : {}) } });
+    if (v === 'draw') { setCameraView(false); setUi({ pathEditId: el.id }); } else setUi({ pathEditId: null });
+  };
+
+  return (
+    <>
+      <SectionHeader>Motion path</SectionHeader>
+      <Field label="Travel after it appears">
+        <Select<RouteChoice> value={m ? 'draw' : 'none'} options={m ? [{ value: 'draw', label: `Along its path (${m.points.length} points)` }, ...ROUTES.filter((r) => r.value !== 'draw')] : ROUTES} onChange={choose} />
+      </Field>
+      {m && (
+        <>
+          <div className="flex gap-2">
+            <Button
+              variant={editing ? 'primary' : 'secondary'}
+              className="flex-1"
+              onClick={() => { if (editing) setUi({ pathEditId: null }); else { setCameraView(false); setUi({ pathEditId: el.id }); } }}
+            >
+              <Route size={14} /> {editing ? 'Done' : 'Edit path on the board'}
+            </Button>
+          </div>
+          {editing && (
+            <p className="text-[11px] leading-snug text-accent">
+              Click the board to add points; drag a point to move it. Backspace removes the last point, Enter finishes.
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Takes">
+              <Slider value={m.duration} onChange={(v) => patchMotion({ duration: v })} min={0.2} max={30} step={0.1} withInput={false} />
+            </Field>
+            <Field label="Sets off after">
+              <Slider value={m.delay} onChange={(v) => patchMotion({ delay: v })} min={0} max={30} step={0.1} withInput={false} />
+            </Field>
+          </div>
+          <Field label="Speed">
+            <Segmented<MotionEasing> value={m.easing ?? 'easeInOut'} onChange={(v) => patchMotion({ easing: v })} options={EASINGS} />
+          </Field>
+          <label className="flex items-center gap-2 text-[12px] text-t2">
+            <input type="checkbox" checked={!!m.orient} onChange={(e) => patchMotion({ orient: e.target.checked || undefined })} />
+            Turn to face the direction of travel
+          </label>
+          {m.orient && (
+            <Field label="The picture faces">
+              <Segmented<Direction> value={m.facing ?? 'right'} onChange={(v) => patchMotion({ facing: v === 'right' ? undefined : v })} options={FACINGS} />
+            </Field>
+          )}
+          <label className="flex items-center gap-2 text-[12px] text-t2">
+            <input type="checkbox" checked={m.smooth !== false} onChange={(e) => patchMotion({ smooth: e.target.checked ? undefined : false })} />
+            Smooth curve through the points
+          </label>
+          <p className="tabular text-[11px] text-t3">
+            {w
+              ? `Sets off at ${w.start.toFixed(1)}s, arrives at ${w.end.toFixed(1)}s and stays there; later elements keep drawing meanwhile.`
+              : 'Add at least one more point on the board to give it somewhere to go.'}
+          </p>
+        </>
+      )}
+    </>
+  );
+}
 
 function Select<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
@@ -200,6 +311,8 @@ export function AnimationSection({ element: el }: { element: DrawElement }) {
           </p>
         </div>
       )}
+
+      <MotionPathControls element={el} />
 
       <SectionHeader>Exit</SectionHeader>
       <Field label="Leaves the board">

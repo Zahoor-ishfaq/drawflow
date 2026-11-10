@@ -122,6 +122,20 @@
         "duration": { "type": "number", "minimum": 0 }, "delay": { "type": "number", "minimum": 0 }, "repeat": { "type": "integer", "minimum": 1 }
       }
     },
+    "MotionPath": {
+      "type": "object",
+      "description": "Travel along a route after appearing. Points are offsets in canvas px from the element's centre; the first is normally {x: 0, y: 0}. The element stays at the last point.",
+      "required": ["points", "duration", "delay"],
+      "properties": {
+        "points": { "type": "array", "minItems": 2, "maxItems": 100, "items": { "type": "object", "required": ["x", "y"], "properties": { "x": { "type": "number" }, "y": { "type": "number" } } } },
+        "duration": { "type": "number", "minimum": 0.1, "description": "Seconds to travel the route" },
+        "delay": { "type": "number", "minimum": 0, "description": "Seconds after the element has appeared before it sets off" },
+        "smooth": { "type": "boolean", "description": "Curve through the points (default true) or straight lines" },
+        "easing": { "enum": ["easeOut", "easeIn", "easeInOut", "linear"], "description": "Default easeInOut" },
+        "orient": { "type": "boolean", "description": "Turn so the picture's front points along the route" },
+        "facing": { "enum": ["right", "left", "top", "bottom"], "description": "With orient: which way the picture faces (default right)" }
+      }
+    },
     "Exit": {
       "type": "object",
       "required": ["kind", "duration", "delay", "direction"],
@@ -166,6 +180,7 @@
         "strokeOrder": { "enum": ["file", "reverse", "leftToRight", "rightToLeft", "topToBottom", "bottomToTop", "centerOut"] },
         "revealMode": { "enum": ["scribble", "wipe", "radial", "center"] },
         "emphasis": { "oneOf": [{ "$ref": "#/definitions/Emphasis" }, { "type": "null" }] },
+        "motion": { "oneOf": [{ "$ref": "#/definitions/MotionPath" }, { "type": "null" }] },
         "exit": { "oneOf": [{ "$ref": "#/definitions/Exit" }, { "type": "null" }] },
         "zIndex": { "type": "number", "description": "Play order" },
         "image": { "type": "object", "required": ["src", "width", "height"], "properties": { "src": { "type": "string", "pattern": "^data:image/" }, "width": { "type": "number" }, "height": { "type": "number" } } },

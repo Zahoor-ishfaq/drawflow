@@ -49,6 +49,7 @@ export const SHORTCUTS: { keys: string; action: string; group: string }[] = [
   { group: 'Editing', keys: 'Ctrl+[ / Ctrl+]', action: 'Send to back / bring to front' },
   { group: 'Editing', keys: 'Ctrl+Shift+C / Ctrl+Shift+V', action: 'Copy / paste animation settings' },
   { group: 'Editing', keys: 'Esc', action: 'Deselect' },
+  { group: 'Editing', keys: 'Backspace / Enter', action: 'While drawing a motion path: remove the last point / finish' },
   { group: 'Canvas', keys: 'Drag paper / Middle-drag', action: 'Pan' },
   { group: 'Canvas', keys: 'Shift+drag paper', action: 'Marquee select' },
   { group: 'Canvas', keys: 'Wheel / Ctrl+= / Ctrl+-', action: 'Zoom' },
@@ -104,6 +105,18 @@ export function useKeyboardShortcuts(): void {
           case 's': e.preventDefault(); emitShortcut('open-versions'); return;
         }
         return;
+      }
+
+      // drawing a motion path: Backspace takes back the last point, Enter / Escape finish
+      const pathEdit = useUiStore.getState().pathEditId;
+      if (pathEdit) {
+        const el = s.elements.find((x) => x.id === pathEdit);
+        if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); useUiStore.getState().set({ pathEditId: null }); return; }
+        if ((e.key === 'Backspace' || e.key === 'Delete') && el?.motion) {
+          e.preventDefault();
+          if (el.motion.points.length > 1) s.updateElement(el.id, { motion: { ...el.motion, points: el.motion.points.slice(0, -1) } });
+          return;
+        }
       }
 
       const nudge = (dx: number, dy: number) => {

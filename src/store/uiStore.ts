@@ -20,6 +20,8 @@ export interface UiState {
   showStats: boolean;        // fps / render timing overlay
   fullscreenPreview: boolean;
   lowQualityPreview: boolean;
+  /** element whose motion path is being drawn on the board (clicks add points), or null */
+  pathEditId: string | null;
   set(patch: Partial<Omit<UiState, 'set'>>): void;
 }
 
@@ -49,9 +51,10 @@ export const useUiStore = create<UiState>()((set, get) => ({
   fullscreenPreview: false,
   lowQualityPreview: false,
   ...load(),
+  pathEditId: null,
   set(patch) {
     set(patch);
-    const { set: _s, fullscreenPreview: _f, ...rest } = get();
+    const { set: _s, fullscreenPreview: _f, pathEditId: _p, ...rest } = get();
     try { localStorage.setItem(KEY, JSON.stringify(rest)); } catch { /* quota */ }
   },
 }));
