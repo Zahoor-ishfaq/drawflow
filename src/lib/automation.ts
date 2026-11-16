@@ -6,7 +6,9 @@
 // built this way is the same as one built by hand.
 
 import { sequenceOrder, useStore } from '../store/useStore';
-import { addImageFile, addImportedSvg, addLibraryIllustration, addTextSized } from './addElements';
+import { addImageFile, addImportedSvg, addLibraryIllustration, addTextSized, addVideoFile } from './addElements';
+import { loadRasterImage } from './images';
+import { paperDef } from '../assets/paper';
 import { elementBounds } from './camera';
 import { motionWindow, slotEnd } from './timing';
 import { cleanMotion } from './motionPath';
@@ -17,12 +19,14 @@ import { fitToPhrases } from './narration';
 import { loadLibraryIndex } from '../assets/illustrations';
 import { buildIndex, searchAll } from './librarySearch';
 import { KOKORO_VOICES, synthesizeSpeech } from './ai/speech';
-import type { AudioClip, DrawElement, MotionEasing, Scene, SubtitleSettings } from '../types';
+import type { AudioClip, BackgroundImage, DrawElement, MotionEasing, Scene, SubtitleSettings } from '../types';
 
 export type SceneItem =
   | { type: 'text'; text: string; size?: 'title' | 'normal' | 'small' }
   | { type: 'svg'; svg: string; label?: string }
   | { type: 'image'; base64: string; mime: string; name?: string }
+  /** a video clip (MP4, WebM, MOV): it pops in and the scene waits until it has played */
+  | { type: 'video'; base64: string; mime: string; name?: string; loop?: boolean }
   /** a picture from the built-in library of 5,000+, found by search */
   | { type: 'library'; query: string; color?: boolean };
 
@@ -82,6 +86,11 @@ async function addItem(item: SceneItem): Promise<void> {
       await addImageFile(new File([bytes], item.name ?? 'picture', { type: item.mime }));
       return;
     }
+    case 'video': {
+      const bytes = Uint8Array.from(atob(item.base64), (c) => c.charCodeAt(0));
+      await addVideoFile(new File([bytes], item.name ?? 'video', { type: item.mime }), { loop: item.loop });
+      return;
+    }
     case 'library': {
       // the same ranked search as the Library panel (synonyms, plurals, typos), pictures only
       const index = buildIndex({ illustrations: await loadLibraryIndex(), icons: [], uploads: [] });
@@ -91,7 +100,7 @@ async function addItem(item: SceneItem): Promise<void> {
       return;
     }
     default:
-      throw new Error(`Unknown item type "${(item as { type: string }).type}" — use text, svg, image or library.`);
+      throw new Error(`Unknown item type "${(item as { type: string }).type}" — use text, svg, image, video or library.`);
   }
 }
 
@@ -125,8 +134,11 @@ export async function addScene(opts: AddSceneOptions): Promise<{ id: string; nam
   const added = sequenceOrder(st.elements).filter((e) => !before.has(e.id));
   added.forEach((e, i) => {
     const patch: Partial<DrawElement> = {};
-    if (opts.drawDuration !== undefined) patch.drawDuration = Math.max(0.2, opts.drawDuration);
-    if (i === added.length - 1 && opts.holdDuration !== undefined) patch.pauseAfter = Math.max(0, opts.holdDuration);
+    // a video clip keeps its quick entrance, and the scene waits for it to play through
+    if (opts.drawDuration !== undefined && !e.video) patch.drawDuration = Math.max(0.2, opts.drawDuration);
+    if (i === added.length - 1 && opts.holdDuration !== undefined) {
+      patch.pauseAfter = Math.max(0, opts.holdDuration, e.video && !e.video.loop ? e.pauseAfter : 0);
+    }
     if (Object.keys(patch).length) st.updateElement(e.id, patch);
   });
   st.select(null);
@@ -292,6 +304,55 @@ export function setMotionPath(opts: MotionPathOptions): { element: string; label
   return { element: el.id, label: el.label, start: +w.start.toFixed(2), end: +w.end.toFixed(2), projectDuration: +useStore.getState().project.duration.toFixed(2) };
 }
 
+export interface BackgroundOptions {
+  /** scene id, name or 1-based number; leave out for the whole video */
+  scene?: string;
+  /** paper colour, such as #fff4e0 (papers with a fixed colour, like kraft, keep theirs) */
+  color?: string;
+  /** a picture filling the frame behind everything; null removes it */
+  image?: { base64: string; mime: string } | null;
+  /** how strongly the picture shows, 0.1 – 1 */
+  opacity?: number;
+  /** cover: fill the frame (default); contain: show the whole picture */
+  fit?: 'cover' | 'contain';
+}
+
+/** Set the paper colour and background picture of one scene, or of the whole video. */
+export async function setBackground(opts: BackgroundOptions): Promise<{ scene: string | null; color: string; picture: boolean; opacity?: number; fit?: string }> {
+  const s = useStore.getState();
+  const scene = opts.scene ? findScene(opts.scene) : null;
+  const current: BackgroundImage | undefined = scene ? scene.backgroundImage : s.project.backgroundImage;
+  let image = current;
+  if (opts.image === null) image = undefined;
+  else if (opts.image) {
+    const bytes = Uint8Array.from(atob(opts.image.base64), (c) => c.charCodeAt(0));
+    const img = await loadRasterImage(new Blob([bytes], { type: opts.image.mime }), opts.image.mime, 2560);
+    image = { src: img.src, width: img.width, height: img.height };
+  }
+  if (image && (opts.opacity !== undefined || opts.fit)) {
+    image = { ...image, ...(opts.opacity !== undefined ? { opacity: Math.min(1, Math.max(0.1, opts.opacity)) } : {}), ...(opts.fit ? { fit: opts.fit } : {}) };
+  }
+  if (opts.image === undefined && opts.opacity === undefined && !opts.fit && opts.color === undefined) {
+    throw new Error('Give a color, an image, or opacity/fit for the existing picture.');
+  }
+  if ((opts.opacity !== undefined || opts.fit) && !image) throw new Error('There is no background picture to change: give an image.');
+  const color = opts.color;
+  if (scene) {
+    s.updateScene(scene.id, { ...(color ? { background: color } : {}), backgroundImage: image });
+  } else {
+    s.updateProject({ ...(color && paperDef(s.project.paper).customColor ? { background: color } : {}), backgroundImage: image });
+  }
+  const p = useStore.getState().project;
+  const sc = scene ? (p.scenes ?? []).find((x) => x.id === scene.id) : null;
+  const out = sc?.backgroundImage ?? (scene ? undefined : p.backgroundImage);
+  return {
+    scene: sc?.name ?? null,
+    color: sc?.background ?? p.background,
+    picture: !!(out ?? (scene ? p.backgroundImage : undefined)),
+    ...(out ? { opacity: out.opacity ?? 1, fit: out.fit ?? 'cover' } : {}),
+  };
+}
+
 /** A plain summary of the open project: settings, scenes with their timing, items and voiceovers. */
 export function describeProject() {
   const { project: p, elements, audioClips } = useStore.getState();
@@ -299,15 +360,18 @@ export function describeProject() {
   return {
     name: p.name, width: p.width, height: p.height, fps: p.fps, exportHeight: p.exportHeight ?? 1080,
     duration: +p.duration.toFixed(2),
+    background: { paper: p.paper, color: p.background, picture: !!p.backgroundImage },
     scenes: (p.scenes ?? []).map((sc, i) => {
       const range = sceneRange(sc.id);
       return {
         number: i + 1, id: sc.id, name: sc.name, transition: sc.transition,
+        ...(sc.background || sc.paper || sc.backgroundImage ? { background: { paper: sc.paper ?? p.paper, color: sc.background ?? p.background, picture: !!sc.backgroundImage } } : {}),
         start: range ? +range.start.toFixed(2) : null, end: range ? +range.end.toFixed(2) : null,
         items: order.filter((e) => e.sceneId === sc.id).map((e) => {
           const w = motionWindow(e);
           return {
-            kind: e.kind, label: e.label, start: +e.startTime.toFixed(2), drawDuration: e.drawDuration, holdAfter: e.pauseAfter,
+            kind: e.video ? 'video' : e.kind, label: e.label, start: +e.startTime.toFixed(2), drawDuration: e.drawDuration, holdAfter: e.pauseAfter,
+            ...(e.video ? { video: { length: e.video.duration, loop: !!e.video.loop, startsAt: e.video.start ?? 0 } } : {}),
             ...(w && e.motion ? { motionPath: { points: e.motion.points.length, setsOff: +w.start.toFixed(2), arrives: +w.end.toFixed(2) } } : {}),
           };
         }),

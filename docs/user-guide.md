@@ -160,6 +160,30 @@ frames of a GIF shows it still.
 To make it move across the board as it plays — a bird flying, say — give it a
 **motion path** ([section 6](#6-how-each-element-animates)).
 
+### Video clips
+
+![A bouncing-ball clip plays on a park scene with its own background picture, then an evening scene with another](screenshots/video-and-backgrounds.gif)
+
+Upload an MP4, WebM or MOV the same way: **Library** > **Uploads** (up to
+100 MB; a short clip works best). It pops in and plays inside your video, and
+the board waits until it has played to the end before the next item starts.
+Like a GIF, it holds still in *Edit view* and plays in *Camera view*, *Preview*
+and the downloaded video, frame for frame.
+
+Select it, and the **Animation** tab starts with its **Video** settings:
+
+- **Start from** — skip the beginning of the clip.
+- **Loop** — play it again and again while it is on the board; otherwise it
+  stops on its last frame.
+- **Wait for the clip to finish** — appears when the timing no longer matches
+  the clip (after changing *Start from*, say), and sets the pause to fit.
+- **Add its sound to the timeline** — the board itself is silent; this puts
+  the clip's sound on the *Sfx* lane, starting with the clip, where you can trim
+  it or change its volume. If you move the clip later, move its sound too.
+
+You can resize, crop, animate and move a clip like any picture, and give it a
+motion path. Uploaded clips stay in **Uploads**, ready to use again.
+
 ### Pictures from the AI
 
 The **AI** tab can suggest library pictures and drawings from a description,
@@ -294,7 +318,10 @@ add next belong to the new scene.
   *Delete* (keeping or removing its elements).
 - **Scene settings** — transition into the scene (*cut*, *fade*, *wipe*) and its
   length; *clear the board first*; a paper style and colour just for this
-  scene.
+  scene; and a **background picture** that fills the video frame behind the
+  scene's drawings. Choose *Fill the frame* or *Whole picture*, and lower its
+  *Strength* so the drawings stand out. A scene without a picture of its own
+  shows the one set for the whole video in the **Paper** panel, if any.
 - Move an element between scenes by dragging its card under another header or
   with *Move to scene* in its right-click menu.
 - Export a single scene from the export dialog. Save a scene as a template
@@ -511,7 +538,10 @@ and click where the pen tip is. Project settings add a nudge and motion
 smoothing; an element can override the hand.
 
 **Paper** — plain, grid, dots, lined, cream, chalkboard or kraft, any colour
-(chalkboard makes the default ink white). Scenes can override the paper.
+(chalkboard makes the default ink white), and a **background picture** for the
+whole video. Scenes can override the paper, its colour and the picture (*Scene
+settings*). In *Edit view* the picture shows inside the camera boundary;
+*Camera view* shows it as the video will.
 
 ---
 

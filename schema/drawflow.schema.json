@@ -35,6 +35,18 @@
       "required": ["cx", "cy", "zoom"],
       "properties": { "cx": { "type": "number" }, "cy": { "type": "number" }, "zoom": { "type": "number", "exclusiveMinimum": 0 } }
     },
+    "BackgroundImage": {
+      "type": "object",
+      "description": "A picture filling the video frame behind everything",
+      "required": ["src", "width", "height"],
+      "properties": {
+        "src": { "type": "string", "pattern": "^data:image/" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "fit": { "enum": ["cover", "contain"] }
+      }
+    },
     "Scene": {
       "type": "object",
       "required": ["id", "name", "transition", "transitionDuration"],
@@ -45,6 +57,7 @@
         "transitionDuration": { "type": "number", "minimum": 0 },
         "background": { "type": "string" },
         "paper": { "$ref": "#/definitions/PaperStyle" },
+        "backgroundImage": { "$ref": "#/definitions/BackgroundImage" },
         "clearBefore": { "type": "boolean" }
       }
     },
@@ -78,6 +91,7 @@
         "exportHeight": { "type": "integer", "minimum": 144, "description": "Preferred output height (720, 1080, 2160…) for render() and the CLI when none is given; default 1080" },
         "background": { "type": "string", "description": "Paper colour (CSS)" },
         "paper": { "$ref": "#/definitions/PaperStyle" },
+        "backgroundImage": { "$ref": "#/definitions/BackgroundImage" },
         "duration": { "type": "number", "minimum": 0, "description": "Derived from the elements and clips; recomputed on load" },
         "hand": { "type": "string", "description": "marker | pen | chalk | marker-left | pen-left | chalk-left | none | custom:<id>" },
         "cameraEasing": { "enum": ["easeOut", "linear", "cut"] },
@@ -184,6 +198,18 @@
         "exit": { "oneOf": [{ "$ref": "#/definitions/Exit" }, { "type": "null" }] },
         "zIndex": { "type": "number", "description": "Play order" },
         "image": { "type": "object", "required": ["src", "width", "height"], "properties": { "src": { "type": "string", "pattern": "^data:image/" }, "width": { "type": "number" }, "height": { "type": "number" } } },
+        "video": {
+          "type": "object",
+          "description": "A video clip; image is then its poster frame",
+          "required": ["src", "duration"],
+          "properties": {
+            "src": { "type": "string", "pattern": "^data:video/" },
+            "duration": { "type": "number", "exclusiveMinimum": 0 },
+            "loop": { "type": "boolean" },
+            "start": { "type": "number", "minimum": 0, "description": "Seconds skipped at the start of the file" },
+            "hasAudio": { "type": "boolean" }
+          }
+        },
         "camera": { "enum": ["auto", "whole", "previous", "custom", "scene"] },
         "cameraZoom": { "type": "number", "minimum": 0.25, "maximum": 3 },
         "customCamera": { "$ref": "#/definitions/CameraView" },

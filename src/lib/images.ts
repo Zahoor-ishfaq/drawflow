@@ -34,7 +34,7 @@ async function isGifFile(file: Blob): Promise<boolean> {
   return String.fromCharCode(...head) === 'GIF';
 }
 
-export async function loadRasterImage(file: Blob, mime = file.type): Promise<LoadedImage> {
+export async function loadRasterImage(file: Blob, mime = file.type, maxSide = MAX_SIDE): Promise<LoadedImage> {
   const gif = await isGifFile(file);
   // a file with no type would otherwise lose the mark that says it is a GIF
   const raw = await readAsDataUrl(gif ? new Blob([file], { type: 'image/gif' }) : file);
@@ -46,7 +46,7 @@ export async function loadRasterImage(file: Blob, mime = file.type): Promise<Loa
   // shrinking would re-encode it as a still: an animated GIF keeps its own bytes
   if (gif && (await gifFrameCount(raw)) > 1) return { src: raw, width: w, height: h };
 
-  const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+  const scale = Math.min(1, maxSide / Math.max(w, h));
   if (scale === 1 && file.size < 2_500_000) return { src: raw, width: w, height: h };
 
   // downscale (and re-encode) so a phone photo doesn't bloat the project

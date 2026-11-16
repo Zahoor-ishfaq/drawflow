@@ -3,14 +3,14 @@
 // <img> decoding in the loop. Runs on the main thread or inside a render
 // worker (nothing here touches the DOM). Path2D objects are cached per path.
 
-import type { DrawElement, PaperStyle, Project } from '../types';
+import type { BackgroundImage, DrawElement, PaperStyle, Project } from '../types';
 import { cuffPath, sleevePath, type HandDef } from '../assets/hands';
 import { localBounds } from './camera';
 import { scribbleStrokeWidth } from './scribble';
 import { gifFrameAt } from './gif';
 import type { SubtitleSprite } from './subtitleSprite';
 import {
-  elementFrameAt, elementTransform, pathColors, type ElementFrame, type Rect,
+  backgroundRect, elementFrameAt, elementTransform, pathColors, type ElementFrame, type Rect,
 } from './renderFrame';
 
 export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -19,6 +19,8 @@ export type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 export interface CanvasAssets {
   images: Map<string, ImageBitmap>;          // element id → decoded picture
   hands: Map<string, { def: HandDef; bitmap: ImageBitmap }>;
+  /** background pictures, by their data: URL */
+  backgrounds?: Map<string, ImageBitmap>;
 }
 
 /** Hand pose for one frame (plain data: computed on the main thread). */
@@ -34,7 +36,7 @@ export interface FrameSpec {
   t: number;
   view: Rect;                                // camera viewBox
   hand: HandPose | null;
-  paper: { paper: PaperStyle; background: string };
+  paper: { paper: PaperStyle; background: string; image?: BackgroundImage | null };
   overlay: { kind: 'fade' | 'wipe'; amount: number; color?: string } | null;
   /** elements to draw, in stacking order (already filtered for scenes / hidden) */
   elementIds: string[];
@@ -121,9 +123,21 @@ function drawPaths(ctx: Ctx2D, el: DrawElement, frame: ElementFrame, alpha: numb
   ctx.globalAlpha = 1;
 }
 
+/** A background picture over the paper, clipped to the frame. */
+function drawBackground(ctx: Ctx2D, img: BackgroundImage, bitmap: ImageBitmap, vb: Rect): void {
+  const r = backgroundRect(img, vb);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(vb.x, vb.y, vb.width, vb.height);
+  ctx.clip();
+  ctx.globalAlpha = img.opacity ?? 1;
+  ctx.drawImage(bitmap, r.x, r.y, r.width, r.height);
+  ctx.restore();
+}
+
 /** Raster picture with crop + reveal mask, in local (image px) coordinates. */
 function drawImage(
-  ctx: Ctx2D, el: DrawElement, frame: ElementFrame, bitmap: ImageBitmap, scratch: OffscreenCanvas,
+  ctx: Ctx2D, el: DrawElement, frame: ElementFrame, bitmap: CanvasImageSource, scratch: OffscreenCanvas,
 ): void {
   if (!el.image) return;
   const w = el.image.width, h = el.image.height;
@@ -220,7 +234,8 @@ function drawHand(ctx: Ctx2D, pose: HandPose, assets: CanvasAssets): void {
 }
 
 export interface CanvasPainter {
-  paint(spec: FrameSpec): void;
+  /** `media`: the frame of each video clip, by element id (see VideoFrames.frames) */
+  paint(spec: FrameSpec, media?: Map<string, CanvasImageSource>): void;
 }
 
 /**
@@ -242,6 +257,7 @@ export function createCanvasPainter(
   const layer = new OffscreenCanvas(outW, outH); // erase / clip layers
   const lctx = layer.getContext('2d')!;
 
+  let media: Map<string, CanvasImageSource> | undefined;
   const paintElement = (target: Ctx2D, el: DrawElement, frame: ElementFrame, alpha: number) => {
     target.save();
     applyElementTransform(target, el, frame);
@@ -261,7 +277,7 @@ export function createCanvasPainter(
       target.clip();
     }
     if (el.kind === 'image' && el.image) {
-      const bmp = gifFrameAt(el.image.src, frame.gifClock)?.bitmap ?? assets.images.get(el.id);
+      const bmp = media?.get(el.id) ?? gifFrameAt(el.image.src, frame.gifClock)?.bitmap ?? assets.images.get(el.id);
       target.globalAlpha = alpha;
       if (bmp) drawImage(target, el, frame, bmp, scratch);
       target.globalAlpha = 1;
@@ -272,7 +288,8 @@ export function createCanvasPainter(
   };
 
   return {
-    paint(spec) {
+    paint(spec, clips) {
+      media = clips;
       const vb = spec.view;
       const scale = outW / vb.width;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -281,6 +298,9 @@ export function createCanvasPainter(
       ctx.clearRect(0, 0, outW, outH);
       ctx.setTransform(scale, 0, 0, scale, -vb.x * scale, -vb.y * scale);
       drawPaper(ctx, spec.paper.paper, spec.paper.background, vb);
+      const bg = spec.paper.image;
+      const bgBitmap = bg ? assets.backgrounds?.get(bg.src) : undefined;
+      if (bg && bgBitmap) drawBackground(ctx, bg, bgBitmap, vb);
 
       for (const id of spec.elementIds) {
         const el = elements.get(id);

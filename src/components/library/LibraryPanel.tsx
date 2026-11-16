@@ -163,7 +163,7 @@ function SearchResults({ hits, onAdded }: { hits: SearchHit[]; onAdded?: () => v
                   className="df-ui-anim flex h-14 w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-panel2 text-t2 transition-colors hover:border-accent hover:bg-accent-weak"
                   onClick={() => void use(h)}>
                   {h.kind === 'illustration' && <img src={pictureSrc(h.entry, prefs.color)} alt="" loading="lazy" className="h-[82%] w-[82%] object-contain" draggable={false} />}
-                  {h.kind === 'upload' && <img src={h.item.kind === 'svg' ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(h.item.data)}` : h.item.data} alt="" className="max-h-[82%] max-w-[82%] object-contain" draggable={false} />}
+                  {h.kind === 'upload' && <img src={h.item.kind === 'svg' ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(h.item.data)}` : h.item.kind === 'video' ? h.item.poster : h.item.data} alt="" className="max-h-[82%] max-w-[82%] object-contain" draggable={false} />}
                   {h.kind === 'icon' && <IconGlyph paths={h.asset.paths} />}
                   {h.kind === 'shape' && <span className="text-[10.5px] font-medium">{h.name}</span>}
                 </button>

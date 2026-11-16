@@ -10,6 +10,7 @@ import { Field, SectionHeader } from '../ui/Field';
 import { TransformSection, AlignRow } from '../inspector/TransformSection';
 import { StyleSection } from '../inspector/StyleSection';
 import { AnimationSection } from '../inspector/AnimationSection';
+import { VideoSection } from '../inspector/VideoSection';
 import { TextSection } from '../inspector/TextSection';
 import { ProjectSection } from '../inspector/ProjectSection';
 import { AudioSection } from '../inspector/AudioSection';
@@ -165,7 +166,14 @@ export function Inspector() {
           <MultiSelection ids={selectedIds} />
         ) : selected ? (
           tab === 'animation' ? (
-            <AnimationSection element={selected} />
+            selected.video ? (
+              <div className="flex flex-col">
+                <VideoSection element={selected} />
+                <AnimationSection element={selected} />
+              </div>
+            ) : (
+              <AnimationSection element={selected} />
+            )
           ) : (
             <div className="flex flex-col">
               <TransformSection element={selected} />

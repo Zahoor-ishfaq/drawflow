@@ -14,6 +14,7 @@ import { paperDef, isDarkPaper } from '../assets/paper';
 import { loadLibrarySvg, pictureSrc, type LibraryEntry } from '../assets/illustrations';
 import { isGifSrc } from './gif';
 import { loadRasterImage } from './images';
+import { loadVideoFile, type LoadedVideo } from './video';
 import { scribblePath } from './scribble';
 import type { GalleryItem } from './gallery';
 import type { SketchResult } from './sketch';
@@ -249,6 +250,36 @@ export function addImageElement(image: ImageRef, label: string): void {
   });
 }
 
+/**
+ * Add a video clip. It pops in (a hand scribbling over it would hide it), and
+ * the board holds on it until it has played through.
+ */
+export function addVideoElement(v: Omit<LoadedVideo, 'src'> & { src: string }, label: string, opts: { loop?: boolean } = {}): void {
+  const paths = [scribblePath(v.width, v.height)];
+  const scale = 640 / Math.max(v.width, v.height, 1);
+  const draw = 0.6;
+  useStore.getState().addElement({
+    kind: 'image',
+    paths,
+    image: { src: v.poster, width: v.width, height: v.height },
+    video: { src: v.src, duration: v.duration, hasAudio: v.hasAudio, ...(opts.loop ? { loop: true } : {}) },
+    label,
+    fillColor: 'none',
+    strokeColor: '#000000',
+    strokeWidth: 1,
+    style: 'pop',
+    drawDuration: draw,
+    pauseAfter: Math.max(0.5, Math.round((v.duration - draw) * 100) / 100),
+    ...placeNew(paths, scale),
+  });
+}
+
+export async function addVideoFile(file: File, opts: { loop?: boolean } = {}): Promise<LoadedVideo> {
+  const v = await loadVideoFile(file);
+  addVideoElement(v, file.name.replace(/\.[^.]+$/, ''), opts);
+  return v;
+}
+
 export async function addImageFile(file: File): Promise<ImageRef> {
   const img = await loadRasterImage(file);
   addImageElement(img, file.name.replace(/\.[^.]+$/, ''));
@@ -256,7 +287,9 @@ export async function addImageFile(file: File): Promise<ImageRef> {
 }
 
 export async function addGalleryItem(item: GalleryItem): Promise<void> {
-  if (item.kind === 'image') {
+  if (item.kind === 'video') {
+    addVideoElement({ src: item.data, poster: item.poster ?? '', width: item.width, height: item.height, duration: item.duration ?? 1, hasAudio: item.hasAudio ?? true }, item.name);
+  } else if (item.kind === 'image') {
     addImageElement({ src: item.data, width: item.width, height: item.height }, item.name);
   } else {
     addImportedSvg(item.data, item.name);

@@ -57,6 +57,7 @@ export async function exportAssetPack(items: GalleryItem[], packName = 'drawflow
   const manifest: Manifest = { name: packName, items: [] };
   const used = new Set<string>();
   for (const it of items) {
+    if (it.kind === 'video') continue; // packs carry pictures; videos stay in this computer's uploads
     const base = it.name.replace(/[^\w\- ]+/g, '').trim() || 'asset';
     let fileName = `${base}.${it.kind === 'svg' ? 'svg' : (it.data.match(/^data:image\/(\w+)/)?.[1] ?? 'png').replace('jpeg', 'jpg')}`;
     let n = 2;

@@ -578,7 +578,8 @@ export const useStore = create<AppState>()(
       },
 
       replaceImage(id, image, paths) {
-        get().updateElement(id, { image, paths, crop: undefined });
+        // a new picture replaces a video clip too
+        get().updateElement(id, { image, paths, crop: undefined, video: undefined });
       },
 
       setTime(t) {

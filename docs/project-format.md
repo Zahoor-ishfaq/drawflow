@@ -26,9 +26,10 @@ draft-07); this page explains the ideas behind it.
 | `width`, `height`, `fps` | Video size and frame rate (24/25/30/50/60). |
 | `exportHeight` | Optional: the output height `render()`, the CLI and the MCP server use when none is given (720, 1080, 2160…); default 1080. |
 | `background`, `paper` | Paper colour and style (`plain`, `grid`, `dots`, `lined`, `cream`, `chalkboard`, `kraft`). |
+| `backgroundImage` | Optional picture filling the frame behind everything: `{ src: data URL, width, height, opacity?, fit?: cover|contain }`. |
 | `hand` | Default hand: `marker`, `pen`, `chalk` (right hands), `marker-left`, `pen-left`, `chalk-left`, `none` or `custom:<id>`. |
 | `cameraEasing`, `cameraFill`, `zoomAtEnd`, `endHold` | Camera behaviour; `duration` is derived and recomputed on load. |
-| `scenes[]` | `{ id, name, transition: cut|fade|wipe, transitionDuration, clearBefore?, paper?, background? }`. Elements point at a scene by `sceneId`; scene order is the element order. |
+| `scenes[]` | `{ id, name, transition: cut|fade|wipe, transitionDuration, clearBefore?, paper?, background?, backgroundImage? }`; a scene without its own `backgroundImage` shows the project's. Elements point at a scene by `sceneId`; scene order is the element order. |
 | `markers[]` | `{ id, time, name, color }` on the timeline ruler. |
 | `handOffset`, `handSmoothing` | Hand picture nudge and motion smoothing. |
 | `customHands[]`, `fonts[]` | Uploaded hand photos (with pen tip) and TTF/OTF fonts, embedded. |
@@ -60,6 +61,7 @@ elements take no time and are not rendered.
 | `groupChildren[]` | The elements a group was made from (for ungroup). |
 | `text`, `fontSize`, `fontFamily`, `fontWeight`, `italic`, `align`, `lineHeight`, `letterSpacing`, `rtl` | Text metadata used to regenerate the glyph paths. |
 | `image` | `{ src: data URL, width, height }` for `kind: image`. |
+| `video` | A video clip: `{ src: data:video/… URL, duration, loop?, start?, hasAudio? }`. The element is an `image` whose `image` is the clip's poster frame; at time t it shows the frame `start + (t - startTime)` seconds into the file (looped, or held on the last frame). |
 
 ## Audio
 
@@ -72,7 +74,8 @@ A voice clip can also hold its `transcript` and its subtitles as `cues[]`
 it moves or is trimmed).
 
 An element's picture stays as one `image.src` data URL. An animated GIF keeps
-its original bytes there; its frames are worked out when it is shown.
+its original bytes there; its frames are worked out when it is shown. A video
+clip keeps its file in `video.src` and a still frame in `image.src`.
 
 ## Compatibility
 

@@ -3,7 +3,7 @@
 // in schema/drawflow.schema.json; this keeps the app running on files that
 // are slightly off rather than refusing them.
 
-import type { AudioClip, DrawElement, Project, SubtitleCue } from '../types';
+import type { AudioClip, BackgroundImage, DrawElement, Project, Scene, SubtitleCue, VideoRef } from '../types';
 import { DEFAULT_PROJECT } from '../store/useStore';
 import { SUBTITLE_DEFAULTS } from './subtitles';
 import { cleanMotion } from './motionPath';
@@ -36,6 +36,44 @@ function cleanCues(v: unknown): SubtitleCue[] | undefined {
   return (v as Partial<SubtitleCue>[]).filter((c) =>
     c && typeof c.text === 'string' && Number.isFinite(c.start) && Number.isFinite(c.end) && c.end! > c.start!,
   ).map((c) => ({ start: Math.max(0, c.start!), end: c.end!, text: c.text! }));
+}
+
+/** A background picture: a data: URL image with a size; anything else is dropped. */
+export function cleanBackgroundImage(v: unknown): BackgroundImage | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const b = v as Record<string, unknown>;
+  if (typeof b.src !== 'string' || !b.src.startsWith('data:image/')) return undefined;
+  const out: BackgroundImage = { src: b.src, width: num(b.width, 1920, 1, 100000), height: num(b.height, 1080, 1, 100000) };
+  if (b.opacity !== undefined) out.opacity = num(b.opacity, 1, 0, 1);
+  if (b.fit === 'contain') out.fit = 'contain';
+  return out;
+}
+
+/** A video clip: a data: URL video with a length. */
+export function cleanVideo(v: unknown): VideoRef | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const r = v as Record<string, unknown>;
+  if (typeof r.src !== 'string' || !r.src.startsWith('data:video/')) return undefined;
+  const duration = num(r.duration, 0, 0, 86400);
+  if (!(duration > 0)) return undefined;
+  const out: VideoRef = { src: r.src, duration };
+  if (r.loop === true) out.loop = true;
+  if (typeof r.start === 'number' && r.start > 0) out.start = num(r.start, 0, 0, Math.max(0, duration - 0.1));
+  if (typeof r.hasAudio === 'boolean') out.hasAudio = r.hasAudio;
+  return out;
+}
+
+function cleanScenes(v: unknown, problems: string[]): Scene[] {
+  if (!Array.isArray(v)) return [];
+  return (v as Scene[]).filter((s) => s && typeof s === 'object' && typeof s.id === 'string').map((s) => {
+    const scene: Scene = { ...s };
+    if (s.backgroundImage !== undefined) {
+      const img = cleanBackgroundImage(s.backgroundImage);
+      if (img) scene.backgroundImage = img;
+      else { delete scene.backgroundImage; problems.push(`Scene "${s.name}" had a background picture that could not be used; removed.`); }
+    }
+    return scene;
+  });
 }
 
 function cleanSubtitles(v: unknown): Project['subtitles'] {
@@ -72,11 +110,16 @@ export function validateDocument(input: DocumentInput): ValidatedDocument {
     cameraFill: num(p.cameraFill, 0.5, 0.1, 1),
     zoomAtEnd: bool(p.zoomAtEnd, false),
     endHold: num(p.endHold, 1.5, 0, 60),
-    scenes: Array.isArray(p.scenes) ? (p.scenes as Project['scenes']) : [],
+    scenes: cleanScenes(p.scenes, problems),
+    backgroundImage: cleanBackgroundImage(p.backgroundImage),
     markers: Array.isArray(p.markers) ? (p.markers as Project['markers']) : [],
     subtitles: cleanSubtitles(p.subtitles),
   };
   if (p.fps !== undefined && project.fps !== p.fps) problems.push(`Frame rate ${String(p.fps)} is not supported; using 30.`);
+  if (!project.backgroundImage) {
+    delete project.backgroundImage;
+    if (p.backgroundImage) problems.push('The background picture could not be used; removed.');
+  }
 
   const elements: DrawElement[] = [];
   const ids = new Set<string>();
@@ -114,6 +157,11 @@ export function validateDocument(input: DocumentInput): ValidatedDocument {
       cameraZoom: num(e.cameraZoom, 1, 0.25, 3),
     };
     if (el.style === 'typewriter' && kind !== 'text') el.style = 'draw';
+    if (e.video != null) {
+      const video = kind === 'image' ? cleanVideo(e.video) : undefined;
+      if (video) el.video = video;
+      else { delete el.video; problems.push(`"${el.label}" had a video that could not be used; it shows as a still picture.`); }
+    }
     if (e.motion != null) {
       const motion = cleanMotion(e.motion);
       if (motion) el.motion = motion;

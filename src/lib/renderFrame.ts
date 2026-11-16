@@ -4,7 +4,7 @@
 // transitions and hand pose. Both the live React canvas and the deterministic
 // export pipeline consume these, so preview and exported video always match.
 
-import type { AudioClip, Direction, DrawElement, HandStyle, MotionEasing, Project, Scene, SubtitleCue, SubtitleSettings } from '../types';
+import type { AudioClip, BackgroundImage, Direction, DrawElement, HandStyle, MotionEasing, Project, Scene, SubtitleCue, SubtitleSettings } from '../types';
 import { applyTransform, dashPropsAt, handTransformAt, measurePaths, pointAt, type DashProps, type PathMeasure } from './drawing';
 import { buildCameraTimeline, cameraAt, localBounds, viewBoxFor, type CameraTimeline } from './camera';
 import { handDef, handInnerSvg, type HandDef } from '../assets/hands';
@@ -44,8 +44,10 @@ export interface ElementFrame {
   visibleCount: number | null;
   /** erase exit: scribble strokes that hide the element, in local coords */
   erase: { d: string; strokeWidth: number; dash: DashProps } | null;
-  /** seconds an animated GIF has been playing */
+  /** seconds an animated GIF or a video clip has been playing */
   gifClock: number;
+  /** the video frame to show, when the renderer has one (else the poster) */
+  mediaHref?: string | null;
 }
 
 export const FULL_FRAME: ElementFrame = {
@@ -685,7 +687,7 @@ export function elementInnerSvg(el: DrawElement, frame: ElementFrame): string {
     if (crop) {
       inner += `<clipPath id="crop-${uid}"><rect x="${crop.x}" y="${crop.y}" width="${crop.width}" height="${crop.height}"/></clipPath>`;
     }
-    const src = gifFrameAt(el.image.src, frame.gifClock)?.url() ?? el.image.src;
+    const src = frame.mediaHref ?? gifFrameAt(el.image.src, frame.gifClock)?.url() ?? el.image.src;
     inner +=
       `<image href="${src}" width="${el.image.width}" height="${el.image.height}" ` +
       `preserveAspectRatio="none"${masked ? ` mask="url(#${maskId})"` : ''}${crop ? ` clip-path="url(#crop-${uid})"` : ''}/>`;
@@ -768,13 +770,48 @@ export function visibleAt(ctx: RenderContext, t: number): DrawElement[] {
   return ctx.stacked.filter((e) => !e.sceneId || keep.has(e.sceneId));
 }
 
-/** Paper (style + colour) in force at time t. */
-export function paperAt(ctx: RenderContext, t: number): { paper: Project['paper']; background: string } {
+export interface PaperNow {
+  paper: Project['paper'];
+  background: string;
+  /** a picture filling the frame behind everything, or null */
+  image: BackgroundImage | null;
+}
+
+/** The video clips drawn at time t, with how long each has been playing. */
+export function videoClipsAt(ctx: RenderContext, t: number): { el: DrawElement; clock: number }[] {
+  return visibleAt(ctx, t)
+    .filter((el) => el.video && el.image && t >= el.startTime - 1e-6)
+    .map((el) => ({ el, clock: t - el.startTime }));
+}
+
+/** Paper (style, colour and background picture) in force at time t. */
+export function paperAt(ctx: RenderContext, t: number): PaperNow {
   const s = sceneAt(t, ctx.scenes);
   return {
     paper: s?.scene.paper ?? ctx.project.paper,
     background: s?.scene.background ?? ctx.project.background,
+    image: s?.scene.backgroundImage ?? ctx.project.backgroundImage ?? null,
   };
+}
+
+/** Where a background picture goes in a frame rect: covering it, or whole inside it. */
+export function backgroundRect(img: BackgroundImage, frame: Rect): Rect {
+  const k = img.fit === 'contain'
+    ? Math.min(frame.width / img.width, frame.height / img.height)
+    : Math.max(frame.width / img.width, frame.height / img.height);
+  const w = img.width * k, h = img.height * k;
+  return { x: frame.x + (frame.width - w) / 2, y: frame.y + (frame.height - h) / 2, width: w, height: h };
+}
+
+/** SVG markup for a background picture, clipped to the frame. */
+export function backgroundSvg(img: BackgroundImage, frame: Rect, id = 'bg'): string {
+  const r = backgroundRect(img, frame);
+  const opacity = img.opacity ?? 1;
+  return (
+    `<clipPath id="${id}-clip"><rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}"/></clipPath>` +
+    `<image href="${img.src}" x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" preserveAspectRatio="none" ` +
+    `clip-path="url(#${id}-clip)"${opacity < 1 ? ` opacity="${opacity}"` : ''}/>`
+  );
 }
 
 export function svgStringForTime(
@@ -783,11 +820,13 @@ export function svgStringForTime(
   outWidth: number,
   outHeight: number,
   handImages: Partial<Record<HandStyle, string>>,
+  /** the frame of each video clip, by element id (see VideoFrames.urls) */
+  media?: Map<string, string>,
 ): string {
   const { project, ordered, timeline } = ctx;
   const cam = cameraAt(t, timeline, project);
   const vb = viewBoxFor(cam, project);
-  const { paper: paperId, background } = paperAt(ctx, t);
+  const { paper: paperId, background, image } = paperAt(ctx, t);
   const paper = paperDef(paperId);
   const parts: string[] = [];
 
@@ -801,10 +840,12 @@ export function svgStringForTime(
     `<rect x="${vb.x}" y="${vb.y}" width="${vb.width}" height="${vb.height}" ` +
       `fill="${esc(paper.fill(background))}"/>`,
   );
+  if (image) parts.push(backgroundSvg(image, vb));
 
   for (const el of visibleAt(ctx, t)) {
     const frame = elementFrameAt(el, t, vb);
     if (!frame) continue;
+    if (media?.has(el.id)) frame.mediaHref = media.get(el.id);
     parts.push(`<g transform="${elementTransform(el, frame)}" opacity="${frame.groupOpacity}">`);
     parts.push(elementInnerSvg(el, frame));
     parts.push('</g>');

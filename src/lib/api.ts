@@ -14,7 +14,7 @@ import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
 import { slotEnd } from './timing';
 import { buildSceneSpans } from './renderFrame';
-import { addScene, addVoiceover, describeProject, importSubtitles, sceneRange, setMotionPath, setSubtitles, subtitlesSrt } from './automation';
+import { addScene, addVoiceover, describeProject, importSubtitles, sceneRange, setBackground, setMotionPath, setSubtitles, subtitlesSrt } from './automation';
 import { KOKORO_VOICES } from './ai/speech';
 import type { DrawElement, Project } from '../types';
 
@@ -128,7 +128,7 @@ export const api = {
     s.newProject();
     s.updateProject(settings);
   },
-  /** Add a scene of text / SVG / image / library items — see automation.ts. */
+  /** Add a scene of text / SVG / image / video / library items — see automation.ts. */
   addScene,
   /** Narrate a scene from an audio file or text (built-in voice) — see automation.ts. */
   addVoiceover,
@@ -136,6 +136,8 @@ export const api = {
   setMotionPath,
   /** Turn subtitles on or off, or set their font, size, position, colour and band. */
   setSubtitles,
+  /** Paper colour and background picture for one scene (`{ scene }`) or the whole video. */
+  setBackground,
   /** Use an .srt or .vtt file's text or bytes for the subtitles, and show them. */
   importSubtitles,
   /** The subtitles as .srt text: the whole video, or `{ scene }` timed from that scene's render. */

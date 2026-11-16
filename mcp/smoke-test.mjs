@@ -64,7 +64,7 @@ async function call(name, args = {}, opts = {}) {
 }
 
 const { tools } = await client.listTools();
-check(['create_project', 'add_scene', 'add_voiceover', 'add_motion_path', 'set_subtitles', 'import_subtitles', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
+check(['create_project', 'add_scene', 'add_voiceover', 'add_motion_path', 'set_background', 'set_subtitles', 'import_subtitles', 'get_preview', 'render', 'check_job', 'list_projects', 'get_project', 'list_voices'].every((n) => tools.some((t) => t.name === n)), 'all tools listed');
 check((client.getInstructions() ?? '').includes('create_project'), 'tells the assistant how to make a video');
 check((await client.listPrompts()).prompts.some((p) => p.name === 'make_whiteboard_video'), 'offers a make_whiteboard_video prompt');
 
@@ -136,6 +136,21 @@ check((await readFile(subtitled.json().subtitles, 'utf8')).includes('One short l
 const zh = await call('import_subtitles', { project: 'Subtitled', path: path.join(OUT, 'zh.srt') });
 check(!zh.isError && zh.json().lines === 1, 'an .srt file imports');
 check((await call('import_subtitles', { project: 'Subtitled', path: path.join(OUT, 'nope.srt') })).isError, 'a missing .srt is refused');
+
+// a video clip in a scene, and a background picture for that scene
+const clip = path.join(ROOT, 'tests', 'fixtures', 'numbered.mp4');
+check(!(await call('add_scene', { project: 'Subtitled', name: 'Film', content: [{ type: 'text', text: 'Watch' }, { type: 'video', path: clip }] })).isError, 'a video clip goes in a scene');
+const film = (await call('get_project', { project: 'Subtitled' })).json().scenes.find((s) => s.name === 'Film');
+const shown = film.items.find((i) => i.kind === 'video');
+check(!!shown && Math.abs(shown.video.length - 3) < 0.1 && shown.holdAfter > 2, 'get_project reports the clip, and the scene waits for it to play');
+check((await call('add_scene', { project: 'Subtitled', content: [{ type: 'video', path: path.join(ROOT, 'build', 'icon.png') }] })).isError, 'a picture is refused as a video');
+const bg = await call('set_background', { project: 'Subtitled', scene: 'Film', image_path: path.join(ROOT, 'build', 'icon.png'), opacity: 0.4 });
+check(!bg.isError && bg.json().picture === true && bg.json().opacity === 0.4, 'the scene gets a background picture');
+check(!(await call('set_background', { project: 'Subtitled', color: '#fff7e6' })).isError, 'the whole video gets a paper colour');
+check((await call('get_project', { project: 'Subtitled' })).json().scenes.find((s) => s.name === 'Film').background?.picture === true, 'get_project reports the background');
+check((await call('set_background', { project: 'Subtitled', scene: 'Nope', color: '#000000' })).isError, 'an unknown scene is refused');
+const filmPreview = await call('get_preview', { project: 'Subtitled', scene: 'Film' });
+check(!filmPreview.isError, 'preview of the scene with the clip and its background');
 check(stray.length === 0, `stdout carried only protocol messages${stray.length ? ` (${stray[0]})` : ''}`);
 await client.close();
 

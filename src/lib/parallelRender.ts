@@ -12,10 +12,11 @@
 import { allHands, type HandDef } from '../assets/hands';
 import { cameraAt, viewBoxFor } from './camera';
 import {
-  handFrameAt, paperAt, sceneOverlayAt, visibleAt, type RenderContext,
+  handFrameAt, paperAt, sceneOverlayAt, videoClipsAt, visibleAt, type RenderContext,
 } from './renderFrame';
 import { createCanvasPainter, type CanvasAssets, type FrameSpec } from './canvasRender';
 import { prepareGifs } from './gif';
+import { VideoFrames } from './video';
 import { subtitleSpriteAt } from './subtitleSprite';
 
 export interface RawChunk {
@@ -91,7 +92,11 @@ export async function loadCanvasAssets(ctx: RenderContext): Promise<CanvasAssets
   for (const def of allHands(project)) {
     if (used.has(def.id)) hands.set(def.id, { def, bitmap: await bitmapFromDataUrl(def.src) });
   }
-  return { images, hands };
+  const backgrounds = new Map<string, ImageBitmap>();
+  for (const img of [project.backgroundImage, ...(project.scenes ?? []).map((s) => s.backgroundImage)]) {
+    if (img?.src && !backgrounds.has(img.src)) backgrounds.set(img.src, await bitmapFromDataUrl(img.src));
+  }
+  return { images, hands, backgrounds };
 }
 
 interface Lane {
@@ -100,6 +105,8 @@ interface Lane {
   next: number;              // next frame index to submit
   canvas: OffscreenCanvas;
   painter: ReturnType<typeof createCanvasPainter>;
+  /** this lane's own video decoders, so lanes never wait on each other's seeks */
+  video: VideoFrames | null;
   encoder: VideoEncoder;
   chunks: RawChunk[];
   description: ArrayBuffer | null;
@@ -132,6 +139,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
   const tInit = performance.now();
   const assets = await loadCanvasAssets(ctx);
   const elements = new Map(ctx.stacked.map((e) => [e.id, e]));
+  const hasVideo = ctx.stacked.some((e) => e.video);
   let failure: Error | null = null;
 
   const pool: Lane[] = [];
@@ -145,6 +153,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
       from, to, next: from, chunks: [], description: null, done: false,
       canvas: laneCanvas,
       painter: createCanvasPainter(laneCanvas, ctx.project, elements, assets),
+      video: hasVideo ? new VideoFrames() : null,
       encoder: null as unknown as VideoEncoder,
     };
     lane.encoder = new VideoEncoder({
@@ -183,8 +192,11 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
           stats.waitMs += performance.now() - tw;
           check();
         }
+        const t = start + i / fps;
+        const media = lane.video ? await lane.video.frames(videoClipsAt(ctx, t)) : undefined;
+        check();
         let t0 = performance.now();
-        lane.painter.paint(frameSpec(ctx, start + i / fps, outW, outH));
+        lane.painter.paint(frameSpec(ctx, t, outW, outH), media);
         stats.paintMs += performance.now() - t0; t0 = performance.now();
         const frame = new VideoFrame(lane.canvas, { timestamp: Math.round(i * frameMicros), duration: Math.round(frameMicros) });
         try {
@@ -213,7 +225,9 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
     for (const lane of pool) {
       try { if (lane.encoder.state !== 'closed') lane.encoder.close(); } catch { /* noop */ }
     }
+    for (const lane of pool) lane.video?.close();
     for (const b of assets.images.values()) b.close();
     for (const h of assets.hands.values()) h.bitmap.close();
+    for (const b of assets.backgrounds?.values() ?? []) b.close();
   }
 }

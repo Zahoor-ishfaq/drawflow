@@ -12,8 +12,9 @@ import type { AudioClip, DrawElement, HandStyle, Project } from '../types';
 import { encodeWav, mixdownBuffer, MIX_SAMPLE_RATE } from './audioMix';
 import { createEncodeSession } from './mediaEncoder';
 import { canRenderFast, renderAndEncodeParallel } from './parallelRender';
-import { makeRenderContext, svgStringForTime } from './renderFrame';
+import { makeRenderContext, svgStringForTime, videoClipsAt } from './renderFrame';
 import { prepareGifs } from './gif';
+import { VideoFrames } from './video';
 import { prepareSubtitleFont } from './subtitleSprite';
 import { getFFmpeg, terminateFFmpeg } from './ffmpegClient';
 import { allHands, loadHandDataUrl } from '../assets/hands';
@@ -93,7 +94,13 @@ function canvasToBlob(canvas: AnyCanvas, type: string, quality?: number): Promis
 }
 
 /** Everything needed to paint any time t of the scribe at the output size. */
+/** The SVG renderer's video decoders; the next export replaces them. */
+let svgVideo: VideoFrames | null = null;
+
 async function makeFrameRenderer(project: Project, elements: DrawElement[], clips: AudioClip[], outW: number, outH: number) {
+  svgVideo?.close();
+  svgVideo = elements.some((e) => e.video) ? new VideoFrames() : null;
+  const video = svgVideo;
   // hand photos must be embedded (an SVG rasterized via <img> can't fetch)
   const handImages: Partial<Record<HandStyle, string>> = {};
   const used = new Set<HandStyle>([project.hand, ...elements.map((e) => e.hand ?? project.hand)]);
@@ -113,7 +120,8 @@ async function makeFrameRenderer(project: Project, elements: DrawElement[], clip
     canvas,
     ctx,
     async paint(t: number): Promise<void> {
-      const svg = svgStringForTime(render, t, outW, outH, handImages);
+      const media = video ? await video.urls(videoClipsAt(render, t)) : undefined;
+      const svg = svgStringForTime(render, t, outW, outH, handImages, media);
       const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
       try {
         const img = new Image();

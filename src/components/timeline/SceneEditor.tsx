@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Copy, Trash2, X } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { PAPERS } from '../../assets/paper';
+import { PAPERS, paperDef } from '../../assets/paper';
+import { BackgroundPicture } from '../library/BackgroundPicture';
+import { ColorInput } from '../ui/ColorInput';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Field } from '../ui/Field';
 import { Segmented } from '../ui/Segmented';
@@ -14,12 +16,14 @@ export function SceneEditor({ scene, index, count, onClose }: { scene: Scene; in
   const { updateScene, removeScene, duplicateScene, moveScene, updateElements, selectMany } = useStore.getState();
   const elements = useStore((s) => s.elements);
   const live = useStore((s) => (s.project.scenes ?? []).find((x) => x.id === scene.id)) ?? scene;
+  const project = useStore((s) => s.project);
+  const paperHere = paperDef(live.paper ?? project.paper);
   const [confirm, setConfirm] = useState(false);
   const members = elements.filter((e) => e.sceneId === scene.id);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#101623]/45" onMouseDown={onClose}>
-      <div className="flex w-[360px] flex-col gap-3 rounded-2xl border border-line bg-panel p-4 shadow-[0_20px_60px_rgba(15,25,45,0.3)]" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[92vh] w-[360px] flex-col gap-3 overflow-y-auto rounded-2xl border border-line bg-panel p-4 shadow-[0_20px_60px_rgba(15,25,45,0.3)]" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2">
           <input
             autoFocus
@@ -60,6 +64,18 @@ export function SceneEditor({ scene, index, count, onClose }: { scene: Scene; in
             {PAPERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </Field>
+        {paperHere.customColor && (
+          <Field label="Paper colour for this scene">
+            <ColorInput value={live.background ?? project.background} onChange={(v) => updateScene(scene.id, { background: v })} />
+          </Field>
+        )}
+        <BackgroundPicture
+          value={live.backgroundImage}
+          onChange={(img) => updateScene(scene.id, { backgroundImage: img })}
+          note={project.backgroundImage
+            ? "The whole video's background picture shows in this scene. Choose one to give this scene its own."
+            : 'A photo or illustration that fills the video frame behind this scene.'}
+        />
         <div className="flex flex-wrap items-center gap-1">
           <button type="button" className="flex h-7 items-center gap-1 rounded-full border border-line px-2.5 text-[11.5px] text-t1 hover:bg-hov disabled:opacity-40" disabled={index === 0} onClick={() => moveScene(scene.id, index - 1)}>
             <ChevronLeft size={12} /> Earlier

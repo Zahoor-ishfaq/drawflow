@@ -3,6 +3,7 @@ import { Download, Package, Pencil, Star, Trash2, Upload } from 'lucide-react';
 import { useGallery, type GalleryItem } from '../../lib/gallery';
 import { addGalleryItem } from '../../lib/addElements';
 import { loadRasterImage, isRasterFile, isSvgFile } from '../../lib/images';
+import { isVideoFile, loadVideoFile } from '../../lib/video';
 import { normalizeSvg } from '../../lib/svgImport';
 import { exportAssetPack, importAssetPack, importPdf, isPdfFile, isZipFile } from '../../lib/assetPacks';
 import { noteUsed, toggleFavorite, useAssetPrefs, forgetAsset } from '../../lib/assetPrefs';
@@ -64,7 +65,12 @@ export function UploadTile({ item, onUse, onEdit }: { item: GalleryItem; onUse: 
         className="df-ui-anim flex h-[72px] w-full items-center justify-center overflow-hidden rounded-xl border border-line bg-panel2 transition-colors hover:border-accent"
         onClick={onUse}
       >
-        <img src={item.kind === 'svg' ? svgThumb(item.data) : item.data} alt={item.name} className="max-h-full max-w-full object-contain p-1.5" draggable={false} />
+        <img src={item.kind === 'svg' ? svgThumb(item.data) : item.kind === 'video' ? item.poster : item.data} alt={item.name} className="max-h-full max-w-full object-contain p-1.5" draggable={false} />
+        {item.kind === 'video' && (
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/65 px-1 text-[9.5px] font-medium text-white">
+            ▶ {Math.round(item.duration ?? 0)}s
+          </span>
+        )}
       </button>
       <StarButton id={item.id} />
       <span className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100">
@@ -121,8 +127,15 @@ export function UploadsPanel({ onAdded }: { onAdded?: () => void }) {
         } else if (isRasterFile(file)) {
           const img = await loadRasterImage(file);
           item = { id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), kind: 'image', data: img.src, width: img.width, height: img.height, addedAt: Date.now() };
+        } else if (isVideoFile(file)) {
+          setBusy(`Reading ${file.name}…`);
+          const v = await loadVideoFile(file);
+          item = {
+            id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), kind: 'video', data: v.src, poster: v.poster,
+            width: v.width, height: v.height, duration: v.duration, hasAudio: v.hasAudio, addedAt: Date.now(),
+          };
         } else {
-          throw new Error(`"${file.name}" isn't a supported file (PNG, JPG, WebP, GIF, SVG, PDF or a .zip pack).`);
+          throw new Error(`"${file.name}" isn't a supported file (PNG, JPG, WebP, GIF, SVG, MP4, WebM, MOV, PDF or a .zip pack).`);
         }
         await gallery.add(item);
         await addGalleryItem(item);
@@ -175,8 +188,8 @@ export function UploadsPanel({ onAdded }: { onAdded?: () => void }) {
         onDrop={(e) => { e.preventDefault(); setDragOver(false); void handleFiles(e.dataTransfer.files); }}
       >
         <Upload size={16} />
-        {busy ?? 'Upload pictures (PNG, JPG, SVG, PDF, .zip pack)'}
-        <input type="file" accept="image/*,.svg,.pdf,.zip" multiple className="hidden" onChange={(e) => { void handleFiles(e.target.files); e.target.value = ''; }} />
+        {busy ?? 'Upload pictures or videos (PNG, JPG, SVG, MP4, PDF…)'}
+        <input type="file" accept="image/*,video/*,.svg,.pdf,.zip,.mp4,.m4v,.mov,.webm" multiple className="hidden" onChange={(e) => { void handleFiles(e.target.files); e.target.value = ''; }} />
       </label>
       <div className="flex items-center gap-1">
         <button type="button" className="flex h-6 items-center gap-1 rounded-full px-2 text-[11px] text-t2 hover:bg-hov hover:text-t1" title="Import an asset pack (.zip of pictures, optional manifest.json)" onClick={() => packRef.current?.click()}>
@@ -202,7 +215,7 @@ export function UploadsPanel({ onAdded }: { onAdded?: () => void }) {
         </div>
       ) : (
         <p className="text-[11.5px] leading-relaxed text-t3">
-          Pictures you upload are kept here until you delete them. Drop a PDF to import its pages, or a .zip pack of pictures.
+          Pictures and videos you upload are kept here until you delete them. Drop a PDF to import its pages, or a .zip pack of pictures.
         </p>
       )}
     </div>

@@ -4,11 +4,12 @@ import { useRenderContext } from '../../store/selectors';
 import { snap, useUiStore } from '../../store/uiStore';
 import type { DrawElement } from '../../types';
 import {
-  elementFrameAt, FULL_FRAME, handFrameAt, paperAt, sceneOverlayAt, visibleAt,
+  backgroundSvg, elementFrameAt, FULL_FRAME, handFrameAt, paperAt, sceneOverlayAt, visibleAt, type ElementFrame,
 } from '../../lib/renderFrame';
 import { cameraAt, cameraForElement, elementBounds, viewBoxFor } from '../../lib/camera';
 import { paperDef } from '../../assets/paper';
 import { prepareGifs } from '../../lib/gif';
+import { liveVideoFrames, mediaTime, onLiveFrame, syncLiveVideos } from '../../lib/video';
 import { cueAt } from '../../lib/subtitles';
 import { prepareSubtitleFont, subtitleSprite } from '../../lib/subtitleSprite';
 import { pathTable, poseAt, routeD } from '../../lib/motionPath';
@@ -80,6 +81,9 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
     if (subtitleFont) void prepareSubtitleFont(ctx.subtitles ?? undefined, project).then(repaint);
   }, [subtitleFont, project.fonts]);
   const stillFrame = useMemo(() => ({ ...FULL_FRAME }), [loads]);
+  // a video clip shows a new frame whenever its player has one
+  useEffect(() => onLiveFrame(repaint), []);
+  const stillVideoFrames = useRef(new Map<string, { href: string; frame: ElementFrame }>());
 
   const cameraMode = mode === 'camera';
   const selected = ordered.find((e) => e.id === selectedId) ?? null;
@@ -94,7 +98,11 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
     ? viewBoxFor(cameraAt(currentTime, timeline, project), project)
     : editView ?? { x: 0, y: 0, width: project.width, height: project.height };
   const hand = cameraMode ? handFrameAt(ordered, currentTime, project, timeline) : null;
-  const { paper: paperId, background } = cameraMode ? paperAt(ctx, currentTime) : project;
+  const paperNow = paperAt(ctx, currentTime);
+  const { paper: paperId, background } = cameraMode ? paperNow : project;
+  // the background picture fills the frame: the video frame, or the camera boundary while editing
+  const bgImage = paperNow.image;
+  const bgArea = cameraMode ? vb : boundary;
   const paper = paperDef(paperId);
   const defs = paper.defs(background);
   const interactive = !isPlaying;
@@ -105,6 +113,15 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
   const cue = ctx.subtitles ? cueAt(ctx.cues, currentTime) ?? (cameraMode ? null : ctx.cues[0] ?? null) : null;
   const subtitle = cue ? subtitleSprite(cue.text, ctx.subtitles!, project.width, project.height) : null;
   const subtitleArea = cameraMode ? vb : boundary;
+
+  // video clips: while editing they hold the frame they open on; in camera view they follow the time
+  const videoEls = drawn.filter((e) => e.video && e.image);
+  const videoClips = videoEls.map((el) => ({ el, clock: cameraMode ? currentTime - el.startTime : 0 }));
+  const clipKey = videoClips.map((c) => `${c.el.id}:${c.el.video!.src.length}:${c.el.video!.start ?? 0}:${c.el.video!.loop ? 1 : 0}:${mediaTime(c.el.video!, c.clock)}`).join('|');
+  const playingClips = isPlaying && cameraMode;
+  useEffect(() => { syncLiveVideos(videoClips, playingClips); }, [clipKey, playingClips]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { syncLiveVideos([], false); }, []);
+  const videoHrefs = videoEls.length ? liveVideoFrames() : null;
 
   // Where the camera will be while the selected element draws. Shown (as a
   // passive outline under the artwork) only when it differs from the
@@ -386,6 +403,9 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
         style={{ cursor: cameraMode || isPlaying ? 'default' : panning ? 'grabbing' : 'grab' }}
         onPointerDown={onPaperPointerDown}
       />
+      {bgImage && bgArea && (
+        <g pointerEvents="none" dangerouslySetInnerHTML={{ __html: backgroundSvg(bgImage, bgArea, 'stage-bg') }} />
+      )}
 
       {/* camera boundary: what the video captures from here */}
       {!cameraMode && boundary && (
@@ -451,8 +471,19 @@ export function Stage({ mode, cssWidth, cssHeight, editView, boundary, onPan }: 
       )}
 
       {drawn.map((el) => {
-        const frame = cameraMode ? elementFrameAt(el, currentTime, vb) : stillFrame;
+        let frame = cameraMode ? elementFrameAt(el, currentTime, vb) : stillFrame;
         if (!frame) return null;
+        const href = el.video ? videoHrefs?.get(el.id) : undefined;
+        if (href && cameraMode) frame.mediaHref = href;
+        else if (href) {
+          // the same frame object while the picture stays the same, so the element doesn't redraw
+          const kept = stillVideoFrames.current.get(el.id);
+          if (kept?.href === href && kept.frame.gifClock === stillFrame.gifClock) frame = kept.frame;
+          else {
+            frame = { ...stillFrame, mediaHref: href };
+            stillVideoFrames.current.set(el.id, { href, frame });
+          }
+        }
         return (
           <ElementNode
             key={el.id}

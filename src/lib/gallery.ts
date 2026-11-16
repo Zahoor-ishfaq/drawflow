@@ -6,9 +6,14 @@ import { useCallback, useEffect, useState } from 'react';
 export interface GalleryItem {
   id: string;
   name: string;
-  kind: 'svg' | 'image';
-  /** SVG source text, or a data: URL for raster images */
+  kind: 'svg' | 'image' | 'video';
+  /** SVG source text, or a data: URL for raster images and videos */
   data: string;
+  /** a video's first frame, shown as its thumbnail */
+  poster?: string;
+  /** a video's length in seconds */
+  duration?: number;
+  hasAudio?: boolean;
   width: number;
   height: number;
   addedAt: number;

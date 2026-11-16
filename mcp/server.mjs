@@ -135,10 +135,19 @@ const MIME = {
   '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg', '.flac': 'audio/flac', '.webm': 'audio/webm',
 };
 
+const VIDEO_MIME = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm' };
+
 async function readMedia(file, kind) {
   const abs = path.resolve(file);
   if (!existsSync(abs)) throw new Error(`File not found: ${abs}`);
-  const mime = MIME[path.extname(abs).toLowerCase()];
+  const ext = path.extname(abs).toLowerCase();
+  if (kind === 'video') {
+    if (!VIDEO_MIME[ext]) throw new Error(`${path.basename(abs)} is not a supported video file (${Object.keys(VIDEO_MIME).join(', ')}).`);
+    const size = (await stat(abs)).size;
+    if (size > 100 * 1024 * 1024) throw new Error(`${path.basename(abs)} is ${Math.round(size / 1048576)} MB; videos can be up to 100 MB.`);
+    return { base64: (await readFile(abs)).toString('base64'), mime: VIDEO_MIME[ext], name: path.basename(abs, ext) };
+  }
+  const mime = MIME[ext];
   if (!mime || !mime.startsWith(kind)) throw new Error(`${path.basename(abs)} is not a supported ${kind} file (${Object.keys(MIME).filter((k) => MIME[k].startsWith(kind)).join(', ')}).`);
   return { base64: (await readFile(abs)).toString('base64'), mime, name: path.basename(abs, path.extname(abs)) };
 }
@@ -214,6 +223,7 @@ Good videos: 3 to 8 scenes, one idea per scene, 1 or 2 spoken sentences per scen
 For YouTube Shorts, TikTok or Reels use resolution "vertical" (9:16). Keep scene text very short there: the board is narrow.
 Subtitles: narration text from add_voiceover becomes subtitles timed to the voice, also when you give audio_path with text. Call set_subtitles with show true to put them in the video, and choose font, size and position there. For a language other than English use a font that has its letters, such as Microsoft YaHei for Chinese.
 To make something move across the board (a bird flying, a car driving), add it to a scene (an animated GIF keeps playing), then call add_motion_path with the route.
+A video clip (MP4, WebM, MOV) goes in a scene as a content item of type video; it plays in the video, and the scene waits until it has played. To give a scene its own background colour or a background picture, call set_background (leave out scene for the whole video).
 add_voiceover and render can take minutes. If one answers with status "working", call check_job until it is done before doing anything else.
 Finish by telling the user where the video file is.`;
 
@@ -244,6 +254,7 @@ const item = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string().min(1).describe('Words to hand-write; \\n for line breaks. Keep it short (a title or key phrase).'), size: z.enum(['title', 'normal', 'small']).optional() }),
   z.object({ type: z.literal('svg'), svg: z.string().optional().describe('SVG markup. Line art (stroke, no fill) draws best.'), path: z.string().optional().describe('…or a path to an .svg file.'), label: z.string().optional() }),
   z.object({ type: z.literal('image'), path: z.string().describe('Path to a PNG, JPEG, WebP or GIF; it is revealed with a scribble.'), label: z.string().optional() }),
+  z.object({ type: z.literal('video'), path: z.string().describe('Path to a video clip (MP4, WebM or MOV, up to 100 MB). It pops in and plays; the scene waits until it has played to the end. Its sound is not used.'), label: z.string().optional(), loop: z.boolean().optional().describe('Play it again and again while it is on the board (default: play once and stop on the last frame).') }),
   z.object({ type: z.literal('library'), query: z.string().min(1).describe('Search the built-in library of 5,000+ drawings, e.g. "light bulb", "person thinking", "rocket".'), color: z.boolean().optional().describe('Coloured version where available.') }),
 ]);
 
@@ -268,6 +279,9 @@ server.registerTool('add_scene', {
     } else if (it.type === 'image') {
       const media = await readMedia(it.path, 'image');
       items.push({ type: 'image', base64: media.base64, mime: media.mime, name: it.label ?? media.name });
+    } else if (it.type === 'video') {
+      const media = await readMedia(it.path, 'video');
+      items.push({ type: 'video', base64: media.base64, mime: media.mime, name: it.label ?? media.name, loop: it.loop });
     } else items.push(it);
   }
   return withProject(project, async (page) => {
@@ -335,6 +349,26 @@ server.registerTool('set_subtitles', {
   const lines = await page.evaluate(() => window.DrawFlow.describe().subtitles.lines);
   return text({ ...look, lines, ...(lines ? {} : { note: 'No subtitles yet: add a voiceover with text, or use import_subtitles.' }) });
 })));
+
+server.registerTool('set_background', {
+  title: 'Set the background',
+  description: 'Give one scene (or the whole video) its own paper colour and/or a background picture that fills the video frame behind everything. A scene without its own picture shows the whole video\'s picture, if there is one. Check the result with get_preview.',
+  inputSchema: {
+    project: z.string().describe('Project title, file name or path.'),
+    scene: z.string().optional().describe('Scene name, id or number (1 = first). Leave out to set the background of the whole video.'),
+    color: z.string().optional().describe('Paper colour, such as #fdf6e3. Papers with a fixed colour (cream, kraft, chalkboard, lined) keep theirs for the whole video.'),
+    image_path: z.string().optional().describe('Path to a PNG, JPEG or WebP to use as the background picture.'),
+    remove_image: z.boolean().optional().describe('Remove the background picture (of that scene, or of the whole video).'),
+    opacity: z.number().min(0.1).max(1).optional().describe('How strongly the picture shows (1 = full; lower it, e.g. 0.35, so drawings stand out).'),
+    fit: z.enum(['cover', 'contain']).optional().describe('cover fills the frame (default, edges may be cut); contain shows the whole picture.'),
+  },
+}, tool(async ({ project, scene, color, image_path, remove_image, opacity, fit }) => {
+  const image = remove_image ? null : image_path ? await readMedia(image_path, 'image') : undefined;
+  return withProject(project, async (page) => {
+    const r = await page.evaluate((o) => window.DrawFlow.setBackground(o), { scene, color, image: image ? { base64: image.base64, mime: image.mime } : image, opacity, fit });
+    return text(r);
+  });
+}));
 
 server.registerTool('import_subtitles', {
   title: 'Import a subtitle file',

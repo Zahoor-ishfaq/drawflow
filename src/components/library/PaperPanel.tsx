@@ -4,6 +4,7 @@ import { PAPERS, paperDef } from '../../assets/paper';
 import { reinkForPaper } from '../../lib/addElements';
 import { Field } from '../ui/Field';
 import { ColorInput } from '../ui/ColorInput';
+import { BackgroundPicture } from './BackgroundPicture';
 
 function Swatch({ id, color }: { id: string; color: string }) {
   const def = paperDef(id as never);
@@ -67,6 +68,11 @@ export function PaperPanel() {
           <ColorInput value={project.background} onChange={(v) => updateProject({ background: v })} />
         </Field>
       )}
+      <BackgroundPicture
+        value={project.backgroundImage}
+        onChange={(img) => updateProject({ backgroundImage: img })}
+        note="A photo or illustration behind the whole video. Each scene can have its own: right-click a scene, then Scene settings."
+      />
     </div>
   );
 }

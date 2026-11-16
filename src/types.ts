@@ -66,6 +66,33 @@ export interface ImageRef {
   height: number;
 }
 
+/**
+ * A video clip on the board. The element is a picture (its `image` is the
+ * poster frame, shown while editing and as the thumbnail); this says which
+ * frame of the clip shows at each moment of the video.
+ */
+export interface VideoRef {
+  src: string;      // data:video/… URL, embedded like pictures
+  duration: number; // seconds
+  /** play again from `start` when it reaches the end (otherwise it stops on the last frame) */
+  loop?: boolean;
+  /** seconds skipped at the beginning of the file */
+  start?: number;
+  /** the file has a sound track (it is never played from the board: add it to the timeline) */
+  hasAudio?: boolean;
+}
+
+/** A picture behind everything, filling the video frame. */
+export interface BackgroundImage {
+  src: string;      // data: URL
+  width: number;
+  height: number;
+  /** 0 – 1, default 1 */
+  opacity?: number;
+  /** cover: fill the frame (default); contain: show the whole picture */
+  fit?: 'cover' | 'contain';
+}
+
 /** Fractions (0..1) trimmed from each side of an image. */
 export interface Crop { left: number; top: number; right: number; bottom: number }
 
@@ -133,6 +160,8 @@ export interface DrawElement {
 
   // raster image (kind === 'image'); `paths` then holds the scribble-reveal path
   image?: ImageRef;
+  /** a video clip: `image` is then its poster frame */
+  video?: VideoRef;
 
   // camera
   camera: CameraMode;
@@ -222,6 +251,8 @@ export interface Scene {
   /** paper overrides for this scene (undefined → project defaults) */
   background?: string;
   paper?: PaperStyle;
+  /** a picture behind this scene (undefined → the project's, if any) */
+  backgroundImage?: BackgroundImage;
   /** clear the board when this scene starts (previous elements vanish) */
   clearBefore?: boolean;
 }
@@ -261,6 +292,8 @@ export interface Project {
   exportHeight?: number;
   background: string;         // paper colour, default '#ffffff'
   paper: PaperStyle;
+  /** a picture behind the whole video (a scene can have its own) */
+  backgroundImage?: BackgroundImage;
   duration: number;           // total timeline length, seconds (derived)
   hand: HandStyle;            // default drawing hand
   cameraEasing: CameraEasing;

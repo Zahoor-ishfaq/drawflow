@@ -65,7 +65,11 @@ yourself: `npm run desktop:pack` (output in `release/`).
   from shot to shot; per-element framing; ease-out, linear or cut moves.
 - **Voice** — record while the scribe plays, upload, or AI narration; *fit to
   narration* retimes the drawing to the phrases of the voiceover.
-- **Animated GIFs** — put a GIF on the board and it plays inside the video.
+- **Animated GIFs and video clips** — put a GIF or an MP4/WebM clip on the board
+  and it plays inside the video, frame for frame; a clip's sound can go on the
+  timeline.
+- **Backgrounds** — a paper colour and a background picture for each scene, or
+  for the whole video.
 - **Motion paths** — send anything along a route you draw on the board: a bird
   flapping across the sky, a car down a road, turning to face where it goes.
 - **Subtitles** — words on screen, timed to the voice and drawn into the video,
