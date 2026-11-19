@@ -49,6 +49,8 @@ export interface ExportResult {
   elapsedMs: number;
   /** frames painted by the worker pool (0 = single-threaded SVG path) */
   parallelFrames: number;
+  /** the video was encoded by the graphics card */
+  gpu: boolean;
 }
 
 export const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
@@ -152,11 +154,11 @@ function safeName(project: Project): string {
 }
 
 function result(
-  blob: Blob, project: Project, ext: string, engine: ExportResult['engine'], t0: number, parallelFrames = 0,
+  blob: Blob, project: Project, ext: string, engine: ExportResult['engine'], t0: number, parallelFrames = 0, gpu = false,
 ): ExportResult {
   return {
     url: URL.createObjectURL(blob), filename: `${safeName(project)}.${ext}`, sizeBytes: blob.size, engine,
-    elapsedMs: Math.round(performance.now() - t0), parallelFrames,
+    elapsedMs: Math.round(performance.now() - t0), parallelFrames, gpu,
   };
 }
 
@@ -246,22 +248,33 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
       if (canRenderFast()) {
         opts.onPhase('capturing');
         let delivered = 0;
-        try {
-          const s = performance.now();
-          const stats = await renderAndEncodeParallel({
-            ctx: makeRenderContext(project, elements, audioClips), outW, outH, fps,
-            start: range.start, totalFrames, signal,
-            videoConfig: session.videoConfig, keyEvery: session.keyEvery,
-            onSegment: (chunks, description) => { session.addRawChunks(chunks, description); delivered++; },
-            onProgress: (done) => opts.onProgress(done / totalFrames),
-          });
-          timing.raster = performance.now() - s;
-          console.info('[export] parallel', Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])));
-          parallelFrames = totalFrames;
-          painted = true;
-        } catch (e) {
-          if (isCancelled(e) || delivered > 0) throw e;
-          console.warn('[export] parallel renderer failed, using the SVG renderer:', e);
+        const parallel = () => renderAndEncodeParallel({
+          ctx: makeRenderContext(project, elements, audioClips), outW, outH, fps,
+          start: range.start, totalFrames, signal,
+          videoConfig: session.videoConfig, keyEvery: session.keyEvery, hardware: session.hardware,
+          onSegment: (chunks, description, colorSpace) => { session.addRawChunks(chunks, description, colorSpace); delivered++; },
+          onProgress: (done) => opts.onProgress(done / totalFrames),
+        });
+        // the graphics card's encoder can fail part-way (a driver problem, or too many
+        // encoders open): nothing has been written yet, so encode again on the processor
+        for (let attempt = 0; attempt < 2 && !painted; attempt++) {
+          try {
+            const s = performance.now();
+            const stats = await parallel();
+            timing.raster = performance.now() - s;
+            console.info('[export] parallel', session.hardware ? 'gpu' : 'cpu', Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])));
+            parallelFrames = totalFrames;
+            painted = true;
+          } catch (e) {
+            if (isCancelled(e) || delivered > 0) throw e;
+            if (attempt === 0 && session.hardware && (await session.useSoftware())) {
+              console.warn('[export] the graphics card encoder failed, encoding on the processor instead:', e);
+              opts.onProgress(0);
+              continue;
+            }
+            console.warn('[export] parallel renderer failed, using the SVG renderer:', e);
+            break;
+          }
         }
       }
       if (!painted) await captureAll(1, (i) => session.addFrame(canvas, i));
@@ -278,13 +291,13 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
       timing.finish = performance.now() - s;
       const type = format === 'mp4' ? 'video/mp4' : 'video/webm';
       if (!mix || session.audioSupported) {
-        console.info('[export]', format, `${outW}x${outH}`, totalFrames, 'frames in', Math.round(performance.now() - t0), 'ms', parallelFrames ? 'parallel' : 'svg', timing);
-        return result(new Blob([file.buffer as ArrayBuffer], { type }), project, format, 'webcodecs', t0, parallelFrames);
+        console.info('[export]', format, `${outW}x${outH}`, totalFrames, 'frames in', Math.round(performance.now() - t0), 'ms', parallelFrames ? 'parallel' : 'svg', session.hardware ? 'gpu' : 'cpu', timing);
+        return result(new Blob([file.buffer as ArrayBuffer], { type }), project, format, 'webcodecs', t0, parallelFrames, session.hardware);
       }
       // video done natively, but no audio encoder here: let ffmpeg attach the WAV
       const blob = await ffmpegMuxAudio(file, encodeWav(mix), format, duration, opts);
       console.info('[export]', format, 'webcodecs+ffmpeg', Math.round(performance.now() - t0), 'ms', timing);
-      return result(blob, project, format, 'webcodecs+ffmpeg', t0, parallelFrames);
+      return result(blob, project, format, 'webcodecs+ffmpeg', t0, parallelFrames, session.hardware);
     } finally {
       session.abort();
     }

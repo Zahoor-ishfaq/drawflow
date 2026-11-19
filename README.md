@@ -87,8 +87,9 @@ yourself: `npm run desktop:pack` (output in `release/`).
   scene and get pictures, write a script and get whole narrated scenes, turn a
   photo into a doodle (offline) or a cartoon. Keys stay in your browser.
 - **Export on your machine** — MP4 (H.264), WebM (VP9), GIF, PNG frames, up to
-  4K, through the browser's hardware encoders running in parallel; a CLI
-  renders `.drawflow.json` files headlessly.
+  4K, encoded on the graphics card (GPU) when it has a video encoder, or on the
+  processor, with several encoders in parallel; video clips are decoded in one
+  pass on the GPU's decoder. A CLI renders `.drawflow.json` files headlessly.
 - **Works with AI assistants (MCP)** — an MCP server lets Claude Desktop,
   Claude Code or any MCP client create a project, add scenes of text, SVG,
   photos and library pictures, narrate them, preview frames and render the

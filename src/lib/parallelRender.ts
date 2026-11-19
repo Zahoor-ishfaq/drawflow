@@ -1,8 +1,9 @@
 // Fast export path: frames are painted with the Canvas2D renderer (a couple
 // of milliseconds each) and pushed through several VideoEncoders at once,
 // each encoding its own contiguous segment of the video. WebCodecs runs the
-// codecs on their own threads, so encoding scales with the CPU cores while
-// the main thread only paints. The compressed chunks are muxed in order.
+// codecs on their own threads (or on the graphics card), so encoding scales
+// with the CPU cores while the main thread only paints. The compressed chunks
+// are muxed in order. Video clips are read in one pass per lane (video.ts).
 //
 // Why not Web Workers: reading pixels out of a worker's OffscreenCanvas
 // round-trips through the GPU process (~100 ms a frame in Chromium), which
@@ -38,10 +39,12 @@ export interface ParallelOptions {
   keyEvery: number;
   signal?: AbortSignal;
   /** compressed chunks of one segment, delivered strictly in order */
-  onSegment: (chunks: RawChunk[], description: ArrayBuffer | null) => void;
+  onSegment: (chunks: RawChunk[], description: ArrayBuffer | null, colorSpace: VideoColorSpaceInit | null) => void;
   onProgress?: (done: number) => void;
   /** override the number of concurrent encoders */
   lanes?: number;
+  /** the encoder is the graphics card's: a few at once is its limit (GeForce drivers allow 3-8 sessions) */
+  hardware?: boolean;
 }
 
 export interface ParallelStats {
@@ -110,6 +113,7 @@ interface Lane {
   encoder: VideoEncoder;
   chunks: RawChunk[];
   description: ArrayBuffer | null;
+  colorSpace: VideoColorSpaceInit | null;
   done: boolean;
 }
 
@@ -121,8 +125,11 @@ function laneCount(opts: ParallelOptions): number {
     if (raw && !override) override = parseInt(raw, 10) || undefined;
   } catch { /* ignore */ }
   // one encoder per physical core (hardwareConcurrency counts hyper-threads;
-  // a third encoder on a 2-core machine measured slower than two)
-  return Math.max(1, Math.min(override ?? Math.max(1, Math.floor(cores / 2)), 6, Math.ceil(opts.totalFrames / opts.fps)));
+  // a third encoder on a 2-core machine measured slower than two). The graphics
+  // card's encoder: two at once (measured 62 vs 90 frames/s for one and two on
+  // Intel HD 620; a third added nothing)
+  const auto = opts.hardware ? 2 : Math.max(1, Math.floor(cores / 2));
+  return Math.max(1, Math.min(override ?? auto, 6, Math.ceil(opts.totalFrames / opts.fps)));
 }
 
 /**
@@ -150,7 +157,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
     // one canvas per lane so encoders never wait on each other's readbacks
     const laneCanvas = new OffscreenCanvas(outW, outH);
     const lane: Lane = {
-      from, to, next: from, chunks: [], description: null, done: false,
+      from, to, next: from, chunks: [], description: null, colorSpace: null, done: false,
       canvas: laneCanvas,
       painter: createCanvasPainter(laneCanvas, ctx.project, elements, assets),
       video: hasVideo ? new VideoFrames() : null,
@@ -161,6 +168,8 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
         const data = new ArrayBuffer(chunk.byteLength);
         chunk.copyTo(data);
         lane.chunks.push({ type: chunk.type, timestamp: chunk.timestamp, duration: chunk.duration ?? 0, data });
+        const cs = meta?.decoderConfig?.colorSpace;
+        if (cs && !lane.colorSpace) lane.colorSpace = { primaries: cs.primaries, transfer: cs.transfer, matrix: cs.matrix, fullRange: cs.fullRange };
         const desc = meta?.decoderConfig?.description;
         if (desc && !lane.description) {
           lane.description = desc instanceof ArrayBuffer ? desc.slice(0) : (desc as ArrayBufferView).buffer.slice(0) as ArrayBuffer;
@@ -217,7 +226,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
       check();
       lane.encoder.close();
       lane.done = true;
-      opts.onSegment(lane.chunks, lane.description);
+      opts.onSegment(lane.chunks, lane.description, lane.colorSpace);
       opts.onProgress?.(lane.to);
     }
     return stats;

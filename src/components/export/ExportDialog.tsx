@@ -14,6 +14,7 @@ import { sequenceOrder } from '../../store/useStore';
 import { slotEnd } from '../../lib/timing';
 import { usePlugins } from '../../lib/plugins';
 import { cuesInRange, saveSrt, subtitleCues, subtitleSettings } from '../../lib/subtitles';
+import { gpuAllowed, setGpuAllowed } from '../../lib/mediaEncoder';
 
 type DialogState =
   | { step: 'options' }
@@ -43,6 +44,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [customHeight, setCustomHeight] = useState(1080);
   const [state, setState] = useState<DialogState>({ step: 'options' });
   const [rangeId, setRangeId] = useState<string>('all');
+  const [gpu, setGpu] = useState(gpuAllowed);
   const exportProgress = useStore((s) => s.exportProgress);
   const project = useStore((s) => s.project);
   const elements = useStore((s) => s.elements);
@@ -182,6 +184,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                   {format === 'gif' ? ` (GIF plays at ${Math.round(project.fps / Math.max(1, Math.round(project.fps / 15)))} fps)` : ''}
                 </span>
               </div>
+              {isVideo && native && (
+                <label className="flex items-center gap-2 text-[12.5px]" title="Encode on the graphics card's video encoder when it has one; DrawFlow falls back to the processor by itself if the card refuses.">
+                  <input type="checkbox" checked={gpu} onChange={(e) => { setGpu(e.target.checked); setGpuAllowed(e.target.checked); }} />
+                  Use the graphics card (GPU) to encode
+                </label>
+              )}
               {state.step === 'error' && (
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] whitespace-pre-wrap text-red-600">
                   {state.message}
@@ -195,7 +203,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                     : format === 'gif'
                       ? 'Animated GIF, no audio. Keep it short and small; 480p or less is best.'
                       : native
-                        ? 'Rendered in your browser with its built-in video encoder — a 30 s clip usually takes under a minute.'
+                        ? 'Rendered with the built-in video encoder (on the graphics card when it has one) — a 30 s clip usually takes under a minute.'
                         : 'This browser has no built-in encoder; the slower software encoder will be used.'}
               </p>
               <Button
@@ -232,7 +240,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
             <div className="flex flex-col gap-3 py-1">
               <div className="text-[13px] text-t2">
                 Done — {(state.result.sizeBytes / (1024 * 1024)).toFixed(1)} MB in {(state.result.elapsedMs / 1000).toFixed(state.result.elapsedMs < 10000 ? 1 : 0)}s
-                {state.result.parallelFrames ? '' : state.result.engine === 'ffmpeg' ? ' (software encoder)' : ''}
+                {state.result.engine === 'ffmpeg' ? ' (software encoder)'
+                  : state.result.engine.startsWith('webcodecs') ? (state.result.gpu ? ' · encoded on the graphics card' : ' · encoded on the processor') : ''}
               </div>
               <a
                 href={state.result.url}

@@ -14,6 +14,13 @@ export interface EncodeSession {
   audioSupported: boolean;
   /** the encoder configuration in use (workers replicate it for segment encoding) */
   videoConfig: VideoEncoderConfig;
+  /** true while videoConfig asks for the graphics card's encoder (and a test frame went through it) */
+  hardware: boolean;
+  /**
+   * Switch to the processor's encoder, e.g. after the graphics card's failed (it may allow only a
+   * few encoders at once). Returns false when there is nothing else to switch to.
+   */
+  useSoftware(): Promise<boolean>;
   /** keyframe interval in frames */
   keyEvery: number;
   /** submit the current canvas contents as frame `index` */
@@ -21,7 +28,10 @@ export interface EncodeSession {
   /** submit a ready-made frame (takes ownership and closes it) */
   addVideoFrame(frame: VideoFrame, index: number): Promise<void>;
   /** submit already-encoded chunks (from a worker), in timestamp order */
-  addRawChunks(chunks: { type: 'key' | 'delta'; timestamp: number; duration: number; data: ArrayBuffer }[], description: ArrayBuffer | null): void;
+  addRawChunks(
+    chunks: { type: 'key' | 'delta'; timestamp: number; duration: number; data: ArrayBuffer }[],
+    description: ArrayBuffer | null, colorSpace?: VideoColorSpaceInit | null,
+  ): void;
   /** encode a whole mixed-down buffer (call once, after or during frames) */
   addAudio(buffer: AudioBuffer): Promise<void>;
   /** finish and return the complete file */
@@ -61,7 +71,75 @@ export function encoderTweaks(): Partial<VideoEncoderConfig> {
   }
 }
 
-async function pickVideoConfig(opts: SessionOptions): Promise<VideoEncoderConfig | null> {
+/** Whether exports may use the graphics card (the Export dialog's switch); on unless turned off. */
+export function gpuAllowed(): boolean {
+  try {
+    return typeof localStorage === 'undefined' || localStorage.getItem('drawflow.gpu') !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function setGpuAllowed(on: boolean): void {
+  try {
+    if (on) localStorage.removeItem('drawflow.gpu');
+    else localStorage.setItem('drawflow.gpu', 'off');
+  } catch { /* private mode: the switch just won't stick */ }
+}
+
+/**
+ * Encode one blank frame with `config`. A graphics card can say it supports a
+ * configuration and still refuse it (a driver problem, or too many encoders
+ * open), so the choice is proven before a whole video depends on it.
+ */
+async function encodesOneFrame(config: VideoEncoderConfig): Promise<boolean> {
+  let ok = true;
+  const box: { enc?: VideoEncoder } = {};
+  const attempt = (async () => {
+    const enc = new VideoEncoder({ output: () => {}, error: () => { ok = false; } });
+    box.enc = enc;
+    enc.configure(config);
+    const canvas = new OffscreenCanvas(config.width, config.height);
+    const g = canvas.getContext('2d');
+    if (g) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, config.width, config.height); }
+    const frame = new VideoFrame(canvas, { timestamp: 0 });
+    try {
+      enc.encode(frame, { keyFrame: true });
+    } finally {
+      frame.close();
+    }
+    await enc.flush();
+    return ok;
+  })();
+  const timeout = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000));
+  try {
+    return await Promise.race([attempt.catch(() => false), timeout]);
+  } finally {
+    try { if (box.enc && box.enc.state !== 'closed') box.enc.close(); } catch { /* noop */ }
+  }
+}
+
+type Acceleration = 'no-preference' | 'prefer-hardware' | 'prefer-software';
+
+/**
+ * How the browser turns canvas pixels into the video's YUV: BT.709, limited
+ * range, for every encoder (measured: #22aa44 becomes Y 131 from both the
+ * processor's encoder and Intel's). The processor's encoder says so in the
+ * stream; a graphics card's often says nothing, and players then guess BT.601
+ * and show the colours too bright. So the file always says it.
+ */
+const BT709: VideoColorSpaceInit = { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false };
+
+export function colourOf(reported?: VideoColorSpaceInit | null): VideoColorSpaceInit {
+  return reported?.matrix && reported.primaries && reported.transfer ? reported : BT709;
+}
+
+function withColour(meta: EncodedVideoChunkMetadata | undefined): EncodedVideoChunkMetadata {
+  if (!meta?.decoderConfig) return meta ?? {};
+  return { ...meta, decoderConfig: { ...meta.decoderConfig, colorSpace: colourOf(meta.decoderConfig.colorSpace) } };
+}
+
+async function pickVideoConfig(opts: SessionOptions, accel?: Acceleration): Promise<VideoEncoderConfig | null> {
   if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return null;
   const base = {
     width: opts.width,
@@ -70,6 +148,7 @@ async function pickVideoConfig(opts: SessionOptions): Promise<VideoEncoderConfig
     bitrate: bitrateFor(opts.width, opts.height, opts.fps),
     bitrateMode: 'variable',
     latencyMode: 'quality',
+    ...(accel ? { hardwareAcceleration: accel } : {}),
     ...encoderTweaks(),
   };
   const codecs = opts.format === 'mp4' ? h264Candidates(opts.width, opts.height) : ['vp09.00.10.08', 'vp8'];
@@ -173,10 +252,27 @@ function ditherNoise(variant = 0): () => number {
   return () => (next() - next()) / 32768;
 }
 
+/**
+ * The video encoder for an export: the graphics card's, when it is allowed and
+ * a test frame goes through it; otherwise the browser's own choice (the
+ * processor's, when the card is switched off).
+ */
+async function chooseVideoConfig(opts: SessionOptions): Promise<{ config: VideoEncoderConfig; hardware: boolean } | null> {
+  const forced = encoderTweaks().hardwareAcceleration;
+  if (!forced && gpuAllowed()) {
+    const hw = await pickVideoConfig(opts, 'prefer-hardware');
+    if (hw && (await encodesOneFrame(hw))) return { config: hw, hardware: true };
+  }
+  const config = await pickVideoConfig(opts, gpuAllowed() ? undefined : 'prefer-software');
+  return config ? { config, hardware: config.hardwareAcceleration === 'prefer-hardware' } : null;
+}
+
 /** Returns null when the browser can't encode video at all (caller uses ffmpeg). */
 export async function createEncodeSession(opts: SessionOptions): Promise<EncodeSession | null> {
-  const videoConfig = await pickVideoConfig(opts);
-  if (!videoConfig) return null;
+  const chosen = await chooseVideoConfig(opts);
+  if (!chosen) return null;
+  let videoConfig = chosen.config;
+  let hardware = chosen.hardware;
   const audioConfig = await pickAudioConfig(opts);
   const { width, height, fps } = opts;
 
@@ -214,7 +310,7 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
   const videoEncoder = () => {
     if (!video) {
       video = new VideoEncoder({
-        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta ?? {}),
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, withColour(meta)),
         error: fail,
       });
       video.configure(videoConfig);
@@ -270,8 +366,20 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
 
   return {
     audioSupported: !!audioConfig,
-    videoConfig,
+    get videoConfig() { return videoConfig; },
+    get hardware() { return hardware; },
     keyEvery,
+
+    async useSoftware() {
+      if (video) return false; // the main-thread encoder already has frames in this configuration
+      const sw = (await pickVideoConfig(opts, 'prefer-software')) ?? (await pickVideoConfig(opts));
+      // the muxer was set up for one codec family (H.264, or VP9 / VP8 in WebM)
+      if (!sw || sw.codec.slice(0, 4) !== videoConfig.codec.slice(0, 4)) return false;
+      if (sw.codec === videoConfig.codec && sw.hardwareAcceleration === videoConfig.hardwareAcceleration) return false;
+      videoConfig = sw;
+      hardware = false;
+      return true;
+    },
 
     async addFrame(canvas, index) {
       if (failure) throw failure;
@@ -299,14 +407,14 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
       }
     },
 
-    addRawChunks(chunks, description) {
+    addRawChunks(chunks, description, colorSpace) {
       for (const c of chunks) {
         // the decoder config (avcC) rides along with the first chunk only
         // (VP9 has no out-of-band description; the muxer wants an object or nothing)
         let meta: EncodedVideoChunkMetadata = {};
         if (!rawDescription && description) {
           rawDescription = description;
-          meta = { decoderConfig: { codec: videoConfig.codec, codedWidth: width, codedHeight: height, description } };
+          meta = { decoderConfig: { codec: videoConfig.codec, codedWidth: width, codedHeight: height, description, colorSpace: colourOf(colorSpace) } };
         }
         // the two muxers disagree on the signature: WebM has no duration argument
         if (isMp4) (muxer as Mp4Muxer<Mp4Target>).addVideoChunkRaw(new Uint8Array(c.data), c.type, c.timestamp, c.duration, meta);

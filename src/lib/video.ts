@@ -2,13 +2,19 @@
 // pixels change with time: its `image` is the poster frame (thumbnails, Edit
 // view), and `video` says which second of the clip shows at each moment.
 //
-// Frames come from the browser's own <video> decoder. Seeking it and waiting
-// for "seeked" gives the exact frame (measured: 0 wrong frames in 360 seeks),
-// so the export is a pure function of time like everything else. The live
-// board plays the clip for real while the preview runs, and seeks while
-// scrubbing.
+// The live board plays the clip in a <video> while the preview runs, and seeks
+// it while scrubbing. Seeking and waiting for "seeked" gives the exact frame
+// (measured: 0 wrong frames in 360 seeks), so snapshots are a pure function of
+// time like everything else.
+//
+// An export asks for every frame in time order, and a seek decodes again from
+// the last keyframe each time: a 1080p clip exported at about 6 frames a second
+// with the CPU flat out. So the export reads each clip in one pass instead
+// (ClipStream: WebCodecs, on the graphics card's decoder where there is one),
+// and seeks the <video> only for a file that pass can't read.
 
 import type { DrawElement, VideoRef } from '../types';
+import type { VideoSample, VideoSampleSink } from 'mediabunny';
 
 /** Bigger files make a project slow to save and to open. */
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
@@ -117,15 +123,111 @@ class VideoReader {
   }
 }
 
+/**
+ * One clip decoded in time order with WebCodecs. Asked for times that go
+ * forward, it decodes each frame once (a few ahead, in the background) and
+ * draws only the frame that shows at the time asked for. A time earlier than
+ * the last one (a loop starting over) or far ahead starts a new pass there.
+ * The frame is kept on a canvas of its own: rotation and flip are applied, and
+ * it stays valid until the next request.
+ */
+class ClipStream {
+  private readonly ready: Promise<VideoSampleSink | null>;
+  private dispose: (() => void) | null = null;
+  private iter: AsyncGenerator<VideoSample, void, unknown> | null = null;
+  private ahead: VideoSample | null = null;
+  private ended = false;
+  private lastT = Number.NaN;
+  private canvas: OffscreenCanvas | null = null;
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(src: string) {
+    this.ready = (async () => {
+      if (typeof VideoDecoder === 'undefined' || typeof OffscreenCanvas === 'undefined') return null;
+      const mb = await import('mediabunny');
+      const input = new mb.Input({ source: new mb.BlobSource(await blobFor(src)), formats: mb.ALL_FORMATS });
+      this.dispose = () => input.dispose();
+      const track = await input.getPrimaryVideoTrack();
+      if (!track || !(await track.canDecode())) return null;
+      return new mb.VideoSampleSink(track);
+    })().catch((e) => {
+      console.warn('[video] cannot read this clip in one pass; seeking it instead', e);
+      return null;
+    });
+  }
+
+  /** A canvas showing the frame at `t` seconds; null when this clip can't be read in one pass here. */
+  frameAt(t: number): Promise<OffscreenCanvas | null> {
+    const job = this.queue.then(() => this.advance(t));
+    this.queue = job.catch(() => undefined);
+    return job;
+  }
+
+  private async advance(t: number): Promise<OffscreenCanvas | null> {
+    const sink = await this.ready;
+    if (!sink) return null;
+    let pending: VideoSample | null = null;
+    try {
+      if (!this.iter || !(t >= this.lastT) || t - this.lastT > 3) {
+        await this.stop();
+        this.iter = sink.samples(t);
+        const first = await this.iter.next(); // the frame showing at t (or the first one, before it)
+        if (first.done) this.ended = true;
+        else pending = first.value;
+      }
+      this.lastT = t;
+      for (;;) {
+        if (!this.ahead && !this.ended) {
+          const r = await this.iter.next();
+          if (r.done) this.ended = true;
+          else this.ahead = r.value;
+        }
+        if (!this.ahead || this.ahead.timestamp > t) break;
+        pending?.close();
+        pending = this.ahead;
+        this.ahead = null;
+      }
+      if (pending) {
+        const w = pending.displayWidth, h = pending.displayHeight;
+        if (!this.canvas || this.canvas.width !== w || this.canvas.height !== h) this.canvas = new OffscreenCanvas(w, h);
+        const g = this.canvas.getContext('2d');
+        if (!g) return null;
+        g.clearRect(0, 0, w, h);
+        pending.draw(g, 0, 0, w, h);
+      }
+      return this.canvas;
+    } finally {
+      pending?.close();
+    }
+  }
+
+  private async stop(): Promise<void> {
+    this.ahead?.close();
+    this.ahead = null;
+    this.ended = false;
+    const it = this.iter;
+    this.iter = null;
+    if (it) await it.return().catch(() => undefined);
+  }
+
+  close(): void {
+    void this.queue.then(async () => {
+      await this.stop();
+      this.dispose?.();
+    });
+  }
+}
+
 /** What a renderer needs to know about a clip: the element and its clock. */
 export interface ClipAt { el: DrawElement; clock: number }
 
 /**
  * Exact frames for one renderer (each export lane has its own, so lanes never
- * wait on each other's seeks).
+ * wait on each other's decoders or seeks).
  */
 export class VideoFrames {
   private readers = new Map<string, VideoReader>();
+  private streams = new Map<string, ClipStream>();
   private canvas: HTMLCanvasElement | null = null;
   private cache = new Map<string, string>();
 
@@ -138,13 +240,23 @@ export class VideoFrames {
     return r;
   }
 
-  /** The <video> of each clip, showing its frame for this moment (for a canvas painter). */
-  async frames(clips: ClipAt[]): Promise<Map<string, HTMLVideoElement>> {
-    const out = new Map<string, HTMLVideoElement>();
+  private stream(el: DrawElement): ClipStream {
+    let s = this.streams.get(el.id);
+    if (!s) {
+      s = new ClipStream(el.video!.src);
+      this.streams.set(el.id, s);
+    }
+    return s;
+  }
+
+  /** Each clip's frame for this moment (for a canvas painter): read in one pass, or by seeking its <video>. */
+  async frames(clips: ClipAt[]): Promise<Map<string, CanvasImageSource>> {
+    const out = new Map<string, CanvasImageSource>();
     for (const { el, clock } of clips) {
       if (!el.video) continue;
+      const t = seekTarget(mediaTime(el.video, clock), el.video.duration);
       try {
-        out.set(el.id, await this.reader(el).seek(seekTarget(mediaTime(el.video, clock), el.video.duration)));
+        out.set(el.id, (await this.stream(el).frameAt(t)) ?? (await this.reader(el).seek(t)));
       } catch (e) {
         console.warn('[video] frame unavailable, showing the poster', e);
       }
@@ -178,7 +290,9 @@ export class VideoFrames {
 
   close(): void {
     for (const r of this.readers.values()) r.close();
+    for (const s of this.streams.values()) s.close();
     this.readers.clear();
+    this.streams.clear();
     this.cache.clear();
   }
 }
