@@ -10,7 +10,8 @@
 
 import type { AudioClip, DrawElement, HandStyle, Project } from '../types';
 import { encodeWav, mixdownBuffer, MIX_SAMPLE_RATE } from './audioMix';
-import { createEncodeSession } from './mediaEncoder';
+import { createEncodeSession, gpuAllowed } from './mediaEncoder';
+import { captureWarnings, describeEnvironment, startExportLog, type ExportLog } from './exportLog';
 import { canRenderFast, renderAndEncodeParallel } from './parallelRender';
 import { makeRenderContext, svgStringForTime, videoClipsAt } from './renderFrame';
 import { prepareGifs } from './gif';
@@ -162,18 +163,47 @@ function result(
   };
 }
 
+/**
+ * Export the project. Every export, finished or not, leaves its details (what
+ * was chosen, on which hardware, how long each part took) in lastExportLog().
+ */
 export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
+  const log = startExportLog();
+  const stop = captureWarnings(log);
+  try {
+    await describeEnvironment(log).catch(() => undefined);
+    const r = await runExport(opts, log);
+    const how = r.engine === 'js' ? 'made in the browser' : r.engine === 'ffmpeg' ? 'software encoder (ffmpeg)'
+      : r.gpu ? 'encoded on the graphics card' : 'encoded on the processor';
+    log.fact('Result', `${(r.sizeBytes / (1024 * 1024)).toFixed(1)} MB in ${(r.elapsedMs / 1000).toFixed(1)} s, ${how}`);
+    log.step('finished');
+    return r;
+  } catch (e) {
+    log.fact('Result', isCancelled(e) ? 'cancelled' : `failed: ${e instanceof Error ? e.message : String(e)}`);
+    log.step(isCancelled(e) ? 'cancelled' : 'failed');
+    throw e;
+  } finally {
+    stop();
+  }
+}
+
+async function runExport(opts: ExportOptions, log: ExportLog): Promise<ExportResult> {
   const { project, elements, audioClips, format, signal } = opts;
   const { outW, outH } = outputSize(project, opts.height);
   const check = () => { if (signal?.aborted) throw new ExportCancelled(); };
 
   const t0 = performance.now();
   opts.onPhase('loading');
-  const renderer = await makeFrameRenderer(project, elements, audioClips, outW, outH);
-  const { canvas, ctx } = renderer;
   const fps = project.fps;
   const range = opts.range ?? { start: 0, end: project.duration };
   const duration = Math.max(0, range.end - range.start);
+  const clipCount = elements.filter((e) => e.video).length;
+  log.fact('Export', `${format.toUpperCase()}, ${outW}x${outH}, ${fps} fps, ${duration.toFixed(1)} s${opts.range ? ' (one scene)' : ''}`);
+  log.fact('Project', `${elements.length} item${elements.length === 1 ? '' : 's'}, ${clipCount} video clip${clipCount === 1 ? '' : 's'}, ${audioClips.length} sound clip${audioClips.length === 1 ? '' : 's'}`);
+  if (format === 'mp4' || format === 'webm') log.fact('GPU switch', gpuAllowed() ? 'on' : 'off');
+  const renderer = await makeFrameRenderer(project, elements, audioClips, outW, outH);
+  const { canvas, ctx } = renderer;
+  log.step('pictures, hands and fonts ready');
 
   // ---- single frame -------------------------------------------------------
   if (format === 'png') {
@@ -237,7 +267,9 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
   const session = await createEncodeSession({
     format, width: outW, height: outH, fps,
     audio: wantAudio ? { sampleRate: MIX_SAMPLE_RATE, channels: 2 } : undefined,
+    log,
   });
+  if (!session) log.step('no built-in video encoder: using the ffmpeg software encoder');
 
   if (session) {
     let parallelFrames = 0;
@@ -260,9 +292,15 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
         for (let attempt = 0; attempt < 2 && !painted; attempt++) {
           try {
             const s = performance.now();
+            log.step(`rendering ${totalFrames} frames (fast renderer, ${session.hardware ? 'graphics card' : 'processor'} encoder)`);
             const stats = await parallel();
             timing.raster = performance.now() - s;
-            console.info('[export] parallel', session.hardware ? 'gpu' : 'cpu', Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])));
+            const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+            console.info('[export] parallel', session.hardware ? 'gpu' : 'cpu', Object.fromEntries(Object.entries(stats).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, Math.round(v as number)])));
+            log.step(`${totalFrames} frames rendered in ${secs(timing.raster)}`);
+            log.fact('Speed', `${(totalFrames / (timing.raster / 1000)).toFixed(1)} frames/s with ${stats.lanes} encoder${stats.lanes === 1 ? '' : 's'} at once`);
+            log.fact('Time spent', `drawing ${secs(stats.paintMs)}, handing frames over ${secs(stats.captureMs)}, waiting for encoders ${secs(stats.waitMs)}, waiting for clip frames ${secs(stats.clipMs)} (summed over the encoders)`);
+            stats.clips.forEach((line, n) => log.fact(`Video clip ${n + 1}`, line.replace(/^clip \d+: /, '')));
             parallelFrames = totalFrames;
             painted = true;
           } catch (e) {
@@ -277,13 +315,18 @@ export async function exportVideo(opts: ExportOptions): Promise<ExportResult> {
           }
         }
       }
-      if (!painted) await captureAll(1, (i) => session.addFrame(canvas, i));
+      if (!painted) {
+        log.step(`rendering ${totalFrames} frames one at a time (the slower picture renderer)`);
+        await captureAll(1, (i) => session.addFrame(canvas, i));
+        log.step(`frames rendered: drawing ${(timing.raster / 1000).toFixed(1)} s, encoding ${(timing.encode / 1000).toFixed(1)} s`);
+      }
       let mix: AudioBuffer | null = null;
       if (wantAudio) {
         opts.onPhase('encoding');
         mix = await mixdownBuffer(rangeClips(audioClips, range), duration);
         check();
         if (mix && session.audioSupported) await session.addAudio(mix);
+        log.step(mix ? 'sound mixed and encoded' : 'no sound to mix');
       }
       opts.onPhase('finishing');
       const s = performance.now();

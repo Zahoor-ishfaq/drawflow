@@ -53,6 +53,10 @@ export interface ParallelStats {
   captureMs: number;
   waitMs: number;
   initMs: number;
+  /** time spent waiting for video clip frames */
+  clipMs: number;
+  /** how each video clip was read (for the export details) */
+  clips: string[];
 }
 
 export function canRenderFast(): boolean {
@@ -126,8 +130,8 @@ function laneCount(opts: ParallelOptions): number {
   } catch { /* ignore */ }
   // one encoder per physical core (hardwareConcurrency counts hyper-threads;
   // a third encoder on a 2-core machine measured slower than two). The graphics
-  // card's encoder: two at once (measured 62 vs 90 frames/s for one and two on
-  // Intel HD 620; a third added nothing)
+  // card's encoder: two at once (measured about 45% faster than one; a third
+  // added nothing)
   const auto = opts.hardware ? 2 : Math.max(1, Math.floor(cores / 2));
   return Math.max(1, Math.min(override ?? auto, 6, Math.ceil(opts.totalFrames / opts.fps)));
 }
@@ -141,7 +145,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
   const lanes = laneCount(opts);
   const segSize = Math.ceil(totalFrames / lanes);
   const frameMicros = 1e6 / fps;
-  const stats: ParallelStats = { lanes, paintMs: 0, captureMs: 0, waitMs: 0, initMs: 0 };
+  const stats: ParallelStats = { lanes, paintMs: 0, captureMs: 0, waitMs: 0, initMs: 0, clipMs: 0, clips: [] };
 
   const tInit = performance.now();
   const assets = await loadCanvasAssets(ctx);
@@ -202,7 +206,9 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
           check();
         }
         const t = start + i / fps;
+        const tc = performance.now();
         const media = lane.video ? await lane.video.frames(videoClipsAt(ctx, t)) : undefined;
+        stats.clipMs += performance.now() - tc;
         check();
         let t0 = performance.now();
         lane.painter.paint(frameSpec(ctx, t, outW, outH), media);
@@ -219,6 +225,7 @@ export async function renderAndEncodeParallel(opts: ParallelOptions): Promise<Pa
         if (submitted - lastProgress >= 8) { lastProgress = submitted; opts.onProgress?.(submitted); await sleep(0); }
       }
     }));
+    stats.clips = [...new Set(pool.flatMap((lane) => lane.video?.report() ?? []))];
     // drain and deliver in order
     for (const lane of pool) {
       check();

@@ -9,6 +9,7 @@ import { exportProjectFile, importProjectFile, parseProjectFile, saveNow } from 
 import { clearSources, decodeToSource } from '../store/audioSources';
 import { validateDocument } from './validate';
 import { exportBench } from './exportBench';
+import { lastExportLog } from './exportLog';
 import { pluginApi, activateInstalledPlugins, getPlugins } from './plugins';
 import { addTextElement, addImportedSvg, addImageElement } from './addElements';
 import { TEMPLATES, buildTemplate } from '../assets/templates';
@@ -120,6 +121,10 @@ export const api = {
     return { base64: await blobToBase64(r.blob), filename: r.filename, sizeBytes: r.sizeBytes, elapsedMs: r.elapsedMs, engine: r.engine };
   },
   bench: exportBench,
+  /** The last export's details as text (hardware, encoder, timings, warnings), or null before the first. */
+  exportLog(): string | null {
+    return lastExportLog()?.text() ?? null;
+  },
 
   // --- automation (the MCP server, scripts) -----------------------------------
   /** Start an empty project with these settings (the open one is replaced). */

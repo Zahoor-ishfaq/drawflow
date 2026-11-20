@@ -140,17 +140,35 @@ class ClipStream {
   private lastT = Number.NaN;
   private canvas: OffscreenCanvas | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  /** how this clip is read, for the export details */
+  info = 'not opened';
+  /** frames drawn from this pass */
+  drawn = 0;
 
   constructor(src: string) {
     this.ready = (async () => {
-      if (typeof VideoDecoder === 'undefined' || typeof OffscreenCanvas === 'undefined') return null;
+      if (typeof VideoDecoder === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+        this.info = 'seeking (this browser has no WebCodecs decoder)';
+        return null;
+      }
       const mb = await import('mediabunny');
       const input = new mb.Input({ source: new mb.BlobSource(await blobFor(src)), formats: mb.ALL_FORMATS });
       this.dispose = () => input.dispose();
+      const format = (await input.getFormat()).name;
       const track = await input.getPrimaryVideoTrack();
-      if (!track || !(await track.canDecode())) return null;
+      if (!track) {
+        this.info = `seeking (${format}: no video track found)`;
+        return null;
+      }
+      const what = `${format}, ${(await track.getCodec()) ?? 'unknown codec'} ${await track.getCodedWidth()}x${await track.getCodedHeight()}`;
+      if (!(await track.canDecode())) {
+        this.info = `seeking (${what}: no decoder for it here)`;
+        return null;
+      }
+      this.info = `one pass (${what})`;
       return new mb.VideoSampleSink(track);
     })().catch((e) => {
+      this.info = `seeking (could not open: ${e instanceof Error ? e.message : String(e)})`;
       console.warn('[video] cannot read this clip in one pass; seeking it instead', e);
       return null;
     });
@@ -194,6 +212,7 @@ class ClipStream {
         if (!g) return null;
         g.clearRect(0, 0, w, h);
         pending.draw(g, 0, 0, w, h);
+        this.drawn++;
       }
       return this.canvas;
     } finally {
@@ -228,6 +247,7 @@ export interface ClipAt { el: DrawElement; clock: number }
 export class VideoFrames {
   private readers = new Map<string, VideoReader>();
   private streams = new Map<string, ClipStream>();
+  private sought = new Map<string, number>();
   private canvas: HTMLCanvasElement | null = null;
   private cache = new Map<string, string>();
 
@@ -256,7 +276,12 @@ export class VideoFrames {
       if (!el.video) continue;
       const t = seekTarget(mediaTime(el.video, clock), el.video.duration);
       try {
-        out.set(el.id, (await this.stream(el).frameAt(t)) ?? (await this.reader(el).seek(t)));
+        let frame: CanvasImageSource | null = await this.stream(el).frameAt(t);
+        if (!frame) {
+          frame = await this.reader(el).seek(t);
+          this.sought.set(el.id, (this.sought.get(el.id) ?? 0) + 1);
+        }
+        out.set(el.id, frame);
       } catch (e) {
         console.warn('[video] frame unavailable, showing the poster', e);
       }
@@ -286,6 +311,14 @@ export class VideoFrames {
       out.set(el.id, url);
     }
     return out;
+  }
+
+  /** One line per clip: how it was read and how many frames came which way. */
+  report(): string[] {
+    return [...this.streams.entries()].map(([id, s], n) => {
+      const sought = this.sought.get(id) ?? 0;
+      return `clip ${n + 1}: ${s.info}${sought ? `, ${sought} frames by seeking` : ''}`;
+    });
   }
 
   close(): void {

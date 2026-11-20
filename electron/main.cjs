@@ -168,6 +168,40 @@ ipcMain.handle('drawflow:save-file', async (event, { filename, text }) => {
   return true;
 });
 
+/**
+ * For the export details: the app version, every graphics chip Chromium sees
+ * (the one it runs on marked active) and whether video encoding and decoding
+ * may use them. Hardware facts only; nothing about the user or their files.
+ */
+ipcMain.handle('drawflow:gpu-info', async () => {
+  let info = null;
+  try {
+    info = await app.getGPUInfo('complete');
+  } catch {
+    try { info = await app.getGPUInfo('basic'); } catch { /* none */ }
+  }
+  const hex = (n) => (typeof n === 'number' ? `0x${n.toString(16).padStart(4, '0')}` : '');
+  const devices = (info?.gpuDevice ?? []).map((d) => ({
+    name: [d.vendorString, d.deviceString].filter(Boolean).join(' ') || `${hex(d.vendorId)} ${hex(d.deviceId)}`,
+    active: !!d.active,
+    driver: d.driverVersion || '',
+  }));
+  let status = {};
+  try { status = app.getGPUFeatureStatus(); } catch { /* none */ }
+  // DrawFlow's own version (app.getVersion() is Electron's when run unpackaged)
+  let appVersion = app.getVersion();
+  try { appVersion = require(path.join(__dirname, '..', 'package.json')).version || appVersion; } catch { /* keep it */ }
+  return {
+    appVersion,
+    devices,
+    features: {
+      videoEncode: status.video_encode ?? 'unknown',
+      videoDecode: status.video_decode ?? 'unknown',
+      compositing: status.gpu_compositing ?? 'unknown',
+    },
+  };
+});
+
 /** This computer or the home network: the only places a local voice app can live. */
 function isLocalHost(hostname) {
   const h = hostname.replace(/^\[|\]$/g, '').toLowerCase();

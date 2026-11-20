@@ -1,8 +1,9 @@
 // Sandboxed preload. The editor is a self-contained web app and needs no Node
 // access, so this exposes only the app version, the native File menu's
 // messages, a "save this text to a file" call, a relay to a local voice app,
-// the built-in voice and the Connect AI dialog behind contextBridge. Kept
-// as .cjs because sandboxed preloads must be CommonJS.
+// the built-in voice, the Connect AI dialog and the graphics details for the
+// export log behind contextBridge. Kept as .cjs because sandboxed preloads
+// must be CommonJS.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('drawflow', {
@@ -39,5 +40,9 @@ contextBridge.exposeInMainWorld('drawflow', {
   /** Opens the dialog that connects DrawFlow to an AI app over MCP. */
   connectAiApps() {
     return ipcRenderer.invoke('drawflow:connect-ai');
+  },
+  /** The graphics chips and their video encode/decode status, for the export details. */
+  gpuInfo() {
+    return ipcRenderer.invoke('drawflow:gpu-info');
   },
 });

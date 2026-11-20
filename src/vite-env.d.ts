@@ -16,6 +16,12 @@ interface DesktopBridge {
   onVoiceProgress?(handler: (msg: { loaded: number; total: number }) => void): () => void;
   /** Opens the dialog that connects DrawFlow to an AI app over MCP. */
   connectAiApps(): Promise<void>;
+  /** Graphics chips (the one in use marked active) and video encode/decode status; older builds lack it. */
+  gpuInfo?(): Promise<{
+    appVersion: string;
+    devices: { name: string; active: boolean; driver: string }[];
+    features: { videoEncode: string; videoDecode: string; compositing: string };
+  }>;
 }
 interface Window {
   drawflow?: DesktopBridge;

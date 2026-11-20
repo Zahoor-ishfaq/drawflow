@@ -15,6 +15,7 @@ import { slotEnd } from '../../lib/timing';
 import { usePlugins } from '../../lib/plugins';
 import { cuesInRange, saveSrt, subtitleCues, subtitleSettings } from '../../lib/subtitles';
 import { gpuAllowed, setGpuAllowed } from '../../lib/mediaEncoder';
+import { lastExportLog } from '../../lib/exportLog';
 
 type DialogState =
   | { step: 'options' }
@@ -191,9 +192,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 </label>
               )}
               {state.step === 'error' && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] whitespace-pre-wrap text-red-600">
-                  {state.message}
-                </div>
+                <>
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] whitespace-pre-wrap text-red-600">
+                    {state.message}
+                  </div>
+                  <ExportDetails />
+                </>
               )}
               <p className="text-[11.5px] leading-relaxed text-t3">
                 {format === 'png'
@@ -251,6 +255,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 <Download size={15} />
                 Download {state.result.filename}
               </a>
+              <ExportDetails />
               {exporters.map((x) => (
                 <Button key={x.id} variant="secondary" className="justify-center" onClick={() => {
                   const r = state.result;
@@ -266,6 +271,48 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The last export's details (hardware, encoder, timings, warnings) to read or
+ * copy into a bug report. Nothing personal: no project or file names.
+ */
+function ExportDetails() {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const text = lastExportLog()?.text();
+  if (!text) return null;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-t3">
+        <button type="button" className="hover:text-t1 hover:underline" onClick={() => setOpen(!open)}>
+          {open ? 'Hide export details' : 'Show export details'}
+        </button>
+        <Button variant="secondary" onClick={() => void copy()}>
+          {copied ? 'Copied' : 'Copy export details'}
+        </Button>
+      </div>
+      {open && (
+        <pre className="max-h-52 overflow-auto rounded-lg border border-line bg-panel2 p-2 text-[10.5px] leading-snug whitespace-pre-wrap text-t2">
+          {text}
+        </pre>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@
 
 import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
+import type { ExportLog } from './exportLog';
 
 export type ContainerFormat = 'mp4' | 'webm';
 
@@ -46,6 +47,8 @@ export interface SessionOptions {
   fps: number;
   /** set when the export has audio; the session decides if it can encode it */
   audio?: { sampleRate: number; channels: number };
+  /** the export details, which record what was chosen and why */
+  log?: ExportLog;
 }
 
 function bitrateFor(width: number, height: number, fps: number): number {
@@ -124,7 +127,7 @@ type Acceleration = 'no-preference' | 'prefer-hardware' | 'prefer-software';
 /**
  * How the browser turns canvas pixels into the video's YUV: BT.709, limited
  * range, for every encoder (measured: #22aa44 becomes Y 131 from both the
- * processor's encoder and Intel's). The processor's encoder says so in the
+ * processor's encoder and a graphics card's). The processor's encoder says so in the
  * stream; a graphics card's often says nothing, and players then guess BT.601
  * and show the colours too bright. So the file always says it.
  */
@@ -258,12 +261,21 @@ function ditherNoise(variant = 0): () => number {
  * processor's, when the card is switched off).
  */
 async function chooseVideoConfig(opts: SessionOptions): Promise<{ config: VideoEncoderConfig; hardware: boolean } | null> {
+  const log = opts.log;
   const forced = encoderTweaks().hardwareAcceleration;
+  if (forced) log?.step(`encoder setting from localStorage: ${forced}`);
+  else if (!gpuAllowed()) log?.step('the graphics card is switched off in the Export dialog');
   if (!forced && gpuAllowed()) {
     const hw = await pickVideoConfig(opts, 'prefer-hardware');
-    if (hw && (await encodesOneFrame(hw))) return { config: hw, hardware: true };
+    if (!hw) log?.step(`graphics card encoder: none offered for ${opts.format.toUpperCase()} at ${opts.width}x${opts.height}`);
+    else {
+      const ok = await encodesOneFrame(hw);
+      log?.step(`graphics card encoder offered for ${hw.codec}; test frame ${ok ? 'went through' : 'was refused'}`);
+      if (ok) return { config: hw, hardware: true };
+    }
   }
   const config = await pickVideoConfig(opts, gpuAllowed() ? undefined : 'prefer-software');
+  if (config) log?.step(`using ${config.codec}, ${config.hardwareAcceleration === 'prefer-software' ? 'on the processor' : "the browser's own choice of encoder"}`);
   return config ? { config, hardware: config.hardwareAcceleration === 'prefer-hardware' } : null;
 }
 
@@ -274,6 +286,8 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
   let videoConfig = chosen.config;
   let hardware = chosen.hardware;
   const audioConfig = await pickAudioConfig(opts);
+  opts.log?.fact('Video encoder', `${videoConfig.codec}, ${hardware ? 'graphics card' : videoConfig.hardwareAcceleration === 'prefer-software' ? 'processor' : "browser's choice (not the graphics card's own)"}, ${((videoConfig.bitrate ?? 0) / 1e6).toFixed(1)} Mbit/s`);
+  if (opts.audio) opts.log?.fact('Audio encoder', audioConfig ? audioConfig.codec : 'none here (ffmpeg adds the sound)');
   const { width, height, fps } = opts;
 
   const isMp4 = opts.format === 'mp4';
@@ -378,6 +392,8 @@ export async function createEncodeSession(opts: SessionOptions): Promise<EncodeS
       if (sw.codec === videoConfig.codec && sw.hardwareAcceleration === videoConfig.hardwareAcceleration) return false;
       videoConfig = sw;
       hardware = false;
+      opts.log?.step(`switched to ${sw.codec} on the processor`);
+      opts.log?.fact('Video encoder', `${sw.codec}, processor (after the graphics card failed)`);
       return true;
     },
 
